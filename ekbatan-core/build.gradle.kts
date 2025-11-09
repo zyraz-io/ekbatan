@@ -5,7 +5,7 @@ plugins {
 
 group = "io.ekbatan.core"
 version = "0.0.1-SNAPSHOT"
-java.sourceCompatibility = JavaVersion.VERSION_21
+java.sourceCompatibility = JavaVersion.VERSION_25
 
 repositories {
     mavenCentral()
@@ -20,6 +20,7 @@ dependencies {
 
     // PostgreSQL JDBC driver
     implementation("org.postgresql:postgresql:42.7.7")
+    implementation("com.zaxxer:HikariCP:7.0.2")
 
     testImplementation(platform("org.junit:junit-bom:6.0.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")

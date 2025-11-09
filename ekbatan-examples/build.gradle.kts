@@ -1,15 +1,18 @@
+import dev.monosoul.jooq.RecommendedVersions
 import org.jooq.meta.jaxb.ForcedType
+
 
 plugins {
     id("java")
-    id("com.revolut.jooq-docker") version "0.3.12"
+    id("dev.monosoul.jooq-docker") version "8.0.3"
 }
 
 group = "io.ekbatan.examples"
 version = "0.0.1-SNAPSHOT"
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
 }
 
 repositories {
@@ -18,13 +21,15 @@ repositories {
 
 tasks {
     generateJooqClasses {
-        schemas = arrayOf("public")
-        basePackageName = "io.ekbatan.examples.generated.jooq"
-        inputDirectory.setFrom(project.files("src/main/resources/db/migration"))
+        schemas.set(listOf("public"))
+        basePackageName.set("io.ekbatan.examples.generated.jooq")
+        migrationLocations.setFromFilesystem("src/main/resources/db/migration")
         outputDirectory.set(project.layout.buildDirectory.dir("generated-jooq"))
-        flywayProperties = mapOf("flyway.placeholderReplacement" to "false")
-        excludeFlywayTable = true
-        customizeGenerator {
+        flywayProperties.put("flyway.placeholderReplacement", "false")
+        includeFlywayTable.set(false)
+        outputSchemaToDefault.add("public")
+        schemaToPackageMapping.put("public", "")
+        usingJavaConfig {
             database.withForcedTypes(
                 ForcedType()
                     .withUserType("com.google.gson.JsonElement")
@@ -43,7 +48,9 @@ tasks {
 dependencies {
     implementation(project(":ekbatan-core"))
 
-    implementation("org.jooq:jooq:3.20.8")
+    implementation("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
+    jooqCodegen("org.postgresql:postgresql:42.7.3")
+
     implementation("org.jooq:jooq-codegen")
 
     testImplementation(platform("org.junit:junit-bom:6.0.1"))
@@ -52,9 +59,6 @@ dependencies {
 
     testImplementation("org.testcontainers:testcontainers:2.0.1")
     testImplementation("org.testcontainers:postgresql:1.21.3")
-
-    // JOOQ JDBC driver
-    jdbc("org.postgresql:postgresql:42.7.3")
 
     // Add explicit dependency on the JOOQ API
     implementation("org.jooq:jooq-meta")
@@ -67,29 +71,4 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
-}
-
-jooq {
-    image {
-        repository = "postgres"
-        tag = "15-alpine"
-        envVars =
-            mapOf(
-                "POSTGRES_DB" to "testdb",
-                "POSTGRES_USER" to "test",
-                "POSTGRES_PASSWORD" to "test",
-            )
-    }
-
-    db {
-        username = "test"
-        password = "test"
-        name = "testdb"
-    }
-
-    jdbc {
-        schema = "jdbc:postgresql"
-        driverClassName = "org.postgresql.Driver"
-        jooqMetaName = "org.jooq.meta.postgres.PostgresDatabase"
-    }
 }

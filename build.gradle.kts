@@ -76,8 +76,8 @@ subprojects {
     
     // Configure Java compilation to ensure compatibility
     tasks.withType<JavaCompile> {
-        sourceCompatibility = "21"
-        targetCompatibility = "21"
+        sourceCompatibility = "25"
+        targetCompatibility = "25"
         // Enable incremental compilation for better build performance
         options.isIncremental = true
         // Enable all warnings

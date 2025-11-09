@@ -64,10 +64,10 @@ public abstract class JooqBaseModelRepository<
      * @throws PersistenceException if a persistence error occurs
      */
     public MODEL add(MODEL model) {
+        Validate.notNull(model, "Model cannot be null");
+
         return wrapException(
                 () -> {
-                    Validate.notNull(model, "Model cannot be null");
-
                     dsl.batchInsert(toRecord(model)).execute();
 
                     return model;
