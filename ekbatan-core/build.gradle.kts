@@ -3,7 +3,7 @@ plugins {
     `maven-publish`
 }
 
-group = "com.example.springdd"
+group = "io.ekbatan.core"
 version = "0.0.1-SNAPSHOT"
 java.sourceCompatibility = JavaVersion.VERSION_21
 

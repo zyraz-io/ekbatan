@@ -5,7 +5,7 @@ plugins {
     id("com.revolut.jooq-docker") version "0.3.12"
 }
 
-group = "com.example.springdd"
+group = "io.ekbatan.examples"
 version = "0.0.1-SNAPSHOT"
 
 java {
@@ -19,7 +19,7 @@ repositories {
 tasks {
     generateJooqClasses {
         schemas = arrayOf("public")
-        basePackageName = "com.example.springdd.generated.jooq"
+        basePackageName = "io.ekbatan.examples.generated.jooq"
         inputDirectory.setFrom(project.files("src/main/resources/db/migration"))
         outputDirectory.set(project.layout.buildDirectory.dir("generated-jooq"))
         flywayProperties = mapOf("flyway.placeholderReplacement" to "false")
@@ -32,7 +32,7 @@ tasks {
                     .withIncludeTypes("JSONB"),
                 ForcedType()
                     .withUserType("java.time.Instant")
-                    .withConverter("com.example.springdd.core.repository.jooq.converter.InstantConverter")
+                    .withConverter("io.ekbatan.core.repository.jooq.converter.InstantConverter")
                     .withIncludeTypes("TIMESTAMP")
                     .withIncludeExpression(".*"),
             )

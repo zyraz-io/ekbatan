@@ -27,7 +27,7 @@ spotless {
 }
 
 allprojects {
-    group = "com.example.springdd"
+    group = "io.ekbatan"
     version = "0.0.1-SNAPSHOT"
 
     repositories {
