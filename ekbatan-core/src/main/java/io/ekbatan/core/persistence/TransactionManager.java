@@ -1,46 +1,87 @@
 package io.ekbatan.core.persistence;
 
-import java.util.function.Function;
+import io.ekbatan.core.persistence.connection.ConnectionMode;
+import io.ekbatan.core.persistence.connection.ConnectionProvider;
+import io.ekbatan.core.persistence.connection.TransactionConnectionWrapper;
+import java.sql.Connection;
+import org.apache.commons.lang3.Validate;
 
-/**
- * Manages transactions for a specific connection type.
- *
- * @param <C> the connection type
- */
-public interface TransactionManager<C> {
-    /**
-     * Executes the given action within a transaction.
-     *
-     * @param action the action to execute within a transaction
-     * @param <T> the return type
-     * @return the result of the action
-     * @throws TransactionException if an error occurs during transaction management
-     */
-    <T> T withTransaction(Function<C, T> action) throws TransactionException;
+public class TransactionManager {
 
-    /**
-     * Executes the given action within a transaction with the specified mode.
-     *
-     * @param mode the transaction mode (e.g., REQUIRE_NEW, REQUIRE_EXISTING)
-     * @param action the action to execute within a transaction
-     * @param <T> the return type
-     * @return the result of the action
-     * @throws TransactionException if an error occurs during transaction management
-     * @throws IllegalStateException if the requested transaction mode cannot be satisfied
-     */
-    <T> T withTransaction(ConnectionMode mode, Function<C, T> action)
-            throws TransactionException, IllegalStateException;
+    private final ConnectionProvider primaryProvider;
+    private final ConnectionProvider replicaProvider;
 
-    /**
-     * Exception thrown when a transaction-related error occurs.
-     */
-    class TransactionException extends RuntimeException {
-        public TransactionException(String message) {
-            super(message);
-        }
+    private static final ScopedValue<TransactionConnectionWrapper> CURRENT = ScopedValue.newInstance();
 
-        public TransactionException(String message, Throwable cause) {
-            super(message, cause);
-        }
+    public TransactionManager(ConnectionProvider primaryProvider, ConnectionProvider replicaProvider) {
+        this.primaryProvider = Validate.notNull(primaryProvider, "primaryProvider should not be null");
+        this.replicaProvider = Validate.notNull(replicaProvider, "replicaProvider should not be null");
+    }
+
+    public <R> R withConnection(boolean primary, CheckedFunction<Connection, R> block) {
+        return switch (currentConnection()) {
+            case Connection existing -> block.apply(existing);
+            case null -> {
+                final var provider = providerOf(primary);
+                final var conn = provider.acquire();
+                try {
+                    yield block.apply(conn);
+                } finally {
+                    provider.release(conn);
+                }
+            }
+        };
+    }
+
+    public <R> R inTransaction(ConnectionMode mode, CheckedFunction<Connection, R> block) {
+        return switch (currentConnection()) {
+            case Connection existingConn -> {
+                Validate.isTrue(
+                        mode == ConnectionMode.REQUIRE_EXISTING,
+                        "Required new connection but existing connection was found");
+                yield block.apply(existingConn);
+            }
+            case null -> {
+                Validate.isTrue(
+                        mode == ConnectionMode.REQUIRE_NEW,
+                        "Required existing connection but no existing connection was found");
+
+                Connection newConn = null;
+                try {
+                    newConn = primaryProvider.acquire();
+                    final var fNewConn = newConn;
+                    final var wrapper = new TransactionConnectionWrapper(newConn);
+                    yield ScopedValue.where(CURRENT, wrapper).call(() -> {
+                        try {
+                            wrapper.begin();
+                            final var result = block.apply(fNewConn);
+                            wrapper.commit();
+                            return result;
+                        } catch (Exception e) {
+                            wrapper.rollback();
+                            throw e;
+                        }
+                    });
+                } finally {
+                    if (newConn != null) {
+                        primaryProvider.release(newConn);
+                    }
+                }
+            }
+        };
+    }
+
+    private Connection currentConnection() {
+        var wrapper = CURRENT.orElse(null);
+        return wrapper != null ? wrapper.connection() : null;
+    }
+
+    private ConnectionProvider providerOf(boolean primary) {
+        return primary ? primaryProvider : replicaProvider;
+    }
+
+    @FunctionalInterface
+    public interface CheckedFunction<T, R> {
+        R apply(T t);
     }
 }

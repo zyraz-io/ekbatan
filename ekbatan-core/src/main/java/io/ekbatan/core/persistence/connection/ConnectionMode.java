@@ -1,4 +1,4 @@
-package io.ekbatan.core.persistence;
+package io.ekbatan.core.persistence.connection;
 
 public enum ConnectionMode {
     REQUIRE_NEW,

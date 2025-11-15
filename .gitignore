@@ -1,7 +1,6 @@
 # Gradle files
 .gradle/
 build/
-!gradle/wrapper/gradle-wrapper.jar
 !**/src/**/build/
 
 # IntelliJ IDEA
@@ -47,8 +46,8 @@ target/
 pom.xml.versionsBackup
 
 # Gradle Wrapper
-gradle/wrapper/
 !gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
 
 # Local development environment
 .env
