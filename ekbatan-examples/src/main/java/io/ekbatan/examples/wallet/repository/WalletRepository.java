@@ -1,14 +1,14 @@
 package io.ekbatan.examples.wallet.repository;
 
 import static io.ekbatan.examples.generated.jooq.tables.Wallets.WALLETS;
-import static io.ekbatan.examples.wallet.models.Wallet.Builder.wallet;
 
-import io.ekbatan.core.domain.GenericState;
 import io.ekbatan.core.domain.Id;
 import io.ekbatan.core.repository.jooq.JooqBaseModelRepository;
 import io.ekbatan.examples.generated.jooq.tables.Wallets;
 import io.ekbatan.examples.generated.jooq.tables.records.WalletsRecord;
 import io.ekbatan.examples.wallet.models.Wallet;
+import io.ekbatan.examples.wallet.models.WalletBuilder;
+import io.ekbatan.examples.wallet.models.WalletState;
 import java.util.Currency;
 import java.util.UUID;
 import org.jooq.DSLContext;
@@ -21,8 +21,9 @@ public class WalletRepository extends JooqBaseModelRepository<Wallet, WalletsRec
 
     @Override
     public Wallet fromRecord(WalletsRecord record) {
-        return wallet().id(Id.of(Wallet.class, record.getId()))
-                .state(GenericState.valueOf(record.getState()))
+        return WalletBuilder.wallet()
+                .id(Id.of(Wallet.class, record.getId()))
+                .state(WalletState.valueOf(record.getState()))
                 .ownerId(record.getOwnerId())
                 .currency(Currency.getInstance(record.getCurrency()))
                 .balance(record.getBalance())

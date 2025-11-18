@@ -43,6 +43,14 @@ subprojects {
     apply(plugin = "java-library")
     apply(plugin = "com.diffplug.spotless")
     
+    // Add annotation processor configuration for non-annotation-processor modules
+    if (project.name != "ekbatan-annotation-processor") {
+        dependencies {
+            annotationProcessor(project(":ekbatan-annotation-processor"))
+            implementation(project(":ekbatan-annotation-processor"))
+        }
+    }
+    
     // Configure Spotless for each subproject
     configure<com.diffplug.gradle.spotless.SpotlessExtension> {
         // Configure Kotlin Gradle scripts

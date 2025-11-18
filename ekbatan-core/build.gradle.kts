@@ -32,14 +32,14 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     // Apache Commons Lang3
-    implementation("org.apache.commons:commons-lang3:3.18.0")
+    implementation("org.apache.commons:commons-lang3:3.20.0")
 
     // Jackson for JSON serialization
     api("com.fasterxml.jackson.core:jackson-databind:2.15.2")
     api("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.2")
 
     // Apache Commons Lang3 for validation and other utilities
-    api("org.apache.commons:commons-lang3:3.19.0")
+    api("org.apache.commons:commons-lang3:3.20.0")
 }
 
 tasks.withType<Test> {

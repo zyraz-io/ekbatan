@@ -43,7 +43,7 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
         return !events.isEmpty();
     }
 
-    protected abstract static class Builder<
+    public abstract static class Builder<
             ID extends Comparable<?>,
             B extends Builder<ID, B, M, STATE>,
             M extends Model<M, ID, STATE>,
