@@ -1,7 +1,10 @@
 package io.ekbatan.examples.test;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
+import static java.util.Optional.empty;
+
+import io.ekbatan.core.config.DataSourceConfig;
+import io.ekbatan.core.persistence.TransactionManager;
+import io.ekbatan.core.persistence.connection.ConnectionProvider;
 import java.sql.SQLException;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -11,10 +14,10 @@ import org.testcontainers.containers.PostgreSQLContainer;
 public abstract class BaseRepositoryTest {
 
     protected static PostgreSQLContainer<?> postgres;
-    protected static Connection connection;
+    protected static TransactionManager transactionManager;
 
     @BeforeAll
-    static void beforeAll() throws SQLException {
+    static void beforeAll() {
         // Start the container
         postgres = new PostgreSQLContainer<>("postgres:15-alpine")
                 .withDatabaseName("testdb")
@@ -27,7 +30,11 @@ public abstract class BaseRepositoryTest {
         String username = postgres.getUsername();
         String password = postgres.getPassword();
 
-        connection = DriverManager.getConnection(jdbcUrl, username, password);
+        var dataSourceConfig =
+                new DataSourceConfig(jdbcUrl, username, password, empty(), 10, empty(), empty(), empty());
+        var primaryConnectionProvider = ConnectionProvider.hikariConnectionProvider(dataSourceConfig, true);
+        var secondaryConnectionProvider = ConnectionProvider.hikariConnectionProvider(dataSourceConfig, true);
+        transactionManager = new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider);
 
         // exec migrations
         var flyway = Flyway.configure()
@@ -40,9 +47,6 @@ public abstract class BaseRepositoryTest {
     @AfterAll
     static void afterAll() throws SQLException {
         // Clean up resources
-        if (connection != null && !connection.isClosed()) {
-            connection.close();
-        }
         if (postgres != null) {
             postgres.stop();
         }

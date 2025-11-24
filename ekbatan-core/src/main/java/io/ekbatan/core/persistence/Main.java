@@ -1,10 +1,9 @@
 package io.ekbatan.core.persistence;
 
 import static io.ekbatan.core.persistence.connection.ConnectionProvider.hikariConnectionProvider;
+import static java.util.Optional.empty;
 
 import io.ekbatan.core.config.DataSourceConfig;
-import io.ekbatan.core.persistence.connection.ConnectionMode;
-import java.sql.SQLException;
 
 public class Main {
 
@@ -13,34 +12,30 @@ public class Main {
                 "jdbc:postgresql://localhost:5432/primarydb",
                 "dbuser",
                 "dbpassword",
-                null, // driverClassName, let Hikari auto-detect
+                empty(), // driverClassName, let Hikari auto-detect
                 10, // maximumPoolSize
-                2, // minimumIdle
-                60000L, // idleTimeout
-                3000L // leakDetectionThreshold
+                empty(), // minimumIdle 2
+                empty(), // idleTimeout 60000L
+                empty() // leakDetectionThreshold 3000L
                 );
 
         var replicaConfig = new DataSourceConfig(
-                "jdbc:postgresql://localhost:5432/replicadb", "dbuser", "dbpassword", null, 10, 2, 60000L, 3000L);
+                "jdbc:postgresql://localhost:5432/replicadb",
+                "dbuser",
+                "dbpassword",
+                empty(),
+                10,
+                empty(),
+                empty(),
+                empty());
 
         final var primaryConnectionProvider = hikariConnectionProvider(primaryConfig, true);
-        final var replicaConnectionProvider = hikariConnectionProvider(replicaConfig, false);
+        final var secondaryConnectionProvider = hikariConnectionProvider(replicaConfig, false);
 
-        final var txManager = new TransactionManager(primaryConnectionProvider, replicaConnectionProvider);
+        final var txManager = new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider);
 
-        final var result = txManager.inTransaction(ConnectionMode.REQUIRE_NEW, conn -> {
-            try (var stmt = conn.createStatement();
-                    var rs = stmt.executeQuery("SELECT NOW()")) {
-
-                if (rs.next()) {
-                    return rs.getString(1);
-                } else {
-                    return "No result";
-                }
-
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
+        final var result = txManager.inTransaction(dslContext -> { // This now unambiguously calls the method with a standard Function
+            return 1;
         });
 
         System.out.println("Query result: " + result);

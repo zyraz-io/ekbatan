@@ -1,87 +1,89 @@
 package io.ekbatan.core.persistence;
 
-import io.ekbatan.core.persistence.connection.ConnectionMode;
 import io.ekbatan.core.persistence.connection.ConnectionProvider;
 import io.ekbatan.core.persistence.connection.TransactionConnectionWrapper;
 import java.sql.Connection;
+import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import org.apache.commons.lang3.Validate;
+import org.jooq.DSLContext;
 
 public class TransactionManager {
 
-    private final ConnectionProvider primaryProvider;
-    private final ConnectionProvider replicaProvider;
+    public final ConnectionProvider primaryConnectionProvider;
+    public final ConnectionProvider secondaryConnectionProvider;
 
-    private static final ScopedValue<TransactionConnectionWrapper> CURRENT = ScopedValue.newInstance();
+    private final ScopedValue<TransactionConnectionWrapper> currentTransaction;
 
-    public TransactionManager(ConnectionProvider primaryProvider, ConnectionProvider replicaProvider) {
-        this.primaryProvider = Validate.notNull(primaryProvider, "primaryProvider should not be null");
-        this.replicaProvider = Validate.notNull(replicaProvider, "replicaProvider should not be null");
+    public TransactionManager(
+            ConnectionProvider primaryConnectionProvider, ConnectionProvider secondaryConnectionProvider) {
+        this.primaryConnectionProvider =
+                Validate.notNull(primaryConnectionProvider, "primaryConnectionProvider should not be null");
+        this.secondaryConnectionProvider =
+                Validate.notNull(secondaryConnectionProvider, "secondaryConnectionProvider should not be null");
+        this.currentTransaction = ScopedValue.newInstance();
     }
 
-    public <R> R withConnection(boolean primary, CheckedFunction<Connection, R> block) {
-        return switch (currentConnection()) {
-            case Connection existing -> block.apply(existing);
-            case null -> {
-                final var provider = providerOf(primary);
-                final var conn = provider.acquire();
+    public <R> R inTransactionChecked(CheckedFunction<DSLContext, R> block) throws Exception {
+        Connection newConn = null;
+        try {
+            newConn = primaryConnectionProvider.acquire();
+            final var wrapper = new TransactionConnectionWrapper(newConn);
+            return ScopedValue.where(currentTransaction, wrapper).call(() -> {
                 try {
-                    yield block.apply(conn);
-                } finally {
-                    provider.release(conn);
+                    wrapper.begin();
+                    final var result = block.apply(wrapper.dslContext());
+                    wrapper.commit();
+                    return result;
+                } catch (Exception e) {
+                    wrapper.rollback();
+                    throw e;
                 }
+            });
+        } finally {
+            if (newConn != null) {
+                primaryConnectionProvider.release(newConn);
             }
-        };
+        }
     }
 
-    public <R> R inTransaction(ConnectionMode mode, CheckedFunction<Connection, R> block) {
-        return switch (currentConnection()) {
-            case Connection existingConn -> {
-                Validate.isTrue(
-                        mode == ConnectionMode.REQUIRE_EXISTING,
-                        "Required new connection but existing connection was found");
-                yield block.apply(existingConn);
-            }
-            case null -> {
-                Validate.isTrue(
-                        mode == ConnectionMode.REQUIRE_NEW,
-                        "Required existing connection but no existing connection was found");
-
-                Connection newConn = null;
-                try {
-                    newConn = primaryProvider.acquire();
-                    final var fNewConn = newConn;
-                    final var wrapper = new TransactionConnectionWrapper(newConn);
-                    yield ScopedValue.where(CURRENT, wrapper).call(() -> {
-                        try {
-                            wrapper.begin();
-                            final var result = block.apply(fNewConn);
-                            wrapper.commit();
-                            return result;
-                        } catch (Exception e) {
-                            wrapper.rollback();
-                            throw e;
-                        }
-                    });
-                } finally {
-                    if (newConn != null) {
-                        primaryProvider.release(newConn);
-                    }
-                }
-            }
-        };
+    public void inTransactionChecked(CheckedConsumer<DSLContext> block) throws Exception {
+        inTransactionChecked(dslContext -> {
+            block.accept(dslContext);
+            return null;
+        });
     }
 
-    private Connection currentConnection() {
-        var wrapper = CURRENT.orElse(null);
-        return wrapper != null ? wrapper.connection() : null;
+    public <R> R inTransaction(Function<DSLContext, R> block) {
+        try {
+            return inTransactionChecked(block::apply);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    private ConnectionProvider providerOf(boolean primary) {
-        return primary ? primaryProvider : replicaProvider;
+    public void inTransaction(Consumer<DSLContext> block) {
+        try {
+            inTransactionChecked(block::accept);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public Optional<DSLContext> currentTransactionDbContext() {
+        return currentTransaction.isBound()
+                ? Optional.of(currentTransaction.get().dslContext())
+                : Optional.empty();
+    }
+
+    @FunctionalInterface
+    public interface CheckedConsumer<T> {
+        void accept(T t) throws Exception;
     }
 
     @FunctionalInterface
     public interface CheckedFunction<T, R> {
-        R apply(T t);
+        R apply(T t) throws Exception;
     }
 }

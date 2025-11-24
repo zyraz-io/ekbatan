@@ -1,10 +1,9 @@
-package io.ekbatan.core.persistence;
+package io.ekbatan.core.repository.jooq.exception;
 
 import java.util.Set;
 import java.util.UUID;
 
 public class PersistenceException extends RuntimeException {
-    public static final String PG_UNIQUE_VIOLATION = "23505";
 
     public PersistenceException(String message) {
         super(message);

@@ -2,15 +2,24 @@ package io.ekbatan.core.persistence.connection;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import org.jooq.DSLContext;
+import org.jooq.SQLDialect;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.jooq.impl.DSL;
 
 public class TransactionConnectionWrapper {
     private final Connection connection;
     private final boolean initialAutoCommit;
+    private final DSLContext dslContext;
+
+    private static final Logger log = LoggerFactory.getLogger(TransactionConnectionWrapper.class);
 
     public TransactionConnectionWrapper(Connection connection) {
         this.connection = connection;
         try {
             this.initialAutoCommit = connection.getAutoCommit();
+            this.dslContext = DSL.using(connection, SQLDialect.POSTGRES);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -46,11 +55,16 @@ public class TransactionConnectionWrapper {
                     connection.setAutoCommit(initialAutoCommit);
                 }
             }
-        } catch (SQLException ignored) {
+        } catch (SQLException e) {
+            log.warn("Failed to rollback and reset auto-commit", e);
         }
     }
 
     public Connection connection() {
         return connection;
+    }
+
+    public DSLContext dslContext() {
+        return dslContext;
     }
 }

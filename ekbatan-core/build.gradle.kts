@@ -26,6 +26,7 @@ dependencies {
     // PostgreSQL JDBC driver
     implementation("org.postgresql:postgresql:42.7.7")
     implementation("com.zaxxer:HikariCP:7.0.2")
+    implementation("org.apache.commons:commons-collections4:4.5.0")
 
     testImplementation(platform("org.junit:junit-bom:6.0.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
