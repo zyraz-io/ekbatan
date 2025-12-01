@@ -3,9 +3,12 @@ package io.ekbatan.examples.wallet.repository;
 import static io.ekbatan.examples.wallet.models.Wallet.createWallet;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.ekbatan.core.domain.MicroType;
 import io.ekbatan.examples.test.BaseRepositoryTest;
+import io.ekbatan.examples.wallet.models.Wallet;
 import java.math.BigDecimal;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Currency;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -88,5 +91,73 @@ class WalletRepositoryTest extends BaseRepositoryTest {
 
         final var fetchedWallet = walletRepository.findById(wallet.getId().getValue());
         assertThat(fetchedWallet).isEmpty();
+    }
+
+    @Test
+    void should_addAll() {
+
+        // GIVEN
+        final var wallets = new ArrayList<Wallet>();
+        for (int i = 0; i < 10; i++) {
+            wallets.add(createWallet(UUID.randomUUID().toString(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                    .build());
+        }
+
+        // WHEN
+        walletRepository.addAll(wallets);
+
+        // THEN
+        final var fetchWallets = walletRepository.findAllByIds(
+                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+
+        assertThat(fetchWallets).hasSize(10);
+    }
+
+    @Test
+    void should_addAll_inTransaction() {
+
+        // GIVEN
+        final var wallets = new ArrayList<Wallet>();
+        for (int i = 0; i < 10; i++) {
+            wallets.add(createWallet(UUID.randomUUID().toString(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                    .build());
+        }
+
+        // WHEN
+        transactionManager.inTransaction(dslContext -> {
+            walletRepository.addAll(wallets);
+        });
+
+        // THEN
+        final var fetchWallets = walletRepository.findAllByIds(
+                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+
+        assertThat(fetchWallets).hasSize(10);
+    }
+
+    @Test
+    void should_not_addAll_inTransaction_when_exception() {
+
+        // GIVEN
+        final var wallets = new ArrayList<Wallet>();
+        for (int i = 0; i < 10; i++) {
+            wallets.add(createWallet(UUID.randomUUID().toString(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                    .build());
+        }
+
+        // WHEN
+        try {
+            transactionManager.inTransaction((Consumer<DSLContext>) dslContext -> {
+                walletRepository.addAll(wallets);
+                throw new RuntimeException();
+            });
+        } catch (Exception _) {
+        }
+
+        // THEN
+        final var fetchWallets = walletRepository.findAllByIds(
+                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+
+        assertThat(fetchWallets).hasSize(0);
     }
 }

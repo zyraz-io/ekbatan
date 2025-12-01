@@ -19,20 +19,20 @@ import org.jooq.impl.DSL;
  *
  * @param <MODEL>  The domain model type
  * @param <RECORD> The JOOQ record type
- * @param <TABLE_ID>     The ID type of the model
+ * @param <MODEL_ID>     The ID type of the model
  * @param <TABLE>    The JOOQ table type
  */
 public abstract class JooqBaseModelRepository<
         MODEL extends Model<MODEL, ?, ?>,
         RECORD extends TableRecord<?>,
         TABLE extends Table<RECORD>,
-        TABLE_ID extends Comparable<?>> {
+        MODEL_ID extends Comparable<?>> {
 
     public final TransactionManager transactionManager;
     private final DSLContext db;
     private final DSLContext readonlyDb;
     protected final TABLE table;
-    private final TableField<RECORD, TABLE_ID> idField;
+    private final TableField<RECORD, MODEL_ID> idField;
     private final TableField<RECORD, Instant> createdDateField;
     private final TableField<RECORD, Instant> updatedDateField;
     private final Class<MODEL> modelClass;
@@ -45,7 +45,7 @@ public abstract class JooqBaseModelRepository<
     protected JooqBaseModelRepository(
             Class<MODEL> modelClass,
             TABLE table,
-            TableField<RECORD, TABLE_ID> idField,
+            TableField<RECORD, MODEL_ID> idField,
             TransactionManager transactionManager) {
         this.transactionManager = Validate.notNull(transactionManager, "transactionManager cannot be null");
         this.db = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
@@ -128,7 +128,7 @@ public abstract class JooqBaseModelRepository<
 
         final var fields = records.getFirst().fields();
 
-        final var insert = txDbElseDb().insertInto(table, fields).values(new Object[0]);
+        final var insert = txDbElseDb().insertInto(table, fields);
 
         for (RECORD record : records) {
             final var values = Arrays.stream(fields).map(record::get).toArray();
@@ -162,7 +162,7 @@ public abstract class JooqBaseModelRepository<
         var updatedRecord = txDbElseDb()
                 .update(table)
                 .set(record)
-                .where(idField.eq((TABLE_ID) model.getId()))
+                .where(idField.eq((MODEL_ID) model.getId()))
                 .and(updatedDateField.eq(originalUpdatedDate))
                 .returning()
                 .fetchOptional();
@@ -191,11 +191,11 @@ public abstract class JooqBaseModelRepository<
         });
 
         // Build VALUES rows: (id, old_updated_date, new_updated_date)
-        List<Row3<TABLE_ID, Instant, Instant>> rows = new ArrayList<>();
+        List<Row3<MODEL_ID, Instant, Instant>> rows = new ArrayList<>();
         Instant now = Instant.now(); // or generate per model if needed
         for (MODEL m : models) {
             rows.add(DSL.row(
-                    (TABLE_ID) m.getId(),
+                    (MODEL_ID) m.getId(),
                     m.updatedDate,
                     now // new updated timestamp
             ));
@@ -345,38 +345,33 @@ public abstract class JooqBaseModelRepository<
     /**
      * Find a single model by ID.
      */
-    public Optional<MODEL> findById(TABLE_ID id) {
+    public Optional<MODEL> findById(MODEL_ID id) {
         return findOneWhere(idField.eq(id));
     }
 
-    public MODEL getById(TABLE_ID id) {
+    public MODEL getById(MODEL_ID id) {
         return findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
                         format("No entity found with id: %s[id=%s]", modelClass.getSimpleName(), id)));
     }
 
     @SuppressWarnings("unchecked")
-    public List<MODEL> findAllByIds(Collection<TABLE_ID> ids) {
+    public List<MODEL> findAllByIds(Collection<MODEL_ID> ids) {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
         }
 
-        Set<TABLE_ID> uniqueIds = new LinkedHashSet<>(ids);
-        if (uniqueIds.size() <= 3) {
-            return readonlyDb()
-                    .selectFrom(table)
-                    .where(idField.in(uniqueIds))
-                    .fetch()
-                    .map(this::fromRecord);
-        }
+        Set<MODEL_ID> uniqueIds = new LinkedHashSet<>(ids);
 
-        final var idClass = (Class<TABLE_ID>) idField.getType();
-        TABLE_ID[] array = uniqueIds.toArray((TABLE_ID[]) new Object[0]); // Simple conversion, requires unchecked cast
-
-        // For larger sets, use = ANY(?) for better performance
+        // To use ANY, we need to bind an array value.
+        // Instead of creating a Java array (which requires reflection for generics),
+        // we can pass the collection to `DSL.val()` and specify the array type
+        // using the idField's data type. jOOQ will create the appropriate SQL
+        // array bind value for the database.
         return readonlyDb()
                 .selectFrom(table)
-                .where(idField.equal(DSL.any(DSL.val(array))))
+                .where(idField.eq(DSL.any(
+                        DSL.val(uniqueIds, idField.getDataType().getArrayDataType()))))
                 .fetch()
                 .map(this::fromRecord);
     }
@@ -411,7 +406,7 @@ public abstract class JooqBaseModelRepository<
         return query.limit(offset, limit).fetch().map(this::fromRecord);
     }
 
-    public boolean existsById(TABLE_ID id) {
+    public boolean existsById(MODEL_ID id) {
         return db().fetchExists(db().selectOne().from(table).where(idField.eq(id)));
     }
 
