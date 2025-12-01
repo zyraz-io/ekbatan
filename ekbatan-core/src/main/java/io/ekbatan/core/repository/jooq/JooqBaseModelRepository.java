@@ -162,7 +162,7 @@ public abstract class JooqBaseModelRepository<
         var updatedRecord = txDbElseDb()
                 .update(table)
                 .set(record)
-                .where(idField.eq((MODEL_ID) model.getId()))
+                .where(idField.eq(record.get(idField)))
                 .and(updatedDateField.eq(originalUpdatedDate))
                 .returning()
                 .fetchOptional();
@@ -195,32 +195,27 @@ public abstract class JooqBaseModelRepository<
         Instant now = Instant.now(); // or generate per model if needed
         for (MODEL m : models) {
             rows.add(DSL.row(
-                    (MODEL_ID) m.getId(),
-                    m.updatedDate,
-                    now // new updated timestamp
-            ));
+                    (MODEL_ID) m.getId(), m.updatedDate, now // new updated timestamp
+                    ));
         }
 
         // values(id, old_updated_date, new_updated_date) AS v(id, old, new)
-        var values = DSL
-                .values(rows.toArray(Row3[]::new))
-                .as("v", "id", "old_updated_date", "new_updated_date");
+        var values = DSL.values(rows.toArray(Row3[]::new)).as("v", "id", "old_updated_date", "new_updated_date");
 
         DSLContext ctx = txDbElseDb();
 
         // Build the UPDATE … FROM … RETURNING query
         // NOTE: jOOQ-OSS supports returning() for PostgreSQL
-        var updateQuery =
-                ctx.update(table)
-                        // Set updated_date = v.new_updated_date
-                        .set(updatedDateField, DSL.field("v.new_updated_date", Instant.class))
-                        // IMPORTANT: Set ALL other fields too (except id, created_date)
-                        // We copy values from input model->record into the UPDATE
-                        .set(getUpdatableFieldMap(models.iterator().next()))
-                        .from(values)
-                        .where(idField.eq(DSL.field("v.id", idField.getType())))
-                        .and(updatedDateField.eq(DSL.field("v.old_updated_date", Instant.class)))
-                        .returning(); // <-- no re-fetch needed
+        var updateQuery = ctx.update(table)
+                // Set updated_date = v.new_updated_date
+                .set(updatedDateField, DSL.field("v.new_updated_date", Instant.class))
+                // IMPORTANT: Set ALL other fields too (except id, created_date)
+                // We copy values from input model->record into the UPDATE
+                .set(getUpdatableFieldMap(models.iterator().next()))
+                .from(values)
+                .where(idField.eq(DSL.field("v.id", idField.getType())))
+                .and(updatedDateField.eq(DSL.field("v.old_updated_date", Instant.class)))
+                .returning(); // <-- no re-fetch needed
 
         // Execute the update and get returned records
         List<RECORD> updatedRecords = updateQuery.fetch();
@@ -238,7 +233,6 @@ public abstract class JooqBaseModelRepository<
         return updatedModels;
     }
 
-
     private Map<Field<?>, Object> getUpdatableFieldMap(MODEL model) {
         RECORD record = toRecord(model);
 
@@ -251,7 +245,6 @@ public abstract class JooqBaseModelRepository<
         }
         return map;
     }
-
 
     @SuppressWarnings("unchecked")
     public List<MODEL> updateAll2(Collection<MODEL> models) {
@@ -274,7 +267,7 @@ public abstract class JooqBaseModelRepository<
             mutableFields.add((TableField<RECORD, Object>) f);
         }
 
-        //Build Row objects per model
+        // Build Row objects per model
         List<RowN> rows = new ArrayList<>(models.size());
         for (MODEL m : models) {
             Validate.notNull(m.getId(), "Model ID cannot be null");
@@ -305,23 +298,21 @@ public abstract class JooqBaseModelRepository<
         }
 
         RowN[] rowArray = rows.toArray(new RowN[0]);
-        var valuesTable = DSL.values(rowArray)
-                .as("v", valueColumnNames);
+        var valuesTable = DSL.values(rowArray).as("v", valueColumnNames);
 
         // Build UPDATE query
-        UpdateSetMoreStep<RECORD> update = ctx.update(table)
-                .set(updatedDateField, DSL.field("v.new_updated_date", Instant.class));
+        UpdateSetMoreStep<RECORD> update =
+                ctx.update(table).set(updatedDateField, DSL.field("v.new_updated_date", Instant.class));
 
         // set all mutable fields dynamically
         for (TableField<RECORD, ?> f : mutableFields) {
-            Field<Object> target = (Field<Object>) f;                   // force target to Object
+            Field<Object> target = (Field<Object>) f; // force target to Object
             Object source = DSL.field("v." + f.getName(), f.getType()); // force value to Object
-            update.set(target, source);                                // now unambiguous
+            update.set(target, source); // now unambiguous
         }
 
         // FROM ... WHERE id & optimistic locking
-        List<RECORD> updatedRecords = update
-                .from(valuesTable)
+        List<RECORD> updatedRecords = update.from(valuesTable)
                 .where(idField.eq(DSL.field("v.id", idField.getType())))
                 .and(updatedDateField.eq(DSL.field("v.old_updated_date", Instant.class)))
                 .returning()
@@ -340,7 +331,6 @@ public abstract class JooqBaseModelRepository<
 
         return updatedModels;
     }
-
 
     /**
      * Find a single model by ID.
@@ -370,8 +360,8 @@ public abstract class JooqBaseModelRepository<
         // array bind value for the database.
         return readonlyDb()
                 .selectFrom(table)
-                .where(idField.eq(DSL.any(
-                        DSL.val(uniqueIds, idField.getDataType().getArrayDataType()))))
+                .where(idField.eq(
+                        DSL.any(DSL.val(uniqueIds, idField.getDataType().getArrayDataType()))))
                 .fetch()
                 .map(this::fromRecord);
     }

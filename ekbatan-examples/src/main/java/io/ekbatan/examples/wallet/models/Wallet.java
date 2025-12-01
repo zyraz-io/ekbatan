@@ -14,11 +14,12 @@ import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import org.apache.commons.lang3.Validate;
 
 @AutoBuilder
 public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
-    public final String ownerId;
+    public final UUID ownerId;
     public final Currency currency;
     public final BigDecimal balance;
     public final List<String> aliases;
@@ -31,7 +32,7 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
         this.aliases = Objects.requireNonNullElse(builder.aliases, List.of());
     }
 
-    public static WalletBuilder createWallet(String ownerId, Currency currency, BigDecimal balance) {
+    public static WalletBuilder createWallet(UUID ownerId, Currency currency, BigDecimal balance) {
         final var id = Id.random(Wallet.class);
         return WalletBuilder.wallet()
                 .id(id)

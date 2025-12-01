@@ -1,6 +1,7 @@
 package io.ekbatan.examples.wallet.repository;
 
 import static io.ekbatan.examples.wallet.models.Wallet.createWallet;
+import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.ekbatan.core.domain.MicroType;
@@ -10,7 +11,6 @@ import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Currency;
-import java.util.UUID;
 import java.util.function.Consumer;
 import org.jooq.DSLContext;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +28,7 @@ class WalletRepositoryTest extends BaseRepositoryTest {
     @Test
     void shouldSaveAndRetrieveWallet() {
         // GIVEN
-        final var wallet = createWallet(UUID.randomUUID().toString(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
                 .build();
 
         // WHEN
@@ -50,7 +50,7 @@ class WalletRepositoryTest extends BaseRepositoryTest {
     void testInTransaction_should_commit() {
         // GIVEN / WHEN
 
-        final var wallet = createWallet(UUID.randomUUID().toString(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
                 .build();
 
         transactionManager.inTransaction(dslContext -> {
@@ -74,7 +74,7 @@ class WalletRepositoryTest extends BaseRepositoryTest {
     void testInTransaction_should_rollback() {
         // GIVEN / WHEN
 
-        final var wallet = createWallet(UUID.randomUUID().toString(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
                 .build();
 
         try {
@@ -99,7 +99,7 @@ class WalletRepositoryTest extends BaseRepositoryTest {
         // GIVEN
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 10; i++) {
-            wallets.add(createWallet(UUID.randomUUID().toString(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
                     .build());
         }
 
@@ -119,12 +119,12 @@ class WalletRepositoryTest extends BaseRepositoryTest {
         // GIVEN
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 10; i++) {
-            wallets.add(createWallet(UUID.randomUUID().toString(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
                     .build());
         }
 
         // WHEN
-        transactionManager.inTransaction(dslContext -> {
+        transactionManager.inTransaction(_ -> {
             walletRepository.addAll(wallets);
         });
 
@@ -141,13 +141,13 @@ class WalletRepositoryTest extends BaseRepositoryTest {
         // GIVEN
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 10; i++) {
-            wallets.add(createWallet(UUID.randomUUID().toString(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
                     .build());
         }
 
         // WHEN
         try {
-            transactionManager.inTransaction((Consumer<DSLContext>) dslContext -> {
+            transactionManager.inTransaction((Consumer<DSLContext>) _ -> {
                 walletRepository.addAll(wallets);
                 throw new RuntimeException();
             });
@@ -159,5 +159,64 @@ class WalletRepositoryTest extends BaseRepositoryTest {
                 wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
 
         assertThat(fetchWallets).hasSize(0);
+    }
+
+    @Test
+    void should_update() {
+        // GIVEN
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        walletRepository.add(wallet);
+        final var walletToUpdate = wallet.withdraw(BigDecimal.TWO);
+
+        // WHEN
+        final var updatedWallet = walletRepository.update(walletToUpdate);
+
+        // THEN
+        assertThat(updatedWallet).isNotNull();
+        assertThat(updatedWallet.balance).isEqualByComparingTo(BigDecimal.valueOf(8));
+    }
+
+    @Test
+    void should_update_inTransaction() {
+        // GIVEN
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        walletRepository.add(wallet);
+        final var walletToUpdate = wallet.withdraw(BigDecimal.TWO);
+
+        // WHEN
+        transactionManager.inTransaction(_ -> {
+            walletRepository.update(walletToUpdate);
+        });
+
+        // THEN
+        final var fetchedWallet = walletRepository.getById(wallet.getId().getValue());
+        assertThat(fetchedWallet).isNotNull();
+        assertThat(fetchedWallet.balance).isEqualByComparingTo(BigDecimal.valueOf(8));
+    }
+
+    @Test
+    void should_not_update_inTransaction_when_exception() {
+        // GIVEN
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        walletRepository.add(wallet);
+        final var walletToUpdate = wallet.withdraw(BigDecimal.TWO);
+
+        // WHEN
+        try {
+            transactionManager.inTransaction((Consumer<DSLContext>) _ -> {
+                walletRepository.update(walletToUpdate);
+
+                throw new RuntimeException();
+            });
+        } catch (Exception _) {
+        }
+
+        // THEN
+        final var fetchedWallet = walletRepository.getById(wallet.getId().getValue());
+        assertThat(fetchedWallet).isNotNull();
+        assertThat(fetchedWallet.balance).isEqualByComparingTo(wallet.balance);
     }
 }

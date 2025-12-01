@@ -34,9 +34,10 @@ public class Main {
 
         final var txManager = new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider);
 
-        final var result = txManager.inTransaction(dslContext -> { // This now unambiguously calls the method with a standard Function
-            return 1;
-        });
+        final var result = txManager.inTransaction(
+                dslContext -> { // This now unambiguously calls the method with a standard Function
+                    return 1;
+                });
 
         System.out.println("Query result: " + result);
     }
