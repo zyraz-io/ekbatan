@@ -1,4 +1,4 @@
-package io.ekbatan.core.repository.jooq;
+package io.ekbatan.core.repository.exception;
 
 import java.util.Optional;
 import org.jooq.Index;

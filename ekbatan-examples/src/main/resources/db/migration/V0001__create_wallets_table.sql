@@ -1,6 +1,7 @@
 -- Create the wallets table
 CREATE TABLE wallets (
     id UUID PRIMARY KEY,
+    version BIGINT NOT NULL,
     state VARCHAR(24) NOT NULL,
     owner_id UUID NOT NULL,
     currency CHAR(3) NOT NULL,

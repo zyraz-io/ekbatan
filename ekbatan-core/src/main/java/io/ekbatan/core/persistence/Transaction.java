@@ -1,4 +1,4 @@
-package io.ekbatan.core.persistence.connection;
+package io.ekbatan.core.persistence;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -8,14 +8,14 @@ import org.jooq.impl.DSL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class TransactionConnectionWrapper {
+class Transaction {
     private final Connection connection;
     private final boolean initialAutoCommit;
     private final DSLContext dslContext;
 
-    private static final Logger log = LoggerFactory.getLogger(TransactionConnectionWrapper.class);
+    private static final Logger log = LoggerFactory.getLogger(Transaction.class);
 
-    public TransactionConnectionWrapper(Connection connection) {
+    public Transaction(Connection connection) {
         this.connection = connection;
         try {
             this.initialAutoCommit = connection.getAutoCommit();

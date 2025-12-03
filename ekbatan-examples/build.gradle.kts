@@ -37,7 +37,7 @@ tasks {
                     .withIncludeTypes("JSONB"),
                 ForcedType()
                     .withUserType("java.time.Instant")
-                    .withConverter("io.ekbatan.core.repository.jooq.converter.InstantConverter")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.InstantConverter")
                     .withIncludeTypes("TIMESTAMP")
                     .withIncludeExpression(".*"),
             )

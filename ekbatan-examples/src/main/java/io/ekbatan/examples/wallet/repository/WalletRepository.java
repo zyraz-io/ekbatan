@@ -4,7 +4,7 @@ import static io.ekbatan.examples.generated.jooq.tables.Wallets.WALLETS;
 
 import io.ekbatan.core.domain.Id;
 import io.ekbatan.core.persistence.TransactionManager;
-import io.ekbatan.core.repository.jooq.JooqBaseModelRepository;
+import io.ekbatan.core.repository.JooqBaseModelRepository;
 import io.ekbatan.examples.generated.jooq.tables.Wallets;
 import io.ekbatan.examples.generated.jooq.tables.records.WalletsRecord;
 import io.ekbatan.examples.wallet.models.Wallet;
@@ -23,6 +23,7 @@ public class WalletRepository extends JooqBaseModelRepository<Wallet, WalletsRec
     public Wallet fromRecord(WalletsRecord record) {
         return WalletBuilder.wallet()
                 .id(Id.of(Wallet.class, record.getId()))
+                .version(record.getVersion())
                 .state(WalletState.valueOf(record.getState()))
                 .ownerId(record.getOwnerId())
                 .currency(Currency.getInstance(record.getCurrency()))
@@ -36,6 +37,7 @@ public class WalletRepository extends JooqBaseModelRepository<Wallet, WalletsRec
     public WalletsRecord toRecord(Wallet model) {
         return new WalletsRecord(
                 model.id.getValue(),
+                model.version,
                 model.state.name(),
                 model.ownerId,
                 model.currency.getCurrencyCode(),

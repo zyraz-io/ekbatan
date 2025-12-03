@@ -1,11 +1,11 @@
-package io.ekbatan.core.repository.jooq;
+package io.ekbatan.core.repository;
 
 import static java.lang.String.format;
 
 import io.ekbatan.core.domain.Model;
 import io.ekbatan.core.persistence.TransactionManager;
-import io.ekbatan.core.repository.jooq.exception.EntityNotFoundException;
-import io.ekbatan.core.repository.jooq.exception.StaleRecordException;
+import io.ekbatan.core.repository.exception.EntityNotFoundException;
+import io.ekbatan.core.repository.exception.StaleRecordException;
 import java.time.Instant;
 import java.util.*;
 import org.apache.commons.collections4.CollectionUtils;
@@ -35,12 +35,14 @@ public abstract class JooqBaseModelRepository<
     private final TableField<RECORD, MODEL_ID> idField;
     private final TableField<RECORD, Instant> createdDateField;
     private final TableField<RECORD, Instant> updatedDateField;
+    private final TableField<RECORD, Long> versionField;
     private final Class<MODEL> modelClass;
     protected final int defaultLimit = 1000;
 
     // Field names for dynamic access
     private static final String CREATED_DATE_FIELD_NAME = "created_date";
     private static final String UPDATED_DATE_FIELD_NAME = "updated_date";
+    private static final String VERSION_FIELD_NAME = "version";
 
     protected JooqBaseModelRepository(
             Class<MODEL> modelClass,
@@ -60,10 +62,13 @@ public abstract class JooqBaseModelRepository<
                 "Table " + table.getName() + " must have a 'created_date' field");
         this.updatedDateField = Validate.notNull(
                 resolveField(table, UPDATED_DATE_FIELD_NAME, Instant.class),
-                "Table " + table.getName() + " must have an 'updated_date' field for optimistic locking");
+                "Table " + table.getName() + " must have an 'updated_date' field");
+        this.versionField = Validate.notNull(
+                resolveField(table, VERSION_FIELD_NAME, Long.class),
+                "Table " + table.getName() + " must have a 'version' field for optimistic locking");
     }
 
-    private DSLContext txDbElseDb() {
+    protected DSLContext txDbElseDb() {
         return txDb().orElseGet(this::db);
     }
 
@@ -102,12 +107,12 @@ public abstract class JooqBaseModelRepository<
                         model.getId().toString(), new RuntimeException("Failed to insert model")));
     }
 
-    /**
-     * Insert new models.
-     *
-     * @param models the models to insert
-     * @return the inserted models
-     */
+    public void addNoResult(MODEL model) {
+        Validate.notNull(model, "Model cannot be null");
+
+        txDbElseDb().insertInto(table).set(toRecord(model)).execute();
+    }
+
     public List<MODEL> addAll(Collection<MODEL> models) {
         Validate.notNull(models, "Models collection cannot be null");
 
@@ -147,32 +152,79 @@ public abstract class JooqBaseModelRepository<
         return addedModels;
     }
 
+    public void addAllNoResult(Collection<MODEL> models) {
+        Validate.notNull(models, "Models collection cannot be null");
+        if (CollectionUtils.isEmpty(models)) {
+            return;
+        }
+
+        final var records = models.stream().map(this::toRecord).toList();
+
+        final var fields = records.getFirst().fields();
+        final var insert = txDbElseDb().insertInto(table, fields);
+
+        records.forEach(
+                record -> insert.values(Arrays.stream(fields).map(record::get).toArray()));
+        insert.execute();
+    }
+
     public MODEL update(MODEL model) {
         Validate.notNull(model, "Model cannot be null");
         Validate.notNull(model.getId(), "Model ID cannot be null for update");
-
-        final Instant originalUpdatedDate = model.updatedDate;
-        Validate.notNull(originalUpdatedDate, "Model must have a non-null updatedDate for optimistic locking check.");
+        Validate.notNull(model.version, "Model must have a non-null version for optimistic locking");
 
         final RECORD record = toRecord(model);
 
-        final var newUpdatedDate = Instant.now();
-        record.set(updatedDateField, newUpdatedDate);
+        // Increment the version
+        final Long currentVersion = model.version;
+        final Long newVersion = currentVersion + 1;
+        record.set(versionField, newVersion);
 
         var updatedRecord = txDbElseDb()
                 .update(table)
                 .set(record)
                 .where(idField.eq(record.get(idField)))
-                .and(updatedDateField.eq(originalUpdatedDate))
+                .and(versionField.eq(currentVersion))
                 .returning()
                 .fetchOptional();
 
         if (updatedRecord.isEmpty()) {
-            throw new StaleRecordException(
-                    /*format("Entity %s[id=%s] was concurrently modified.", modelClass.getSimpleName(), model.getId())*/ );
+            throw new StaleRecordException(format(
+                    "Entity %s[id=%s, version=%d] was concurrently modified or not found",
+                    modelClass.getSimpleName(), model.getId(), currentVersion));
         }
 
         return updatedRecord.map(this::fromRecord).orElseThrow();
+    }
+
+    public void updateNoResult(MODEL model) {
+        Validate.notNull(model, "Model cannot be null");
+        Validate.notNull(model.getId(), "Model ID cannot be null for update");
+        Validate.notNull(model.version, "Model must have a non-null version for optimistic locking");
+
+        final RECORD record = toRecord(model);
+
+        // Increment the version
+        final Long currentVersion = model.version;
+        final Long newVersion = currentVersion + 1;
+        record.set(versionField, newVersion);
+
+        int affectedRows = txDbElseDb()
+                .update(table)
+                .set(record)
+                .where(idField.eq(record.get(idField)))
+                .and(versionField.eq(currentVersion))
+                .execute();
+
+        if (affectedRows > 1) {
+            throw new IllegalStateException();
+        }
+
+        if (affectedRows < 1) {
+            throw new StaleRecordException(format(
+                    "Entity %s[id=%s, version=%d] was concurrently modified or not found",
+                    modelClass.getSimpleName(), model.getId(), currentVersion));
+        }
     }
 
     public List<MODEL> updateAll(Collection<MODEL> models) {
@@ -184,157 +236,60 @@ public abstract class JooqBaseModelRepository<
             return List.of(update(models.iterator().next()));
         }
 
-        // Validate inputs
-        models.forEach(model -> {
-            Validate.notNull(model.getId(), "Model ID cannot be null for update");
-            Validate.notNull(model.updatedDate, "Model must have a non-null updatedDate for optimistic locking");
-        });
+        var updateQuery = buildUpdateAllQuery(models).returning();
+        final var updatedModels = updateQuery.fetch().map(this::fromRecord);
 
-        // Build VALUES rows: (id, old_updated_date, new_updated_date)
-        List<Row3<MODEL_ID, Instant, Instant>> rows = new ArrayList<>();
-        Instant now = Instant.now(); // or generate per model if needed
-        for (MODEL m : models) {
-            rows.add(DSL.row(
-                    (MODEL_ID) m.getId(), m.updatedDate, now // new updated timestamp
-                    ));
-        }
-
-        // values(id, old_updated_date, new_updated_date) AS v(id, old, new)
-        var values = DSL.values(rows.toArray(Row3[]::new)).as("v", "id", "old_updated_date", "new_updated_date");
-
-        DSLContext ctx = txDbElseDb();
-
-        // Build the UPDATE … FROM … RETURNING query
-        // NOTE: jOOQ-OSS supports returning() for PostgreSQL
-        var updateQuery = ctx.update(table)
-                // Set updated_date = v.new_updated_date
-                .set(updatedDateField, DSL.field("v.new_updated_date", Instant.class))
-                // IMPORTANT: Set ALL other fields too (except id, created_date)
-                // We copy values from input model->record into the UPDATE
-                .set(getUpdatableFieldMap(models.iterator().next()))
-                .from(values)
-                .where(idField.eq(DSL.field("v.id", idField.getType())))
-                .and(updatedDateField.eq(DSL.field("v.old_updated_date", Instant.class)))
-                .returning(); // <-- no re-fetch needed
-
-        // Execute the update and get returned records
-        List<RECORD> updatedRecords = updateQuery.fetch();
-
-        if (updatedRecords.size() != models.size()) {
-            throw new StaleRecordException();
-        }
-
-        // Convert returned jOOQ records → MODEL
-        List<MODEL> updatedModels = new ArrayList<>(updatedRecords.size());
-        for (RECORD r : updatedRecords) {
-            updatedModels.add(fromRecord(r));
+        if (updatedModels.size() != models.size()) {
+            throw new StaleRecordException(
+                    format("Expected to update %d records but only updated %d", models.size(), updatedModels.size()));
         }
 
         return updatedModels;
     }
 
-    private Map<Field<?>, Object> getUpdatableFieldMap(MODEL model) {
-        RECORD record = toRecord(model);
-
-        Map<Field<?>, Object> map = new LinkedHashMap<>();
-        for (Field<?> field : record.fields()) {
-            if (field.equals(idField)) continue;
-            if (field.equals(createdDateField)) continue;
-            if (field.equals(updatedDateField)) continue;
-            map.put(field, record.get(field));
-        }
-        return map;
-    }
-
-    @SuppressWarnings("unchecked")
-    public List<MODEL> updateAll2(Collection<MODEL> models) {
+    public void updateAllNoResult(Collection<MODEL> models) {
         Validate.notNull(models, "Models collection cannot be null");
         if (models.isEmpty()) {
-            return List.of();
+            return;
         }
         if (models.size() == 1) {
-            return List.of(update(models.iterator().next()));
+            updateNoResult(models.iterator().next());
+            return;
         }
 
-        DSLContext ctx = txDbElseDb();
-        Instant now = Instant.now();
+        int affectedRows = buildUpdateAllQuery(models).execute();
 
-        // Extract mutable fields dynamically (excluding id, created_date, updated_date)
-        List<TableField<RECORD, Object>> mutableFields = new ArrayList<>();
-        RECORD firstRecord = toRecord(models.iterator().next());
-        for (Field<?> f : firstRecord.fields()) {
-            if (f.equals(idField) || f.equals(createdDateField) || f.equals(updatedDateField)) continue;
-            mutableFields.add((TableField<RECORD, Object>) f);
+        if (affectedRows != models.size()) {
+            throw new StaleRecordException(
+                    format("Expected to update %d records but only updated %d", models.size(), affectedRows));
         }
-
-        // Build Row objects per model
-        List<RowN> rows = new ArrayList<>(models.size());
-        for (MODEL m : models) {
-            Validate.notNull(m.getId(), "Model ID cannot be null");
-            Validate.notNull(m.updatedDate, "Model must have non-null updatedDate");
-
-            RECORD r = toRecord(m);
-
-            // Row: id, old_updated_date, new_updated_date, mutable fields...
-            Object[] rowValues = new Object[3 + mutableFields.size()];
-            rowValues[0] = m.getId();
-            rowValues[1] = m.updatedDate;
-            rowValues[2] = now;
-
-            for (int i = 0; i < mutableFields.size(); i++) {
-                rowValues[3 + i] = r.get(mutableFields.get(i));
-            }
-
-            rows.add(DSL.row(rowValues));
-        }
-
-        // Create VALUES table alias
-        String[] valueColumnNames = new String[3 + mutableFields.size()];
-        valueColumnNames[0] = "id";
-        valueColumnNames[1] = "old_updated_date";
-        valueColumnNames[2] = "new_updated_date";
-        for (int i = 0; i < mutableFields.size(); i++) {
-            valueColumnNames[3 + i] = mutableFields.get(i).getName();
-        }
-
-        RowN[] rowArray = rows.toArray(new RowN[0]);
-        var valuesTable = DSL.values(rowArray).as("v", valueColumnNames);
-
-        // Build UPDATE query
-        UpdateSetMoreStep<RECORD> update =
-                ctx.update(table).set(updatedDateField, DSL.field("v.new_updated_date", Instant.class));
-
-        // set all mutable fields dynamically
-        for (TableField<RECORD, ?> f : mutableFields) {
-            Field<Object> target = (Field<Object>) f; // force target to Object
-            Object source = DSL.field("v." + f.getName(), f.getType()); // force value to Object
-            update.set(target, source); // now unambiguous
-        }
-
-        // FROM ... WHERE id & optimistic locking
-        List<RECORD> updatedRecords = update.from(valuesTable)
-                .where(idField.eq(DSL.field("v.id", idField.getType())))
-                .and(updatedDateField.eq(DSL.field("v.old_updated_date", Instant.class)))
-                .returning()
-                .fetch();
-
-        // Validate optimistic locking
-        if (updatedRecords.size() != models.size()) {
-            throw new StaleRecordException();
-        }
-
-        // 7️⃣ Convert records to MODEL
-        List<MODEL> updatedModels = new ArrayList<>(updatedRecords.size());
-        for (RECORD r : updatedRecords) {
-            updatedModels.add(fromRecord(r));
-        }
-
-        return updatedModels;
     }
 
-    /**
-     * Find a single model by ID.
-     */
+    private UpdateConditionStep<RECORD> buildUpdateAllQuery(Collection<MODEL> models) {
+        final var records = models.stream().map(this::toRecord).toList();
+        final var fields = records.getFirst().fields();
+
+        final var rows = records.stream().map(m -> DSL.row(m.intoArray())).toArray(RowN[]::new);
+
+        final var columnNames = Arrays.stream(fields).map(Field::getName).toArray(String[]::new);
+
+        var values = DSL.values(rows).as("v", columnNames);
+
+        var update = txDbElseDb()
+                .update(table)
+                .set(versionField, values.field(versionField).plus(1));
+
+        for (var field : fields) {
+            if (!field.equals(versionField)) {
+                update = setField(update, field, values);
+            }
+        }
+
+        return update.from(values)
+                .where(idField.eq(values.field(idField)))
+                .and(versionField.eq(values.field(versionField)));
+    }
+
     public Optional<MODEL> findById(MODEL_ID id) {
         return findOneWhere(idField.eq(id));
     }
@@ -345,7 +300,6 @@ public abstract class JooqBaseModelRepository<
                         format("No entity found with id: %s[id=%s]", modelClass.getSimpleName(), id)));
     }
 
-    @SuppressWarnings("unchecked")
     public List<MODEL> findAllByIds(Collection<MODEL_ID> ids) {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
@@ -353,11 +307,6 @@ public abstract class JooqBaseModelRepository<
 
         Set<MODEL_ID> uniqueIds = new LinkedHashSet<>(ids);
 
-        // To use ANY, we need to bind an array value.
-        // Instead of creating a Java array (which requires reflection for generics),
-        // we can pass the collection to `DSL.val()` and specify the array type
-        // using the idField's data type. jOOQ will create the appropriate SQL
-        // array bind value for the database.
         return readonlyDb()
                 .selectFrom(table)
                 .where(idField.eq(
@@ -459,5 +408,12 @@ public abstract class JooqBaseModelRepository<
         }
 
         return null; // Field exists but is not a TableField or type doesn't match
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> UpdateSetMoreStep<RECORD> setField(
+            UpdateSetStep<RECORD> update, Field<T> targetField, Table<?> values) {
+        Field<T> sourceField = (Field<T>) values.field(targetField.getName(), targetField.getType());
+        return update.set(targetField, sourceField);
     }
 }

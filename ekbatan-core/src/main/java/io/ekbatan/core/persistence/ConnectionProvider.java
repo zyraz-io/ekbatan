@@ -1,4 +1,4 @@
-package io.ekbatan.core.persistence.connection;
+package io.ekbatan.core.persistence;
 
 import com.zaxxer.hikari.HikariDataSource;
 import io.ekbatan.core.config.DataSourceConfig;

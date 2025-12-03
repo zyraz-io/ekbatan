@@ -1,4 +1,4 @@
-package io.ekbatan.core.repository.jooq.exception;
+package io.ekbatan.core.repository.exception;
 
 import java.util.Set;
 import java.util.UUID;

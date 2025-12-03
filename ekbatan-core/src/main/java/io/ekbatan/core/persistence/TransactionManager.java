@@ -1,7 +1,5 @@
 package io.ekbatan.core.persistence;
 
-import io.ekbatan.core.persistence.connection.ConnectionProvider;
-import io.ekbatan.core.persistence.connection.TransactionConnectionWrapper;
 import java.sql.Connection;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -14,7 +12,7 @@ public class TransactionManager {
     public final ConnectionProvider primaryConnectionProvider;
     public final ConnectionProvider secondaryConnectionProvider;
 
-    private final ScopedValue<TransactionConnectionWrapper> currentTransaction;
+    private final ScopedValue<Transaction> currentTransaction;
 
     public TransactionManager(
             ConnectionProvider primaryConnectionProvider, ConnectionProvider secondaryConnectionProvider) {
@@ -29,7 +27,7 @@ public class TransactionManager {
         Connection newConn = null;
         try {
             newConn = primaryConnectionProvider.acquire();
-            final var wrapper = new TransactionConnectionWrapper(newConn);
+            final var wrapper = new Transaction(newConn);
             return ScopedValue.where(currentTransaction, wrapper).call(() -> {
                 try {
                     wrapper.begin();

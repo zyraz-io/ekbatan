@@ -1,6 +1,5 @@
-package io.ekbatan.core.repository.jooq.exception;
+package io.ekbatan.core.repository.exception;
 
-import io.ekbatan.core.repository.jooq.PgHelpers;
 import org.jooq.*;
 import org.jooq.exception.DataAccessException;
 import org.postgresql.util.PSQLState;

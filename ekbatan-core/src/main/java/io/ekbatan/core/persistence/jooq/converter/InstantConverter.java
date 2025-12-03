@@ -1,4 +1,4 @@
-package io.ekbatan.core.repository.jooq.converter;
+package io.ekbatan.core.persistence.jooq.converter;
 
 import java.time.Instant;
 import java.time.LocalDateTime;

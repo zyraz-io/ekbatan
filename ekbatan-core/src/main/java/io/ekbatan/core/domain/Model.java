@@ -20,6 +20,7 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
     public final STATE state;
     public final Instant createdDate;
     public final Instant updatedDate;
+    public final Long version;
 
     protected <B extends Builder<ID, B, MODEL, STATE>> Model(Builder<ID, B, MODEL, STATE> builder) {
         this.id = Validate.notNull(builder.id, "id cannot be null");
@@ -29,18 +30,13 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
                 ? builder.createdDate
                 : Instant.now().truncatedTo(MICROS);
         this.updatedDate = builder.updatedDate != null ? builder.updatedDate : this.createdDate;
+        this.version = Validate.notNull(builder.version, "version cannot be null");
+        Validate.isTrue(builder.version >= 1, "version must be greater than or equal to 1");
     }
 
     @Override
     public ID getId() {
         return id;
-    }
-
-    /**
-     * Returns true if this model has been modified since it was loaded.
-     */
-    public boolean isDirty() {
-        return !events.isEmpty();
     }
 
     public abstract static class Builder<
@@ -54,6 +50,7 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
         protected STATE state;
         protected Instant createdDate;
         protected Instant updatedDate;
+        protected Long version;
 
         protected Builder() {}
 
@@ -98,6 +95,16 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
             return self();
         }
 
+        public B withInitialVersion() {
+            this.version = 1L;
+            return self();
+        }
+
+        public B version(Long version) {
+            this.version = version;
+            return self();
+        }
+
         /**
          * Sets the events for this model.
          *
@@ -116,6 +123,7 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
                     .state(model.state)
                     .createdDate(model.createdDate)
                     .updatedDate(model.updatedDate)
+                    .version(model.version)
                     .events(new ArrayList<>(model.events));
         }
     }
@@ -126,7 +134,8 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
         if (o == null || getClass() != o.getClass()) return false;
         Model<?, ?, ?> model = (Model<?, ?, ?>) o;
         return id.equals(model.id)
-                && state == model.state
+                && state.equals(model.state)
+                && version.equals(model.version)
                 && createdDate.equals(model.createdDate)
                 && updatedDate.equals(model.updatedDate);
     }

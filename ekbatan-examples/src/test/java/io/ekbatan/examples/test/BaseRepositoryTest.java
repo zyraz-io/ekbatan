@@ -3,8 +3,8 @@ package io.ekbatan.examples.test;
 import static java.util.Optional.empty;
 
 import io.ekbatan.core.config.DataSourceConfig;
+import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
-import io.ekbatan.core.persistence.connection.ConnectionProvider;
 import java.sql.SQLException;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;

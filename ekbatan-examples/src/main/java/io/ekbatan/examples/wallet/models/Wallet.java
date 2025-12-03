@@ -40,6 +40,7 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
                 .ownerId(ownerId)
                 .currency(currency)
                 .balance(balance)
+                .withInitialVersion()
                 .withEvent(new WalletCreatedEvent(id, ownerId, currency, balance));
     }
 
