@@ -8,11 +8,6 @@ import java.util.Collections;
 import java.util.List;
 import org.apache.commons.lang3.Validate;
 
-/**
- * @param <MODEL> The type of the model
- * @param <ID>    The type of the ID that uniquely identifies the model
- * @param <STATE> The type of the state enum (defaults to GenericState)
- */
 public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Comparable<?>, STATE extends Enum<STATE>>
         implements Identifiable<ID> {
     public final ID id;
@@ -64,22 +59,11 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
             return self();
         }
 
-        /**
-         * Adds an event to be raised when this model is saved.
-         * @param event The event to raise
-         * @return This builder for method chaining
-         */
         public B withEvent(ModelEvent<M> event) {
             this.events.add(event);
             return self();
         }
 
-        /**
-         * Sets the state of the model.
-         *
-         * @param state the state to set
-         * @return this builder for method chaining
-         */
         public B state(STATE state) {
             this.state = state;
             return self();
@@ -105,12 +89,6 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
             return self();
         }
 
-        /**
-         * Sets the events for this model.
-         *
-         * @param events the list of events to set
-         * @return this builder for method chaining
-         */
         public B events(List<ModelEvent<M>> events) {
             this.events = new ArrayList<>(events);
             return self();

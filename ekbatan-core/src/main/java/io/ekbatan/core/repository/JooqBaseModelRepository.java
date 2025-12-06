@@ -7,7 +7,13 @@ import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.exception.EntityNotFoundException;
 import io.ekbatan.core.repository.exception.StaleRecordException;
 import java.time.Instant;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.Validate;
 import org.jooq.*;
@@ -88,12 +94,6 @@ public abstract class JooqBaseModelRepository<
 
     public abstract RECORD toRecord(MODEL model);
 
-    /**
-     * Insert a new model.
-     *
-     * @param model the model to insert
-     * @return the inserted model
-     */
     public MODEL add(MODEL model) {
         Validate.notNull(model, "Model cannot be null");
 
@@ -103,13 +103,11 @@ public abstract class JooqBaseModelRepository<
                 .returning()
                 .fetchOptional()
                 .map(this::fromRecord)
-                .orElseThrow(() -> new IllegalStateException(
-                        model.getId().toString(), new RuntimeException("Failed to insert model")));
+                .orElseThrow(() -> new IllegalStateException("Failed to insert model with ID: " + model.id));
     }
 
     public void addNoResult(MODEL model) {
         Validate.notNull(model, "Model cannot be null");
-
         txDbElseDb().insertInto(table).set(toRecord(model)).execute();
     }
 
@@ -159,7 +157,6 @@ public abstract class JooqBaseModelRepository<
         }
 
         final var records = models.stream().map(this::toRecord).toList();
-
         final var fields = records.getFirst().fields();
         final var insert = txDbElseDb().insertInto(table, fields);
 
@@ -175,7 +172,6 @@ public abstract class JooqBaseModelRepository<
 
         final RECORD record = toRecord(model);
 
-        // Increment the version
         final Long currentVersion = model.version;
         final Long newVersion = currentVersion + 1;
         record.set(versionField, newVersion);
@@ -190,7 +186,7 @@ public abstract class JooqBaseModelRepository<
 
         if (updatedRecord.isEmpty()) {
             throw new StaleRecordException(format(
-                    "Entity %s[id=%s, version=%d] was concurrently modified or not found",
+                    "Model %s[id=%s, version=%d] was concurrently modified or not found",
                     modelClass.getSimpleName(), model.getId(), currentVersion));
         }
 
@@ -203,8 +199,6 @@ public abstract class JooqBaseModelRepository<
         Validate.notNull(model.version, "Model must have a non-null version for optimistic locking");
 
         final RECORD record = toRecord(model);
-
-        // Increment the version
         final Long currentVersion = model.version;
         final Long newVersion = currentVersion + 1;
         record.set(versionField, newVersion);
@@ -217,12 +211,12 @@ public abstract class JooqBaseModelRepository<
                 .execute();
 
         if (affectedRows > 1) {
-            throw new IllegalStateException();
+            throw new IllegalStateException("More than one row was updated, which was not expected");
         }
 
         if (affectedRows < 1) {
             throw new StaleRecordException(format(
-                    "Entity %s[id=%s, version=%d] was concurrently modified or not found",
+                    "Model %s[id=%s, version=%d] was concurrently modified or not found",
                     modelClass.getSimpleName(), model.getId(), currentVersion));
         }
     }
@@ -407,7 +401,7 @@ public abstract class JooqBaseModelRepository<
             }
         }
 
-        return null; // Field exists but is not a TableField or type doesn't match
+        return null;
     }
 
     @SuppressWarnings("unchecked")
