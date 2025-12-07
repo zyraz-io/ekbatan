@@ -9,7 +9,7 @@ import java.util.List;
 import org.apache.commons.lang3.Validate;
 
 public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Comparable<?>, STATE extends Enum<STATE>>
-        implements Identifiable<ID> {
+        implements Identifiable<ID>, Persistable {
     public final ID id;
     protected final List<ModelEvent<MODEL>> events;
     public final STATE state;
@@ -32,6 +32,11 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
     @Override
     public ID getId() {
         return id;
+    }
+
+    @Override
+    public final boolean isModel() {
+        return true;
     }
 
     public abstract static class Builder<

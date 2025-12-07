@@ -28,11 +28,12 @@ import org.jooq.impl.DSL;
  * @param <MODEL_ID>     The ID type of the model
  * @param <TABLE>    The JOOQ table type
  */
-public abstract class JooqBaseModelRepository<
-        MODEL extends Model<MODEL, ?, ?>,
-        RECORD extends TableRecord<?>,
-        TABLE extends Table<RECORD>,
-        MODEL_ID extends Comparable<?>> {
+public abstract class ModelRepository<
+                MODEL extends Model<MODEL, ?, ?>,
+                RECORD extends TableRecord<?>,
+                TABLE extends Table<RECORD>,
+                MODEL_ID extends Comparable<?>>
+        implements Repository {
 
     public final TransactionManager transactionManager;
     private final DSLContext db;
@@ -50,7 +51,7 @@ public abstract class JooqBaseModelRepository<
     private static final String UPDATED_DATE_FIELD_NAME = "updated_date";
     private static final String VERSION_FIELD_NAME = "version";
 
-    protected JooqBaseModelRepository(
+    protected ModelRepository(
             Class<MODEL> modelClass,
             TABLE table,
             TableField<RECORD, MODEL_ID> idField,
@@ -390,10 +391,9 @@ public abstract class JooqBaseModelRepository<
     protected <F> TableField<RECORD, F> resolveField(Table<RECORD> table, String fieldName, Class<F> fieldType) {
         Field<?> field = table.field(fieldName);
         if (field == null) {
-            return null; // Field doesn't exist
+            return null;
         }
 
-        // Check if the field is a TableField and its type matches the expected type
         if (field instanceof TableField) {
             TableField<RECORD, ?> tableField = (TableField<RECORD, ?>) field;
             if (fieldType.isAssignableFrom(tableField.getType())) {

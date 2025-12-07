@@ -4,7 +4,7 @@ import org.apache.commons.lang3.Validate;
 
 public abstract class Entity<
                 ENTITY extends Entity<ENTITY, ID, STATE>, ID extends Comparable<?>, STATE extends Enum<STATE>>
-        implements Identifiable<ID> {
+        implements Identifiable<ID>, Persistable {
     public final ID id;
     public final STATE state;
     public final Long version;
@@ -19,6 +19,11 @@ public abstract class Entity<
     @Override
     public ID getId() {
         return id;
+    }
+
+    @Override
+    public final boolean isModel() {
+        return false;
     }
 
     public abstract static class Builder<

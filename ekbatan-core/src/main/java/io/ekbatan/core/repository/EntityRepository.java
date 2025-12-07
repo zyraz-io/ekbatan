@@ -22,11 +22,12 @@ import org.jooq.impl.DSL;
  * @param <ENTITY_ID> The ID type of the entity
  * @param <TABLE>     The JOOQ table type
  */
-public abstract class JooqBaseEntityRepository<
-        ENTITY extends Entity<ENTITY, ?, ?>,
-        RECORD extends TableRecord<?>,
-        TABLE extends Table<RECORD>,
-        ENTITY_ID extends Comparable<ENTITY_ID>> {
+public abstract class EntityRepository<
+                ENTITY extends Entity<ENTITY, ?, ?>,
+                RECORD extends TableRecord<?>,
+                TABLE extends Table<RECORD>,
+                ENTITY_ID extends Comparable<ENTITY_ID>>
+        implements Repository {
 
     public final TransactionManager transactionManager;
     private final DSLContext db;
@@ -38,7 +39,7 @@ public abstract class JooqBaseEntityRepository<
     protected final int defaultLimit = 1000;
     private static final String VERSION_FIELD_NAME = "version";
 
-    protected JooqBaseEntityRepository(
+    protected EntityRepository(
             Class<ENTITY> entityClass,
             TABLE table,
             TableField<RECORD, ENTITY_ID> idField,
@@ -362,7 +363,7 @@ public abstract class JooqBaseEntityRepository<
     }
 
     @SuppressWarnings("unchecked")
-    protected <T> UpdateSetMoreStep<RECORD> setField(
+    private <T> UpdateSetMoreStep<RECORD> setField(
             UpdateSetStep<RECORD> update, Field<T> targetField, Table<?> values) {
         Field<T> sourceField = (Field<T>) values.field(targetField.getName(), targetField.getType());
         return update.set(targetField, sourceField);
