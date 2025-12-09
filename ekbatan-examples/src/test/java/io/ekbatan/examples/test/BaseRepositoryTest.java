@@ -5,26 +5,26 @@ import static java.util.Optional.empty;
 import io.ekbatan.core.config.DataSourceConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
-import java.sql.SQLException;
 import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
+@Testcontainers
 public abstract class BaseRepositoryTest {
 
-    protected static PostgreSQLContainer<?> postgres;
+    @Container
+    @SuppressWarnings("resource")
+    protected static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:latest")
+            .withDatabaseName("testdb")
+            .withUsername("test")
+            .withPassword("test");
+
     protected static TransactionManager transactionManager;
 
     @BeforeAll
     static void beforeAll() {
-        // Start the container
-        postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-                .withDatabaseName("testdb")
-                .withUsername("test")
-                .withPassword("test");
-        postgres.start();
-
         // Initialize database connection
         String jdbcUrl = postgres.getJdbcUrl();
         String username = postgres.getUsername();
@@ -42,13 +42,5 @@ public abstract class BaseRepositoryTest {
                 .locations("classpath:db/migration")
                 .load();
         flyway.migrate();
-    }
-
-    @AfterAll
-    static void afterAll() throws SQLException {
-        // Clean up resources
-        if (postgres != null) {
-            postgres.stop();
-        }
     }
 }
