@@ -4,7 +4,7 @@ import org.apache.commons.lang3.Validate;
 
 public abstract class Entity<
                 ENTITY extends Entity<ENTITY, ID, STATE>, ID extends Comparable<?>, STATE extends Enum<STATE>>
-        implements Identifiable<ID>, Persistable {
+        implements Persistable<ID> {
     public final ID id;
     public final STATE state;
     public final Long version;
@@ -24,6 +24,14 @@ public abstract class Entity<
     @Override
     public final boolean isModel() {
         return false;
+    }
+
+    public abstract Entity.Builder<ID, ?, ENTITY, STATE> copy();
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <E extends Persistable<ID>> E nextVersion() {
+        return (E) copy().increaseVersion().build();
     }
 
     public abstract static class Builder<
@@ -53,13 +61,18 @@ public abstract class Entity<
             return self();
         }
 
+        public B withInitialVersion() {
+            this.version = 1L;
+            return self();
+        }
+
         public B version(Long version) {
             this.version = version;
             return self();
         }
 
-        public B withInitialVersion() {
-            this.version = 1L;
+        public B increaseVersion() {
+            this.version++;
             return self();
         }
 

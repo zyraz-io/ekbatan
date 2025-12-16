@@ -1,6 +1,12 @@
 package io.ekbatan.core.repository.exception;
 
-import org.jooq.*;
+import org.jooq.ExecuteContext;
+import org.jooq.ExecuteListener;
+import org.jooq.Field;
+import org.jooq.Select;
+import org.jooq.Table;
+import org.jooq.TableField;
+import org.jooq.TableRecord;
 import org.jooq.exception.DataAccessException;
 import org.postgresql.util.PSQLState;
 

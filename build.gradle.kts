@@ -1,6 +1,7 @@
 plugins {
     `java-library`
     id("com.diffplug.spotless") version "6.22.0"
+    checkstyle
 }
 
 // Configure Spotless for the root project
@@ -29,6 +30,17 @@ spotless {
 allprojects {
     group = "io.ekbatan"
     version = "0.0.1-SNAPSHOT"
+    
+    apply(plugin = "checkstyle")
+    
+    configure<CheckstyleExtension> {
+        configFile = rootProject.file("config/checkstyle/checkstyle.xml")
+        toolVersion = "10.12.5"  // Updated to support modern Java features
+        isIgnoreFailures = false
+        isShowViolations = true
+        // Enable HTML reports for better diagnostics
+        reportsDir = file("${buildDir}/reports/checkstyle")
+    }
 
     repositories {
         mavenCentral()

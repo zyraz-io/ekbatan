@@ -1,8 +1,16 @@
 package io.ekbatan.core.processor;
 
-import com.squareup.javapoet.*;
+import com.squareup.javapoet.AnnotationSpec;
+import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.JavaFile;
+import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.ParameterizedTypeName;
+import com.squareup.javapoet.TypeName;
+import com.squareup.javapoet.TypeSpec;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Generated;
@@ -18,7 +26,6 @@ import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 
@@ -62,26 +69,26 @@ public class AutoBuilderProcessor extends AbstractProcessor {
     }
 
     private void generateBuilderClass(TypeElement classElement) throws IOException {
-        String packageName =
+        final var packageName =
                 elementUtils.getPackageOf(classElement).getQualifiedName().toString();
-        String className = classElement.getSimpleName().toString();
-        String builderClassName = className + "Builder";
+        final var className = classElement.getSimpleName().toString();
+        final var builderClassName = className + "Builder";
 
         // Get the type parameters from the superclass (Model or Entity)
-        TypeMirror superclass = classElement.getSuperclass();
-        List<? extends TypeMirror> typeArguments = ((DeclaredType) superclass).getTypeArguments();
+        final var superclass = classElement.getSuperclass();
+        final var typeArguments = ((DeclaredType) superclass).getTypeArguments();
 
-        TypeName modelType = TypeName.get(classElement.asType());
-        String superClassName = ((TypeElement) ((DeclaredType) superclass).asElement())
+        final var modelType = TypeName.get(classElement.asType());
+        final var superClassName = ((TypeElement) ((DeclaredType) superclass).asElement())
                 .getSimpleName()
                 .toString();
 
         // Extract type parameters based on superclass type
-        TypeName idType = TypeName.get(typeArguments.get(1)); // ID type is always second parameter
-        TypeName stateType = TypeName.get(typeArguments.get(2)); // STATE type is always third parameter
+        final var idType = TypeName.get(typeArguments.get(1)); // ID type is always second parameter
+        final var stateType = TypeName.get(typeArguments.get(2)); // STATE type is always third parameter
 
         // Create the builder class with proper type parameters and @Generated annotation
-        TypeSpec.Builder builder = TypeSpec.classBuilder(builderClassName)
+        final var typeSpecBuilder = TypeSpec.classBuilder(builderClassName)
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
                 .addAnnotation(AnnotationSpec.builder(Generated.class)
                         .addMember("value", "$S", AutoBuilderProcessor.class.getName())
@@ -109,7 +116,7 @@ public class AutoBuilderProcessor extends AbstractProcessor {
             TypeName fieldType = TypeName.get(field.asType());
 
             // Add the field (package-private)
-            builder.addField(fieldType, fieldName);
+            typeSpecBuilder.addField(fieldType, fieldName);
 
             MethodSpec setter = MethodSpec.methodBuilder(fieldName)
                     .addModifiers(Modifier.PUBLIC)
@@ -118,43 +125,43 @@ public class AutoBuilderProcessor extends AbstractProcessor {
                     .addStatement("this.$N = $N", fieldName, fieldName)
                     .addStatement("return this")
                     .build();
-            builder.addMethod(setter);
+            typeSpecBuilder.addMethod(setter);
 
             // Add the getter method
-            MethodSpec getter = MethodSpec.methodBuilder(fieldName) // Same name as field
+            final var getter = MethodSpec.methodBuilder(fieldName) // Same name as field
                     .addModifiers(Modifier.PUBLIC)
                     .returns(fieldType)
                     .addStatement("return this.$N", fieldName)
                     .build();
-            builder.addMethod(getter);
+            typeSpecBuilder.addMethod(getter);
         }
 
         // Add private constructor
-        MethodSpec constructor =
+        final var constructor =
                 MethodSpec.constructorBuilder().addModifiers(Modifier.PRIVATE).build();
-        builder.addMethod(constructor);
+        typeSpecBuilder.addMethod(constructor);
 
         // Add static factory method (using classname in lowercase as method name)
-        String factoryMethodName =
+        final var factoryMethodName =
                 Character.toLowerCase(className.charAt(0)) + (className.length() > 1 ? className.substring(1) : "");
-        MethodSpec factoryMethod = MethodSpec.methodBuilder(factoryMethodName)
+        final var factoryMethod = MethodSpec.methodBuilder(factoryMethodName)
                 .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                 .returns(ClassName.get(packageName, builderClassName))
                 .addStatement("return new $T()", ClassName.get(packageName, builderClassName))
                 .build();
-        builder.addMethod(factoryMethod);
+        typeSpecBuilder.addMethod(factoryMethod);
 
         // Add build method
-        MethodSpec buildMethod = MethodSpec.methodBuilder("build")
+        final var buildMethod = MethodSpec.methodBuilder("build")
                 .addAnnotation(Override.class)
                 .addModifiers(Modifier.PUBLIC)
                 .returns(modelType)
                 .addStatement("return new $T(this)", modelType)
                 .build();
-        builder.addMethod(buildMethod);
+        typeSpecBuilder.addMethod(buildMethod);
 
         // Write the generated class to a file
-        JavaFile.builder(packageName, builder.build()).build().writeTo(filer);
+        JavaFile.builder(packageName, typeSpecBuilder.build()).build().writeTo(filer);
     }
 
     private void error(Element e, String msg, Object... args) {

@@ -44,6 +44,7 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
                 .withEvent(new WalletCreatedEvent(id, ownerId, currency, balance));
     }
 
+    @Override
     public WalletBuilder copy() {
         return WalletBuilder.wallet()
                 .copyBase(this)

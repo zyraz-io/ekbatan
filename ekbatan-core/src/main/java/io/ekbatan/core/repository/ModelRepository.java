@@ -16,16 +16,26 @@ import java.util.Optional;
 import java.util.Set;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.Validate;
-import org.jooq.*;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.RowN;
 import org.jooq.SQLDialect;
+import org.jooq.SortField;
+import org.jooq.Table;
+import org.jooq.TableField;
+import org.jooq.TableRecord;
+import org.jooq.UpdateConditionStep;
+import org.jooq.UpdateSetMoreStep;
+import org.jooq.UpdateSetStep;
 import org.jooq.impl.DSL;
 
 /**
  * Base repository implementation using JOOQ for database operations.
  *
- * @param <MODEL>  The domain model type
- * @param <RECORD> The JOOQ record type
- * @param <MODEL_ID>     The ID type of the model
+ * @param <MODEL>    The domain model type
+ * @param <RECORD>   The JOOQ record type
+ * @param <MODEL_ID> The ID type of the model
  * @param <TABLE>    The JOOQ table type
  */
 public abstract class ModelRepository<
@@ -33,7 +43,7 @@ public abstract class ModelRepository<
                 RECORD extends TableRecord<?>,
                 TABLE extends Table<RECORD>,
                 MODEL_ID extends Comparable<?>>
-        implements Repository {
+        implements Repository<MODEL> {
 
     public final TransactionManager transactionManager;
     private final DSLContext db;
@@ -95,6 +105,7 @@ public abstract class ModelRepository<
 
     public abstract RECORD toRecord(MODEL model);
 
+    @Override
     public MODEL add(MODEL model) {
         Validate.notNull(model, "Model cannot be null");
 
@@ -107,11 +118,13 @@ public abstract class ModelRepository<
                 .orElseThrow(() -> new IllegalStateException("Failed to insert model with ID: " + model.id));
     }
 
+    @Override
     public void addNoResult(MODEL model) {
         Validate.notNull(model, "Model cannot be null");
         txDbElseDb().insertInto(table).set(toRecord(model)).execute();
     }
 
+    @Override
     public List<MODEL> addAll(Collection<MODEL> models) {
         Validate.notNull(models, "Models collection cannot be null");
 
@@ -151,6 +164,7 @@ public abstract class ModelRepository<
         return addedModels;
     }
 
+    @Override
     public void addAllNoResult(Collection<MODEL> models) {
         Validate.notNull(models, "Models collection cannot be null");
         if (CollectionUtils.isEmpty(models)) {
@@ -166,6 +180,7 @@ public abstract class ModelRepository<
         insert.execute();
     }
 
+    @Override
     public MODEL update(MODEL model) {
         Validate.notNull(model, "Model cannot be null");
         Validate.notNull(model.getId(), "Model ID cannot be null for update");
@@ -194,6 +209,7 @@ public abstract class ModelRepository<
         return updatedRecord.map(this::fromRecord).orElseThrow();
     }
 
+    @Override
     public void updateNoResult(MODEL model) {
         Validate.notNull(model, "Model cannot be null");
         Validate.notNull(model.getId(), "Model ID cannot be null for update");
@@ -222,6 +238,7 @@ public abstract class ModelRepository<
         }
     }
 
+    @Override
     public List<MODEL> updateAll(Collection<MODEL> models) {
         Validate.notNull(models, "Models collection cannot be null");
         if (models.isEmpty()) {
@@ -242,6 +259,7 @@ public abstract class ModelRepository<
         return updatedModels;
     }
 
+    @Override
     public void updateAllNoResult(Collection<MODEL> models) {
         Validate.notNull(models, "Models collection cannot be null");
         if (models.isEmpty()) {
@@ -322,6 +340,7 @@ public abstract class ModelRepository<
                 .map(this::fromRecord);
     }
 
+    @Override
     public List<MODEL> findAll() {
         return db().selectFrom(table).fetch().map(this::fromRecord);
     }

@@ -9,7 +9,7 @@ import java.util.List;
 import org.apache.commons.lang3.Validate;
 
 public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Comparable<?>, STATE extends Enum<STATE>>
-        implements Identifiable<ID>, Persistable {
+        implements Persistable<ID> {
     public final ID id;
     protected final List<ModelEvent<MODEL>> events;
     public final STATE state;
@@ -37,6 +37,14 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
     @Override
     public final boolean isModel() {
         return true;
+    }
+
+    public abstract Builder<ID, ?, MODEL, STATE> copy();
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <E extends Persistable<ID>> E nextVersion() {
+        return (E) copy().increaseVersion().build();
     }
 
     public abstract static class Builder<
@@ -91,6 +99,11 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
 
         public B version(Long version) {
             this.version = version;
+            return self();
+        }
+
+        public B increaseVersion() {
+            this.version++;
             return self();
         }
 

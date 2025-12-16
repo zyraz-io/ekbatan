@@ -6,11 +6,27 @@ import io.ekbatan.core.domain.Entity;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.exception.EntityNotFoundException;
 import io.ekbatan.core.repository.exception.StaleRecordException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.Validate;
-import org.jooq.*;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.RowN;
 import org.jooq.SQLDialect;
+import org.jooq.SortField;
+import org.jooq.Table;
+import org.jooq.TableField;
+import org.jooq.TableRecord;
+import org.jooq.UpdateConditionStep;
+import org.jooq.UpdateSetMoreStep;
+import org.jooq.UpdateSetStep;
 import org.jooq.impl.DSL;
 
 /**
@@ -27,7 +43,7 @@ public abstract class EntityRepository<
                 RECORD extends TableRecord<?>,
                 TABLE extends Table<RECORD>,
                 ENTITY_ID extends Comparable<ENTITY_ID>>
-        implements Repository {
+        implements Repository<ENTITY> {
 
     public final TransactionManager transactionManager;
     private final DSLContext db;
@@ -77,6 +93,7 @@ public abstract class EntityRepository<
 
     public abstract RECORD toRecord(ENTITY entity);
 
+    @Override
     public ENTITY add(ENTITY entity) {
         Validate.notNull(entity, "Entity cannot be null");
 
@@ -89,11 +106,13 @@ public abstract class EntityRepository<
                 .orElseThrow(() -> new IllegalStateException("Failed to insert entity with ID: " + entity.id));
     }
 
+    @Override
     public void addNoResult(ENTITY entity) {
         Validate.notNull(entity, "Entity cannot be null");
         txDbElseDb().insertInto(table).set(toRecord(entity)).execute();
     }
 
+    @Override
     public List<ENTITY> addAll(Collection<ENTITY> entities) {
         Validate.notNull(entities, "Entities collection cannot be null");
 
@@ -131,6 +150,7 @@ public abstract class EntityRepository<
         return addedEntities;
     }
 
+    @Override
     public void addAllNoResult(Collection<ENTITY> entities) {
         Validate.notNull(entities, "Entities collection cannot be null");
         if (CollectionUtils.isEmpty(entities)) {
@@ -146,6 +166,7 @@ public abstract class EntityRepository<
         insert.execute();
     }
 
+    @Override
     public ENTITY update(ENTITY entity) {
         Validate.notNull(entity, "Entity cannot be null");
         Validate.notNull(entity.getId(), "Entity ID cannot be null for update");
@@ -173,6 +194,7 @@ public abstract class EntityRepository<
         return updatedRecord.map(this::fromRecord).orElseThrow();
     }
 
+    @Override
     public void updateNoResult(ENTITY entity) {
         Validate.notNull(entity, "Entity cannot be null");
         Validate.notNull(entity.getId(), "Entity ID cannot be null for update");
@@ -201,6 +223,7 @@ public abstract class EntityRepository<
         }
     }
 
+    @Override
     public List<ENTITY> updateAll(Collection<ENTITY> entities) {
         Validate.notNull(entities, "Entities collection cannot be null");
         if (entities.isEmpty()) {
@@ -221,6 +244,7 @@ public abstract class EntityRepository<
         return updatedEntities;
     }
 
+    @Override
     public void updateAllNoResult(Collection<ENTITY> entities) {
         Validate.notNull(entities, "Entities collection cannot be null");
         if (entities.isEmpty()) {
@@ -298,6 +322,7 @@ public abstract class EntityRepository<
                 .map(this::fromRecord);
     }
 
+    @Override
     public List<ENTITY> findAll() {
         return db().selectFrom(table).fetch().map(this::fromRecord);
     }
