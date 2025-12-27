@@ -8,23 +8,23 @@ import java.util.List;
  * Marker interface for all repositories
  *
  */
-public interface Repository<T extends Persistable<?>> {
+public interface Repository<PERSISTABLE extends Persistable<?>> {
 
-    T add(T model);
+    PERSISTABLE add(PERSISTABLE model);
 
-    void addNoResult(T model);
+    void addNoResult(PERSISTABLE model);
 
-    List<T> addAll(Collection<T> models);
+    List<PERSISTABLE> addAll(Collection<PERSISTABLE> models);
 
-    void addAllNoResult(Collection<T> models);
+    void addAllNoResult(Collection<PERSISTABLE> models);
 
-    T update(T model);
+    PERSISTABLE update(PERSISTABLE model);
 
-    void updateNoResult(T model);
+    void updateNoResult(PERSISTABLE model);
 
-    List<T> updateAll(Collection<T> models);
+    List<PERSISTABLE> updateAll(Collection<PERSISTABLE> models);
 
-    void updateAllNoResult(Collection<T> models);
+    void updateAllNoResult(Collection<PERSISTABLE> models);
 
-    List<T> findAll();
+    List<PERSISTABLE> findAll();
 }

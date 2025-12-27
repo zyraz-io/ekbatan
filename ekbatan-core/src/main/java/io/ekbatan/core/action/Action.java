@@ -5,7 +5,7 @@ import java.security.Principal;
 public abstract class Action<PARAM, RESULT> {
     public final ActionPlan plan = new ActionPlan();
 
-    protected abstract RESULT tryPerform(Principal principal, PARAM params) throws Exception;
+    protected abstract RESULT perform(Principal principal, PARAM params) throws Exception;
 
     protected void beforeCommit() {
         // Default implementation does nothing

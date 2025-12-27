@@ -14,7 +14,7 @@ public class WalletCreateAction extends Action<WalletCreateAction.Params, Wallet
     public record Params() {}
 
     @Override
-    protected Wallet tryPerform(Principal principal, Params params) throws Exception {
+    protected Wallet perform(Principal principal, Params params) throws Exception {
         final var wallet = createWallet(UUID.randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
                 .build();
 

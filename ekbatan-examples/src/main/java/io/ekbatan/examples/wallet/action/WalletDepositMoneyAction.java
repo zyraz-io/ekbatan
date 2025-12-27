@@ -18,7 +18,7 @@ public class WalletDepositMoneyAction extends Action<WalletDepositMoneyAction.Pa
     }
 
     @Override
-    protected Wallet tryPerform(Principal principal, Params params) throws Exception {
+    protected Wallet perform(Principal principal, Params params) throws Exception {
         final var wallet = walletRepository.getById(params.walletId.getId());
 
         return plan.update(wallet.deposit(BigDecimal.TEN));

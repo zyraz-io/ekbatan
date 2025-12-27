@@ -35,7 +35,7 @@ public class ActionExecutor {
 
         try {
             // Execute the action's business logic
-            R result = action.tryPerform(principal, params);
+            R result = action.perform(principal, params);
 
             // Get the action plan with all planned changes
             ActionPlan actionPlan = action.plan;

@@ -35,6 +35,11 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
     }
 
     @Override
+    public Long getVersion() {
+        return version;
+    }
+
+    @Override
     public final boolean isModel() {
         return true;
     }

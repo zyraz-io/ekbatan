@@ -22,6 +22,11 @@ public abstract class Entity<
     }
 
     @Override
+    public Long getVersion() {
+        return version;
+    }
+
+    @Override
     public final boolean isModel() {
         return false;
     }

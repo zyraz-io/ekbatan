@@ -1,11 +1,13 @@
 package io.ekbatan.examples.wallet.repository;
 
 import static io.ekbatan.examples.wallet.models.Wallet.createWallet;
+import static java.lang.String.format;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.ekbatan.core.domain.MicroType;
+import io.ekbatan.core.repository.exception.EntityNotFoundException;
 import io.ekbatan.core.repository.exception.StaleRecordException;
 import io.ekbatan.examples.test.BaseRepositoryTest;
 import io.ekbatan.examples.wallet.models.Wallet;
@@ -702,5 +704,84 @@ class WalletRepositoryTest extends BaseRepositoryTest {
         // WHEN & THEN
         assertThatThrownBy(() -> walletRepository.updateAllNoResult(walletsToUpdate))
                 .isInstanceOf(StaleRecordException.class);
+    }
+
+    @Test
+    void should_findById() {
+        // GIVEN
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        wallet = walletRepository.add(wallet);
+
+        // WHEN
+        final var found = walletRepository.findById(wallet.getId().getValue());
+
+        // THEN
+        assertThat(found).isPresent();
+        assertThat(found.orElseThrow()).isEqualTo(wallet);
+    }
+
+    @Test
+    void should_return_empty_when_findById_with_non_existent_id() {
+        // WHEN
+        final var found = walletRepository.findById(randomUUID());
+
+        // THEN
+        assertThat(found).isEmpty();
+    }
+
+    @Test
+    void should_getById() {
+        // GIVEN
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        wallet = walletRepository.add(wallet);
+
+        // WHEN
+        final var found = walletRepository.getById(wallet.getId().getValue());
+
+        // THEN
+        assertThat(found).isEqualTo(wallet);
+    }
+
+    @Test
+    void should_throw_EntityNotFoundException_when_getById_with_non_existent_id() {
+        // GIVEN
+        final var id = randomUUID();
+
+        // WHEN / THEN
+        assertThatThrownBy(() -> walletRepository.getById(id))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining(format("No entity found with id: %s[id=%s]", Wallet.class.getSimpleName(), id));
+    }
+
+    @Test
+    void should_findAllByIds() {
+        // GIVEN
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+                .build();
+        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO)
+                .build();
+
+        walletRepository.addAll(List.of(wallet1, wallet2, wallet3));
+
+        // WHEN
+        final var foundWallets = walletRepository.findAllByIds(
+                List.of(wallet1.getId().getValue(), wallet3.getId().getValue(), randomUUID()));
+
+        // THEN
+        assertThat(foundWallets).hasSize(2);
+        assertThat(foundWallets).extracting(w -> w.id).containsExactlyInAnyOrder(wallet1.id, wallet3.id);
+    }
+
+    @Test
+    void should_return_empty_list_when_findAllByIds_with_empty_input() {
+        // WHEN
+        final var foundWallets = walletRepository.findAllByIds(List.of());
+
+        // THEN
+        assertThat(foundWallets).isEmpty();
     }
 }
