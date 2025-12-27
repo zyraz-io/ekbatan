@@ -12,7 +12,6 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.Validate;
@@ -46,9 +45,11 @@ public abstract class AbstractRepository<
     protected final TABLE table;
     private final TableField<RECORD, ID> idField;
     protected final TableField<RECORD, Long> versionField;
+    protected final TableField<RECORD, String> stateField;
     protected final Class<PERSISTABLE> domainClass;
 
     private static final String VERSION_FIELD_NAME = "version";
+    private static final String STATE_FIELD_NAME = "state";
 
     protected AbstractRepository(
             Class<PERSISTABLE> domainClass,
@@ -66,6 +67,10 @@ public abstract class AbstractRepository<
         this.versionField = Validate.notNull(
                 resolveField(table, VERSION_FIELD_NAME, Long.class),
                 "Table " + table.getName() + " must have a 'version' field for optimistic locking");
+
+        this.stateField = Validate.notNull(
+                resolveField(table, STATE_FIELD_NAME, String.class),
+                "Table " + table.getName() + " must have a 'state' field");
     }
 
     protected abstract String getDomainTypeName();
@@ -307,26 +312,25 @@ public abstract class AbstractRepository<
                 .selectFrom(table)
                 .where(idField.eq(
                         DSL.any(DSL.val(uniqueIds, idField.getDataType().getArrayDataType()))))
+                .and(notDeleted())
                 .fetch()
                 .map(this::fromRecord);
     }
 
-    public List<PERSISTABLE> findAll(int offset, int limit) {
-        return readonlyDb()
-                .selectFrom(table)
-                .orderBy(idField)
-                .limit(offset, limit)
-                .fetch()
-                .map(this::fromRecord);
+    public List<PERSISTABLE> findAll(int offset, int limit, SortField<?>... sortFields) {
+        Validate.isTrue(ArrayUtils.isNotEmpty(sortFields), "Sort fields cannot be empty");
+        var query = readonlyDb().selectFrom(table).where(notDeleted());
+
+        return query.orderBy(sortFields).limit(offset, limit).fetch().map(this::fromRecord);
     }
 
     @Override
     public List<PERSISTABLE> findAll() {
-        return db().selectFrom(table).fetch().map(this::fromRecord);
+        return db().selectFrom(table).where(notDeleted()).fetch().map(this::fromRecord);
     }
 
     public List<PERSISTABLE> findAllWhere(Condition condition, SortField<?>... sortFields) {
-        var query = db().selectFrom(table).where(condition);
+        var query = db().selectFrom(table).where(condition.and(notDeleted()));
 
         if (ArrayUtils.isNotEmpty(sortFields)) {
             return query.orderBy(sortFields).fetch().map(this::fromRecord);
@@ -336,7 +340,7 @@ public abstract class AbstractRepository<
     }
 
     public List<PERSISTABLE> findAllWhere(Condition condition, int offset, int limit, SortField<?>... sortFields) {
-        var query = db().selectFrom(table).where(condition);
+        var query = db().selectFrom(table).where(condition.and(notDeleted()));
 
         if (ArrayUtils.isNotEmpty(sortFields)) {
             return query.orderBy(sortFields).limit(offset, limit).fetch().map(this::fromRecord);
@@ -346,25 +350,28 @@ public abstract class AbstractRepository<
     }
 
     public boolean existsById(ID id) {
-        return db().fetchExists(db().selectOne().from(table).where(idField.eq(id)));
+        return db().fetchExists(
+                        db().selectOne().from(table).where(idField.eq(id).and(notDeleted())));
     }
 
     public long count() {
-        return db().fetchCount(table);
+        return db().fetchCount(table, notDeleted());
     }
 
     public long countWhere(Condition condition) {
-        return db().fetchCount(table, condition);
+        return db().fetchCount(table, condition.and(notDeleted()));
     }
 
     public Optional<PERSISTABLE> findOneWhere(Condition condition) {
-        return Optional.ofNullable(db().selectFrom(table).where(condition).fetchOne())
+        return Optional.ofNullable(db().selectFrom(table)
+                        .where(condition.and(notDeleted()))
+                        .fetchOne())
                 .map(this::fromRecord);
     }
 
     public List<PERSISTABLE> findAllWhere(
             Condition condition, int offset, int limit, Collection<SortField<?>> sortFields) {
-        var query = db().selectFrom(table).where(condition);
+        var query = db().selectFrom(table).where(condition.and(notDeleted()));
 
         if (CollectionUtils.isNotEmpty(sortFields)) {
             return query.orderBy(sortFields).limit(offset, limit).fetch().map(this::fromRecord);
@@ -374,15 +381,15 @@ public abstract class AbstractRepository<
     }
 
     public List<PERSISTABLE> findAllWhere(Condition condition) {
-        return db().selectFrom(table).where(condition).fetch().map(this::fromRecord);
-    }
-
-    public List<PERSISTABLE> findAllWhere(Condition condition, int offset, int limit) {
-        return findAllWhere(condition, offset, limit, Set.of());
+        return db().selectFrom(table).where(condition.and(notDeleted())).fetch().map(this::fromRecord);
     }
 
     public boolean existsWhere(Condition condition) {
-        return db().fetchExists(db().selectOne().from(table).where(condition));
+        return db().fetchExists(db().selectOne().from(table).where(condition.and(notDeleted())));
+    }
+
+    private Condition notDeleted() {
+        return stateField.ne("DELETED");
     }
 
     @SuppressWarnings("unchecked")

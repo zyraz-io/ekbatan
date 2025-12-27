@@ -1,5 +1,6 @@
 package io.ekbatan.examples.wallet.repository;
 
+import static io.ekbatan.examples.generated.jooq.tables.Wallets.WALLETS;
 import static io.ekbatan.examples.wallet.models.Wallet.createWallet;
 import static java.lang.String.format;
 import static java.util.UUID.randomUUID;
@@ -18,6 +19,8 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.jooq.DSLContext;
+import org.jooq.SQLDialect;
+import org.jooq.impl.DSL;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -731,6 +734,23 @@ class WalletRepositoryTest extends BaseRepositoryTest {
     }
 
     @Test
+    void should_return_empty_when_findById_when_marked_as_deleted() {
+        // GIVEN
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        walletRepository.add(wallet);
+
+        final var deletedWallet = wallet.delete();
+        walletRepository.update(deletedWallet);
+
+        // WHEN
+        final var found = walletRepository.findById(wallet.getId().getValue());
+
+        // THEN
+        assertThat(found).isEmpty();
+    }
+
+    @Test
     void should_getById() {
         // GIVEN
         var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
@@ -756,6 +776,23 @@ class WalletRepositoryTest extends BaseRepositoryTest {
     }
 
     @Test
+    void should_throw_EntityNotFoundException_when_getById_when_marked_as_deleted() {
+        // GIVEN
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        walletRepository.add(wallet);
+
+        final var deletedWallet = wallet.delete();
+        walletRepository.update(deletedWallet);
+
+        // WHEN
+        final var found = walletRepository.findById(wallet.getId().getValue());
+
+        // THEN
+        assertThat(found).isEmpty();
+    }
+
+    @Test
     void should_findAllByIds() {
         // GIVEN
         final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
@@ -777,11 +814,395 @@ class WalletRepositoryTest extends BaseRepositoryTest {
     }
 
     @Test
+    void findAllByIds_should_return_non_DELETED_items() {
+        // GIVEN
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+                .build();
+
+        walletRepository.addAll(List.of(wallet1, wallet2));
+
+        final var deletedWallet2 = wallet2.delete();
+        walletRepository.update(deletedWallet2);
+
+        // WHEN
+        final var foundWallets = walletRepository.findAllByIds(
+                List.of(wallet1.getId().getValue(), wallet2.getId().getValue()));
+
+        // THEN
+        assertThat(foundWallets).hasSize(1);
+        assertThat(foundWallets).extracting(w -> w.id).containsExactly(wallet1.id);
+    }
+
+    @Test
     void should_return_empty_list_when_findAllByIds_with_empty_input() {
         // WHEN
         final var foundWallets = walletRepository.findAllByIds(List.of());
 
         // THEN
         assertThat(foundWallets).isEmpty();
+    }
+
+    @Test
+    void should_findAll_with_offset_and_limit_and_sortFields() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallets = new ArrayList<Wallet>();
+        for (int i = 0; i < 10; i++) {
+            final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i))
+                    .build();
+            wallets.add(wallet);
+        }
+        walletRepository.addAll(wallets);
+
+        // WHEN
+        final var result = walletRepository.findAll(2, 5, WALLETS.CREATED_DATE.asc());
+
+        // THEN
+        assertThat(result).hasSize(5);
+        assertThat(result).containsExactlyElementsOf(wallets.subList(2, 7));
+    }
+
+    @Test
+    void should_findAll_with_offset_and_limit_and_sortFields_excludes_deleted() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallets = new ArrayList<Wallet>();
+        for (int i = 0; i < 10; i++) {
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i))
+                    .build());
+        }
+        walletRepository.addAll(wallets);
+
+        final var deletedWallets = List.of(
+                wallets.get(2).delete(), wallets.get(5).delete(), wallets.get(8).delete());
+        walletRepository.updateAll(deletedWallets);
+
+        // WHEN
+        // Active wallets indices: 0, 1, 3, 4, 6, 7, 9 (Total 7)
+        final var result = walletRepository.findAll(2, 3, WALLETS.BALANCE.asc());
+
+        // THEN
+        // Offset 2 skips (0, 1). Limit 3 takes (3, 4, 6).
+        assertThat(result).hasSize(3);
+        assertThat(result)
+                .extracting(w -> w.id)
+                .containsExactly(wallets.get(3).id, wallets.get(4).id, wallets.get(6).id);
+    }
+
+    @Test
+    void should_findAll() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+                .build();
+        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO)
+                .build();
+        final var wallet4 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO)
+                .build();
+
+        walletRepository.addAll(List.of(wallet1, wallet2, wallet3, wallet4));
+
+        final var deletedWallet3 = wallet3.delete();
+        walletRepository.update(deletedWallet3);
+
+        // WHEN
+        final var result = walletRepository.findAll();
+
+        // THEN
+        assertThat(result).hasSize(3);
+        assertThat(result).extracting(w -> w.id).containsExactlyInAnyOrder(wallet1.id, wallet2.id, wallet4.id);
+    }
+
+    @Test
+    void should_findAll_excludes_deleted() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+                .build();
+
+        walletRepository.addAll(List.of(wallet1, wallet2));
+
+        final var deletedWallet1 = wallet1.delete();
+        walletRepository.update(deletedWallet1);
+
+        // WHEN
+        final var result = walletRepository.findAll();
+
+        // THEN
+        assertThat(result).hasSize(1);
+        assertThat(result).extracting(w -> w.id).containsExactly(wallet2.id);
+    }
+
+    @Test
+    void should_findAllWhere_with_condition_and_sort_excludes_deleted() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(20))
+                .build();
+        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(30))
+                .build();
+        final var wallet4 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(40))
+                .build();
+
+        walletRepository.addAll(List.of(wallet1, wallet2, wallet3, wallet4));
+
+        final var deletedWallet2 = wallet2.delete();
+        walletRepository.update(deletedWallet2);
+
+        // WHEN
+        final var result = walletRepository.findAllWhere(WALLETS.CURRENCY.eq("EUR"), WALLETS.BALANCE.desc());
+
+        // THEN
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(w -> w.id).containsExactly(wallet3.id, wallet1.id);
+    }
+
+    @Test
+    void should_findAllWhere_with_condition_offset_limit_and_sort_excludes_deleted() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallets = new ArrayList<Wallet>();
+        for (int i = 0; i < 10; i++) {
+            // Wallets 0-7, 9 are EUR. Wallet 8 is USD.
+            String currencyCode = (i == 8) ? "USD" : "EUR";
+            wallets.add(createWallet(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i))
+                    .build());
+        }
+        walletRepository.addAll(wallets);
+
+        // Delete Wallet 2 and Wallet 5 (both are EUR)
+        final var deletedWallets =
+                List.of(wallets.get(2).delete(), wallets.get(5).delete());
+        walletRepository.updateAll(deletedWallets);
+
+        // WHEN
+        // Active EUR indices sorted by balance: 0, 1, 3, 4, 6, 7, 9
+        final var result = walletRepository.findAllWhere(WALLETS.CURRENCY.eq("EUR"), 2, 3, WALLETS.BALANCE.asc());
+
+        // THEN
+        assertThat(result).hasSize(3);
+        assertThat(result)
+                .extracting(w -> w.id)
+                .containsExactly(wallets.get(3).id, wallets.get(4).id, wallets.get(6).id);
+    }
+
+    @Test
+    void should_existsById() {
+        // GIVEN
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        wallet = walletRepository.add(wallet);
+
+        // WHEN
+        final var exists = walletRepository.existsById(wallet.getId().getValue());
+        final var notExists = walletRepository.existsById(randomUUID());
+
+        // THEN
+        assertThat(exists).isTrue();
+        assertThat(notExists).isFalse();
+    }
+
+    @Test
+    void should_existsById_excludes_deleted() {
+        // GIVEN
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        walletRepository.add(wallet);
+
+        final var deletedWallet = wallet.delete();
+        walletRepository.update(deletedWallet);
+
+        // WHEN
+        final var exists = walletRepository.existsById(wallet.getId().getValue());
+
+        // THEN
+        assertThat(exists).isFalse();
+    }
+
+    @Test
+    void should_count_excludes_deleted() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN)
+                .build();
+        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.TEN)
+                .build();
+
+        walletRepository.addAll(List.of(wallet1, wallet2, wallet3));
+
+        walletRepository.update(wallet2.delete());
+
+        // WHEN
+        final var count = walletRepository.count();
+
+        // THEN
+        assertThat(count).isEqualTo(2);
+    }
+
+    @Test
+    void should_countWhere_excludes_deleted() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        final var wallet4 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN)
+                .build();
+
+        walletRepository.addAll(List.of(wallet1, wallet2, wallet3, wallet4));
+
+        walletRepository.update(wallet3.delete());
+
+        // WHEN
+        final var count = walletRepository.countWhere(WALLETS.CURRENCY.eq("EUR"));
+
+        // THEN
+        assertThat(count).isEqualTo(2);
+    }
+
+    @Test
+    void should_findOneWhere_excludes_deleted() {
+        // GIVEN
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN)
+                .build();
+
+        walletRepository.addAll(List.of(wallet1, wallet2));
+
+        walletRepository.update(wallet1.delete());
+
+        // WHEN
+        final var foundDeleted =
+                walletRepository.findOneWhere(WALLETS.ID.eq(wallet1.getId().getValue()));
+        final var foundActive =
+                walletRepository.findOneWhere(WALLETS.ID.eq(wallet2.getId().getValue()));
+
+        // THEN
+        assertThat(foundDeleted).isEmpty();
+        assertThat(foundActive).isPresent();
+        assertThat(foundActive.get().id).isEqualTo(wallet2.id);
+    }
+
+    @Test
+    void should_findAllWhere_with_condition_offset_limit_and_collection_sort_excludes_deleted() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallets = new ArrayList<Wallet>();
+        for (int i = 0; i < 10; i++) {
+            // Wallets 0-7, 9 are EUR. Wallet 8 is USD.
+            String currencyCode = (i == 8) ? "USD" : "EUR";
+            wallets.add(createWallet(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i))
+                    .build());
+        }
+        walletRepository.addAll(wallets);
+
+        // Delete Wallet 2 and Wallet 5 (both are EUR)
+        final var deletedWallets =
+                List.of(wallets.get(2).delete(), wallets.get(5).delete());
+        walletRepository.updateAll(deletedWallets);
+
+        // WHEN
+        // Active EUR indices sorted by balance: 0, 1, 3, 4, 6, 7, 9
+        final var result =
+                walletRepository.findAllWhere(WALLETS.CURRENCY.eq("EUR"), 2, 3, List.of(WALLETS.BALANCE.asc()));
+
+        // THEN
+        assertThat(result).hasSize(3);
+        assertThat(result)
+                .extracting(w -> w.id)
+                .containsExactly(wallets.get(3).id, wallets.get(4).id, wallets.get(6).id);
+    }
+
+    @Test
+    void should_findAllWhere_condition_excludes_deleted() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(20))
+                .build();
+        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(30))
+                .build();
+
+        walletRepository.addAll(List.of(wallet1, wallet2, wallet3));
+
+        walletRepository.update(wallet1.delete());
+
+        // WHEN
+        final var result = walletRepository.findAllWhere(WALLETS.CURRENCY.eq("EUR"));
+
+        // THEN
+        assertThat(result).hasSize(1);
+        assertThat(result).extracting(w -> w.id).containsExactly(wallet2.id);
+    }
+
+    @Test
+    void should_existsWhere_returns_true_when_exists() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        walletRepository.add(wallet);
+
+        // WHEN
+        final var exists = walletRepository.existsWhere(WALLETS.CURRENCY.eq("EUR"));
+
+        // THEN
+        assertThat(exists).isTrue();
+    }
+
+    @Test
+    void should_existsWhere_returns_false_when_deleted() {
+        // GIVEN
+        final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        dsl.truncate(WALLETS).cascade().execute();
+
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        walletRepository.add(wallet);
+
+        walletRepository.update(wallet.delete());
+
+        // WHEN
+        final var exists = walletRepository.existsWhere(WALLETS.CURRENCY.eq("EUR"));
+
+        // THEN
+        assertThat(exists).isFalse();
     }
 }
