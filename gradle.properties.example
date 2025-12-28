@@ -1,0 +1,28 @@
+# Plugin versions
+spotlessVersion=6.22.0
+checkstyleVersion=10.12.5
+jooqDockerPluginVersion=8.0.9
+
+# JUnit versions
+junitBomVersion=6.0.1
+junitJupiterVersion=6.0.1
+junitPlatformLauncherVersion=1.10.2
+mockkVersion=1.13.8
+assertjVersion=3.24.2
+
+# Core Dependencies
+jooqVersion=3.18.0
+postgresqlVersion=42.7.7
+mariadbJavaClientVersion=3.3.3
+hikariCpVersion=7.0.2
+commonsCollections4Version=4.5.0
+guavaVersion=33.5.0-jre
+commonsLang3Version=3.20.0
+jacksonDatabindVersion=2.15.2
+jacksonDatatypeJsr310Version=2.15.2
+flywayVersion=11.16.0
+testcontainersVersion=2.0.3
+
+# Annotation Processor
+javaPoetVersion=1.13.0
+autoServiceVersion=1.0.1

@@ -15,11 +15,11 @@ class Transaction {
 
     private static final Logger log = LoggerFactory.getLogger(Transaction.class);
 
-    public Transaction(Connection connection) {
+    public Transaction(Connection connection, SQLDialect dialect) {
         this.connection = connection;
         try {
             this.initialAutoCommit = connection.getAutoCommit();
-            this.dslContext = DSL.using(connection, SQLDialect.POSTGRES);
+            this.dslContext = DSL.using(connection, dialect);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

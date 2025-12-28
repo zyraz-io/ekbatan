@@ -6,6 +6,7 @@ import io.ekbatan.core.domain.Persistable;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.exception.EntityNotFoundException;
 import io.ekbatan.core.repository.exception.StaleRecordException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -18,12 +19,15 @@ import org.apache.commons.lang3.Validate;
 import org.jooq.Condition;
 import org.jooq.DSLContext;
 import org.jooq.Field;
+import org.jooq.Record;
 import org.jooq.RowN;
 import org.jooq.SQLDialect;
+import org.jooq.Select;
 import org.jooq.SortField;
 import org.jooq.Table;
 import org.jooq.TableField;
 import org.jooq.TableRecord;
+import org.jooq.Update;
 import org.jooq.UpdateConditionStep;
 import org.jooq.UpdateSetMoreStep;
 import org.jooq.UpdateSetStep;
@@ -57,9 +61,9 @@ public abstract class AbstractRepository<
             TableField<RECORD, ID> idField,
             TransactionManager transactionManager) {
         this.transactionManager = Validate.notNull(transactionManager, "transactionManager cannot be null");
-        this.db = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+        this.db = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
         this.readonlyDb =
-                DSL.using(transactionManager.secondaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
+                DSL.using(transactionManager.secondaryConnectionProvider.getDataSource(), transactionManager.dialect);
         this.table = table;
         this.idField = idField;
         this.domainClass = Validate.notNull(domainClass, "domainClass cannot be null");
@@ -227,6 +231,7 @@ public abstract class AbstractRepository<
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public List<PERSISTABLE> updateAll(Collection<PERSISTABLE> domainObjects) {
         Validate.notNull(domainObjects, getDomainTypeName() + "s collection cannot be null");
         if (domainObjects.isEmpty()) {
@@ -236,8 +241,22 @@ public abstract class AbstractRepository<
             return List.of(update(domainObjects.iterator().next()));
         }
 
-        var updateQuery = buildUpdateAllQuery(domainObjects).returning();
-        final var updatedObjects = updateQuery.fetch().map(this::fromRecord);
+        final List<PERSISTABLE> updatedObjects;
+        if (transactionManager.dialect.equals(SQLDialect.MARIADB)) {
+            int affectedRows = buildUpdateAllQueryMariadb(domainObjects).execute();
+
+            if (affectedRows < domainObjects.size()) {
+                throw new StaleRecordException(format(
+                        "Expected to update %d records but only updated %d", domainObjects.size(), affectedRows));
+            }
+
+            updatedObjects = domainObjects.stream()
+                    .map(d -> (PERSISTABLE) d.nextVersion())
+                    .toList();
+        } else {
+            var updateQuery = buildUpdateAllQuery(domainObjects).returning();
+            updatedObjects = updateQuery.fetch().map(this::fromRecord);
+        }
 
         if (updatedObjects.size() != domainObjects.size()) {
             throw new StaleRecordException(format(
@@ -253,12 +272,18 @@ public abstract class AbstractRepository<
         if (domainObjects.isEmpty()) {
             return;
         }
+
         if (domainObjects.size() == 1) {
             updateNoResult(domainObjects.iterator().next());
             return;
         }
 
-        int affectedRows = buildUpdateAllQuery(domainObjects).execute();
+        int affectedRows;
+        if (transactionManager.dialect.equals(SQLDialect.MARIADB)) {
+            affectedRows = buildUpdateAllQueryMariadb(domainObjects).execute();
+        } else {
+            affectedRows = buildUpdateAllQuery(domainObjects).execute();
+        }
 
         if (affectedRows != domainObjects.size()) {
             throw new StaleRecordException(
@@ -289,6 +314,43 @@ public abstract class AbstractRepository<
         return update.from(values)
                 .where(idField.eq(values.field(idField)))
                 .and(versionField.eq(values.field(versionField)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Update<?> buildUpdateAllQueryMariadb(Collection<PERSISTABLE> domainObjects) {
+        final var records = domainObjects.stream().map(this::toRecord).toList();
+        final var fields = records.getFirst().fields();
+
+        Select<Record> subquery = null;
+
+        for (var record : records) {
+            final var selectFields = new ArrayList<Field<?>>(fields.length);
+            for (var field : fields) {
+                selectFields.add(DSL.val(record.get(field), field).as(field.getName()));
+            }
+            final var select = DSL.select(selectFields);
+            subquery = (subquery == null) ? select : subquery.unionAll(select);
+        }
+
+        final var v = subquery.asTable("v");
+
+        final var joinCondition = idField.eq(v.field(idField.getName(), idField.getType()))
+                .and(versionField.eq(v.field(versionField.getName(), versionField.getType())));
+
+        final var joinedTable = table.join(v).on(joinCondition);
+
+        var update = txDbElseDb().update(joinedTable);
+
+        var vVersion = v.field(versionField.getName(), versionField.getType());
+        var step = update.set(versionField, vVersion.plus(1));
+
+        for (var field : fields) {
+            if (!field.equals(versionField)) {
+                step = setField(step, field, v);
+            }
+        }
+
+        return step;
     }
 
     public Optional<PERSISTABLE> findById(ID id) {
@@ -410,8 +472,8 @@ public abstract class AbstractRepository<
     }
 
     @SuppressWarnings("unchecked")
-    private <T> UpdateSetMoreStep<RECORD> setField(
-            UpdateSetStep<RECORD> update, Field<T> targetField, Table<?> values) {
+    private <T, R extends Record> UpdateSetMoreStep<R> setField(
+            UpdateSetStep<R> update, Field<T> targetField, Table<?> values) {
         final var sourceField = values.field(targetField.getName(), targetField.getType());
         return update.set(targetField, sourceField);
     }

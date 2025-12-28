@@ -85,13 +85,12 @@ subprojects {
 
     dependencies {
 
-        testImplementation(platform("org.junit:junit-bom:6.0.1"))
-        testImplementation("org.junit.jupiter:junit-jupiter")
-        testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+        testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
+        testImplementation("org.junit.jupiter:junit-jupiter:${project.property("junitJupiterVersion")}")
+        testRuntimeOnly("org.junit.platform:junit-platform-launcher:${project.property("junitPlatformLauncherVersion")}")
 
-
-        testImplementation("io.mockk:mockk:1.13.8")
-        testImplementation("org.assertj:assertj-core:3.24.2")
+        testImplementation("io.mockk:mockk:${project.property("mockkVersion")}")
+        testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
     }
     
     // Configure Java compilation to ensure compatibility

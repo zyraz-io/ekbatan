@@ -19,29 +19,26 @@ repositories {
 dependencies {
 
     // JOOQ dependencies
-    api("org.jooq:jooq:3.18.0")
-    api("org.jooq:jooq-meta:3.18.0")
-    api("org.jooq:jooq-codegen:3.18.0")
+    api("org.jooq:jooq:${project.property("jooqVersion")}")
+    api("org.jooq:jooq-meta:${project.property("jooqVersion")}")
+    api("org.jooq:jooq-codegen:${project.property("jooqVersion")}")
 
     // PostgreSQL JDBC driver
-    implementation("org.postgresql:postgresql:42.7.7")
-    implementation("com.zaxxer:HikariCP:7.0.2")
-    implementation("org.apache.commons:commons-collections4:4.5.0")
-    implementation("com.google.guava:guava:33.5.0-jre")
+    implementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
+    implementation("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
+    implementation("org.apache.commons:commons-collections4:${project.property("commonsCollections4Version")}")
+    implementation("com.google.guava:guava:${project.property("guavaVersion")}")
 
-    testImplementation(platform("org.junit:junit-bom:6.0.1"))
+    testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     // Apache Commons Lang3
-    implementation("org.apache.commons:commons-lang3:3.20.0")
+    implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
 
     // Jackson for JSON serialization
-    api("com.fasterxml.jackson.core:jackson-databind:2.15.2")
-    api("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.2")
-
-    // Apache Commons Lang3 for validation and other utilities
-    api("org.apache.commons:commons-lang3:3.20.0")
+    api("com.fasterxml.jackson.core:jackson-databind:${project.property("jacksonDatabindVersion")}")
+    api("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${project.property("jacksonDatatypeJsr310Version")}")
 }
 
 tasks.withType<Test> {

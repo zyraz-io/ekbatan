@@ -5,14 +5,14 @@ import static io.ekbatan.core.repository.RepositoryRegistry.Builder.repositoryRe
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.ekbatan.core.action.ActionExecutor;
-import io.ekbatan.examples.test.BaseRepositoryTest;
+import io.ekbatan.examples.test.PgBaseRepositoryTest;
 import io.ekbatan.examples.wallet.action.WalletCreateAction;
 import io.ekbatan.examples.wallet.action.WalletDepositMoneyAction;
 import io.ekbatan.examples.wallet.models.Wallet;
 import io.ekbatan.examples.wallet.repository.WalletRepository;
 import org.junit.jupiter.api.Test;
 
-public class WalletCreateActionTest extends BaseRepositoryTest {
+public class WalletCreateActionTest extends PgBaseRepositoryTest {
 
     @Test
     void test_action() throws Exception {

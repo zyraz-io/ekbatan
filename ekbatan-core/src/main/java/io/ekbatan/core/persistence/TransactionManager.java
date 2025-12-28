@@ -6,8 +6,11 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.commons.lang3.Validate;
 import org.jooq.DSLContext;
+import org.jooq.SQLDialect;
 
 public class TransactionManager {
+
+    public final SQLDialect dialect;
 
     public final ConnectionProvider primaryConnectionProvider;
     public final ConnectionProvider secondaryConnectionProvider;
@@ -15,7 +18,10 @@ public class TransactionManager {
     private final ScopedValue<Transaction> currentTransaction;
 
     public TransactionManager(
-            ConnectionProvider primaryConnectionProvider, ConnectionProvider secondaryConnectionProvider) {
+            ConnectionProvider primaryConnectionProvider,
+            ConnectionProvider secondaryConnectionProvider,
+            SQLDialect dialect) {
+        this.dialect = Validate.notNull(dialect, "dialect should not be null");
         this.primaryConnectionProvider =
                 Validate.notNull(primaryConnectionProvider, "primaryConnectionProvider should not be null");
         this.secondaryConnectionProvider =
@@ -27,7 +33,7 @@ public class TransactionManager {
         Connection newConn = null;
         try {
             newConn = primaryConnectionProvider.acquire();
-            final var wrapper = new Transaction(newConn);
+            final var wrapper = new Transaction(newConn, dialect);
             return ScopedValue.where(currentTransaction, wrapper).call(() -> {
                 try {
                     wrapper.begin();

@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.ekbatan.core.domain.MicroType;
 import io.ekbatan.core.repository.exception.EntityNotFoundException;
 import io.ekbatan.core.repository.exception.StaleRecordException;
-import io.ekbatan.examples.test.BaseRepositoryTest;
+import io.ekbatan.examples.test.PgBaseRepositoryTest;
 import io.ekbatan.examples.wallet.models.Wallet;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -24,7 +24,7 @@ import org.jooq.impl.DSL;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class WalletRepositoryTest extends BaseRepositoryTest {
+class WalletRepositoryTest extends PgBaseRepositoryTest {
 
     private WalletRepository walletRepository;
 
@@ -511,7 +511,7 @@ class WalletRepositoryTest extends BaseRepositoryTest {
     }
 
     @Test
-    void should_throw_optimistic_lock_exception_when_updating_stale_versions() {
+    void should_throw_optimistic_lock_exception_when_updateAll_with_stale_versions() {
         // GIVEN
         final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
                 .build();
@@ -547,6 +547,28 @@ class WalletRepositoryTest extends BaseRepositoryTest {
         assertThat(wallet2Fetched).isPresent();
         assertThat(wallet2Fetched.orElseThrow().balance).isEqualByComparingTo(BigDecimal.valueOf(9));
         assertThat(wallet2Fetched.orElseThrow().version).isEqualTo(2);
+    }
+
+    @Test
+    void should_throw_StaleRecordException_when_updating_stale_version_with_update_method() {
+        // GIVEN
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        walletRepository.add(wallet);
+
+        final var walletToUpdate = wallet.withdraw(BigDecimal.ONE);
+        final var walletToUpdateStale = wallet.withdraw(BigDecimal.TWO);
+        walletRepository.update(walletToUpdate);
+
+        // WHEN & THEN
+        assertThatThrownBy(() -> walletRepository.update(walletToUpdateStale))
+                .isInstanceOf(StaleRecordException.class)
+                .hasMessageContaining("was concurrently modified or not found");
+
+        final var fetchedWallet = walletRepository.getById(wallet.getId().getValue());
+        assertThat(fetchedWallet).isNotNull();
+        assertThat(fetchedWallet.balance).isEqualByComparingTo(walletToUpdate.balance);
+        assertThat(fetchedWallet.version).isEqualTo(2);
     }
 
     @Test
@@ -647,9 +669,13 @@ class WalletRepositoryTest extends BaseRepositoryTest {
             assertThat(w.currency.getCurrencyCode()).isEqualTo("GBP");
             assertThat(w.version).isEqualTo(2);
         });
-        assertThat(fetchedWallets.get(0).balance).isEqualByComparingTo(new BigDecimal("94.50")); // 100.00 - 5.50
-        assertThat(fetchedWallets.get(1).balance).isEqualByComparingTo(new BigDecimal("104.50"));
-        assertThat(fetchedWallets.get(2).balance).isEqualByComparingTo(new BigDecimal("114.50"));
+
+        final var fetchedMap = fetchedWallets.stream().collect(Collectors.toMap(d -> d.id, d -> d));
+
+        assertThat(fetchedMap.get(wallets.get(0).id).balance)
+                .isEqualByComparingTo(new BigDecimal("94.50")); // 100.00 - 5.50
+        assertThat(fetchedMap.get(wallets.get(1).id).balance).isEqualByComparingTo(new BigDecimal("104.50"));
+        assertThat(fetchedMap.get(wallets.get(2).id).balance).isEqualByComparingTo(new BigDecimal("114.50"));
     }
 
     @Test

@@ -3,11 +3,11 @@ plugins {
 }
 
 dependencies {
-    implementation("com.squareup:javapoet:1.13.0")
+    implementation("com.squareup:javapoet:${project.property("javaPoetVersion")}")
 
     // Annotation processor dependencies
-    annotationProcessor("com.google.auto.service:auto-service:1.0.1")
-    compileOnly("com.google.auto.service:auto-service-annotations:1.0.1")
+    annotationProcessor("com.google.auto.service:auto-service:${project.property("autoServiceVersion")}")
+    compileOnly("com.google.auto.service:auto-service-annotations:${project.property("autoServiceVersion")}")
 }
 
 java {

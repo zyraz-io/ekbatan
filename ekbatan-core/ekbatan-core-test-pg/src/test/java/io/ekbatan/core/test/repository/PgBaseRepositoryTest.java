@@ -6,35 +6,36 @@ import io.ekbatan.core.config.DataSourceConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import org.flywaydb.core.Flyway;
+import org.jooq.SQLDialect;
 import org.junit.jupiter.api.BeforeAll;
-import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Testcontainers
-public abstract class BaseRepositoryTest {
+public abstract class PgBaseRepositoryTest {
 
     @Container
-    @SuppressWarnings("resource")
-    protected static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:latest")
+    protected static final PostgreSQLContainer db = new PostgreSQLContainer("postgres:latest")
             .withDatabaseName("testdb")
-            .withUsername("io/ekbatan/core/test")
-            .withPassword("io/ekbatan/core/test");
+            .withUsername("test")
+            .withPassword("test");
 
     protected static TransactionManager transactionManager;
 
     @BeforeAll
     static void beforeAll() {
         // Initialize database connection
-        String jdbcUrl = postgres.getJdbcUrl();
-        String username = postgres.getUsername();
-        String password = postgres.getPassword();
+        String jdbcUrl = db.getJdbcUrl();
+        String username = db.getUsername();
+        String password = db.getPassword();
 
         var dataSourceConfig =
                 new DataSourceConfig(jdbcUrl, username, password, empty(), 10, empty(), empty(), empty());
         var primaryConnectionProvider = ConnectionProvider.hikariConnectionProvider(dataSourceConfig, true);
         var secondaryConnectionProvider = ConnectionProvider.hikariConnectionProvider(dataSourceConfig, true);
-        transactionManager = new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider);
+        transactionManager =
+                new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider, SQLDialect.POSTGRES);
 
         // exec migrations
         var flyway = Flyway.configure()

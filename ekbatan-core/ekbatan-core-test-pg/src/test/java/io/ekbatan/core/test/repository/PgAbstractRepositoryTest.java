@@ -23,7 +23,7 @@ import org.jooq.impl.DSL;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class AbstractRepositoryTest extends BaseRepositoryTest {
+class PgAbstractRepositoryTest extends PgBaseRepositoryTest {
 
     private DummyRepository dummyRepository;
 
@@ -510,7 +510,7 @@ class AbstractRepositoryTest extends BaseRepositoryTest {
     }
 
     @Test
-    void should_throw_optimistic_lock_exception_when_updating_stale_versions() {
+    void should_throw_optimistic_lock_exception_when_updateAll_with_stale_versions() {
         // GIVEN
         final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
                 .build();
@@ -546,6 +546,28 @@ class AbstractRepositoryTest extends BaseRepositoryTest {
         assertThat(dummy2Fetched).isPresent();
         assertThat(dummy2Fetched.orElseThrow().balance).isEqualByComparingTo(BigDecimal.valueOf(9));
         assertThat(dummy2Fetched.orElseThrow().version).isEqualTo(2);
+    }
+
+    @Test
+    void should_throw_StaleRecordException_when_updating_stale_version_with_update_method() {
+        // GIVEN
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+                .build();
+        dummyRepository.add(dummy);
+
+        final var dummyToUpdate = dummy.withdraw(BigDecimal.ONE);
+        final var dummyToUpdateStale = dummy.withdraw(BigDecimal.TWO);
+        dummyRepository.update(dummyToUpdate);
+
+        // WHEN & THEN
+        assertThatThrownBy(() -> dummyRepository.update(dummyToUpdateStale))
+                .isInstanceOf(StaleRecordException.class)
+                .hasMessageContaining("was concurrently modified or not found");
+
+        final var fetchedDummy = dummyRepository.getById(dummy.getId().getValue());
+        assertThat(fetchedDummy).isNotNull();
+        assertThat(fetchedDummy.balance).isEqualByComparingTo(dummyToUpdate.balance);
+        assertThat(fetchedDummy.version).isEqualTo(2);
     }
 
     @Test
@@ -646,9 +668,13 @@ class AbstractRepositoryTest extends BaseRepositoryTest {
             assertThat(w.currency.getCurrencyCode()).isEqualTo("GBP");
             assertThat(w.version).isEqualTo(2);
         });
-        assertThat(fetchedDummies.get(0).balance).isEqualByComparingTo(new BigDecimal("94.50")); // 100.00 - 5.50
-        assertThat(fetchedDummies.get(1).balance).isEqualByComparingTo(new BigDecimal("104.50"));
-        assertThat(fetchedDummies.get(2).balance).isEqualByComparingTo(new BigDecimal("114.50"));
+
+        final var fetchedMap = fetchedDummies.stream().collect(Collectors.toMap(d -> d.id, d -> d));
+
+        assertThat(fetchedMap.get(dummies.get(0).id).balance)
+                .isEqualByComparingTo(new BigDecimal("94.50")); // 100.00 - 5.50
+        assertThat(fetchedMap.get(dummies.get(1).id).balance).isEqualByComparingTo(new BigDecimal("104.50"));
+        assertThat(fetchedMap.get(dummies.get(2).id).balance).isEqualByComparingTo(new BigDecimal("114.50"));
     }
 
     @Test

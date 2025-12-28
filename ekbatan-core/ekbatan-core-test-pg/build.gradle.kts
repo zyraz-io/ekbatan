@@ -4,7 +4,7 @@ import org.jooq.meta.jaxb.ForcedType
 
 plugins {
     id("java")
-    id("dev.monosoul.jooq-docker") version "8.0.3"
+    id("dev.monosoul.jooq-docker") version "8.0.9"
 }
 
 group = "io.ekbatan.examples"
@@ -49,24 +49,24 @@ dependencies {
     implementation(project(":ekbatan-core"))
 
     implementation("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
-    jooqCodegen("org.postgresql:postgresql:42.7.7")
+    jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
 
     // Add explicit dependency on the JOOQ API
     implementation("org.jooq:jooq-meta")
     implementation("org.jooq:jooq-codegen")
 
     // Flyway for database migrations
-    implementation("org.flywaydb:flyway-core:11.16.0")
-    implementation("org.flywaydb:flyway-database-postgresql:11.16.0")
+    implementation("org.flywaydb:flyway-core:${project.property("flywayVersion")}")
+    implementation("org.flywaydb:flyway-database-postgresql:${project.property("flywayVersion")}")
 
-    testImplementation("org.testcontainers:testcontainers-junit-jupiter:2.0.2")
-    testImplementation(platform("org.junit:junit-bom:6.0.1"))
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
+    testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")
-    testImplementation("com.zaxxer:HikariCP:7.0.2")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:${project.property("junitPlatformLauncherVersion")}")
 
-    testImplementation("org.testcontainers:testcontainers:2.0.1")
-    testImplementation("org.testcontainers:postgresql:1.21.3")
+    testImplementation("org.testcontainers:testcontainers:${project.property("testcontainersVersion")}")
+    testImplementation("org.testcontainers:testcontainers-postgresql:${project.property("testcontainersVersion")}")
 
     testCompileOnly(project(":ekbatan-annotation-processor"))
     testAnnotationProcessor(project(":ekbatan-annotation-processor"))

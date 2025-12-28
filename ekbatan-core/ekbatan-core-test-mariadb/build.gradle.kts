@@ -19,11 +19,34 @@ repositories {
     mavenCentral()
 }
 
+jooq {
+    withContainer {
+        image {
+            name = "mariadb:11.8"
+            envVars =
+                mapOf(
+                    "MARIADB_ROOT_PASSWORD" to "root",
+                    "MARIADB_DATABASE" to "ekdb",
+                )
+        }
+        db {
+            username = "root"
+            password = "root"
+            name = "ekdb"
+            port = 3306
+            jdbc {
+                schema = "jdbc:mariadb"
+                driverClassName = "org.mariadb.jdbc.Driver"
+            }
+        }
+    }
+}
+
 tasks {
     generateJooqClasses {
         schemas.set(listOf("public"))
-        basePackageName.set("io.ekbatan.examples.generated.jooq")
-        migrationLocations.setFromFilesystem("src/main/resources/db/migration")
+        basePackageName.set("io.ekbatan.core.test.generated.jooq")
+        migrationLocations.setFromFilesystem("src/test/resources/db/migration")
         outputDirectory.set(project.layout.buildDirectory.dir("generated-jooq"))
         flywayProperties.put("flyway.placeholderReplacement", "false")
         includeFlywayTable.set(false)
@@ -34,7 +57,7 @@ tasks {
                 ForcedType()
                     .withUserType("java.time.Instant")
                     .withConverter("io.ekbatan.core.persistence.jooq.converter.InstantConverter")
-                    .withIncludeTypes("TIMESTAMP")
+                    .withIncludeTypes("(?i:DATETIME|TIMESTAMP)")
                     .withIncludeExpression(".*"),
             )
         }
@@ -46,8 +69,9 @@ dependencies {
 
     implementation("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
 
-    implementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
-    jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
+    implementation("org.mariadb.jdbc:mariadb-java-client:${project.property("mariadbJavaClientVersion")}")
+    jooqCodegen("org.mariadb.jdbc:mariadb-java-client:${project.property("mariadbJavaClientVersion")}")
+    jooqCodegen("org.flywaydb:flyway-mysql:${project.property("flywayVersion")}")
 
     // Add explicit dependency on the JOOQ API
     implementation("org.jooq:jooq-meta")
@@ -55,10 +79,7 @@ dependencies {
 
     // Flyway for database migrations
     implementation("org.flywaydb:flyway-core:${project.property("flywayVersion")}")
-    implementation("org.flywaydb:flyway-database-postgresql:${project.property("flywayVersion")}")
-
-    // Apache Commons Lang3
-    implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
+    implementation("org.flywaydb:flyway-mysql:${project.property("flywayVersion")}")
 
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
@@ -67,7 +88,10 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:${project.property("junitPlatformLauncherVersion")}")
 
     testImplementation("org.testcontainers:testcontainers:${project.property("testcontainersVersion")}")
-    testImplementation("org.testcontainers:testcontainers-postgresql:${project.property("testcontainersVersion")}")
+    testImplementation("org.testcontainers:testcontainers-mariadb:${project.property("testcontainersVersion")}")
+
+    testCompileOnly(project(":ekbatan-annotation-processor"))
+    testAnnotationProcessor(project(":ekbatan-annotation-processor"))
 }
 
 tasks.withType<Test> {
