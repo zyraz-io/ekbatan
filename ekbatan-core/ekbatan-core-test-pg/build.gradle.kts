@@ -22,8 +22,8 @@ repositories {
 tasks {
     generateJooqClasses {
         schemas.set(listOf("public"))
-        basePackageName.set("io.ekbatan.examples.generated.jooq")
-        migrationLocations.setFromFilesystem("src/main/resources/db/migration")
+        basePackageName.set("io.ekbatan.core.test.generated.jooq")
+        migrationLocations.setFromFilesystem("src/test/resources/db/migration")
         outputDirectory.set(project.layout.buildDirectory.dir("generated-jooq"))
         flywayProperties.put("flyway.placeholderReplacement", "false")
         includeFlywayTable.set(false)
@@ -67,6 +67,9 @@ dependencies {
 
     testImplementation("org.testcontainers:testcontainers:2.0.1")
     testImplementation("org.testcontainers:postgresql:1.21.3")
+
+    testCompileOnly(project(":ekbatan-annotation-processor"))
+    testAnnotationProcessor(project(":ekbatan-annotation-processor"))
 }
 
 tasks.withType<Test> {
