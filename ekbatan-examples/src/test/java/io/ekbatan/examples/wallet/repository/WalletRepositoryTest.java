@@ -1,6 +1,6 @@
 package io.ekbatan.examples.wallet.repository;
 
-import static io.ekbatan.examples.generated.jooq.tables.Wallets.WALLETS;
+import static io.ekbatan.examples.generated.jooq.public_schema.tables.Wallets.WALLETS;
 import static io.ekbatan.examples.wallet.models.Wallet.createWallet;
 import static java.lang.String.format;
 import static java.util.UUID.randomUUID;

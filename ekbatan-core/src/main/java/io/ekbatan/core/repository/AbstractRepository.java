@@ -47,7 +47,7 @@ public abstract class AbstractRepository<
     private final DSLContext db;
     private final DSLContext readonlyDb;
     protected final TABLE table;
-    private final TableField<RECORD, ID> idField;
+    public final TableField<RECORD, ID> idField;
     protected final TableField<RECORD, Long> versionField;
     protected final TableField<RECORD, String> stateField;
     protected final Class<PERSISTABLE> domainClass;
@@ -103,6 +103,11 @@ public abstract class AbstractRepository<
     public PERSISTABLE add(PERSISTABLE domainObject) {
         Validate.notNull(domainObject, getDomainTypeName() + " cannot be null");
 
+        if (transactionManager.dialect.equals(SQLDialect.MYSQL)) {
+            txDbElseDb().insertInto(table).set(toRecord(domainObject)).execute();
+            return domainObject;
+        }
+
         return txDbElseDb()
                 .insertInto(table)
                 .set(toRecord(domainObject))
@@ -146,6 +151,11 @@ public abstract class AbstractRepository<
             insert.values(values);
         }
 
+        if (transactionManager.dialect.equals(SQLDialect.MYSQL)) {
+            insert.execute();
+            return List.copyOf(domainObjects);
+        }
+
         final var addedObjects = insert.returning().fetch().map(this::fromRecord);
 
         if (addedObjects.size() != domainObjects.size()) {
@@ -174,6 +184,7 @@ public abstract class AbstractRepository<
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public PERSISTABLE update(PERSISTABLE domainObject) {
         Validate.notNull(domainObject, getDomainTypeName() + " cannot be null");
         Validate.notNull(domainObject.getId(), getDomainTypeName() + " ID cannot be null for update");
@@ -183,6 +194,22 @@ public abstract class AbstractRepository<
         final RECORD record = toRecord(domainObject);
         final Long newVersion = currentVersion + 1;
         record.set(versionField, newVersion);
+
+        if (transactionManager.dialect.equals(SQLDialect.MYSQL)) {
+            final var affectedRows = txDbElseDb()
+                    .update(table)
+                    .set(record)
+                    .where(idField.eq(record.get(idField)))
+                    .and(versionField.eq(currentVersion))
+                    .execute();
+
+            if (affectedRows == 0) {
+                throw new StaleRecordException(format(
+                        "%s %s[id=%s, version=%d] was concurrently modified or not found",
+                        getDomainTypeName(), domainClass.getSimpleName(), domainObject.getId(), currentVersion));
+            }
+            return (PERSISTABLE) domainObject.nextVersion();
+        }
 
         var updatedRecord = txDbElseDb()
                 .update(table)
@@ -242,7 +269,8 @@ public abstract class AbstractRepository<
         }
 
         final List<PERSISTABLE> updatedObjects;
-        if (transactionManager.dialect.equals(SQLDialect.MARIADB)) {
+        if (transactionManager.dialect.equals(SQLDialect.MARIADB)
+                || transactionManager.dialect.equals(SQLDialect.MYSQL)) {
             int affectedRows = buildUpdateAllQueryMariadb(domainObjects).execute();
 
             if (affectedRows < domainObjects.size()) {
@@ -279,7 +307,8 @@ public abstract class AbstractRepository<
         }
 
         int affectedRows;
-        if (transactionManager.dialect.equals(SQLDialect.MARIADB)) {
+        if (transactionManager.dialect.equals(SQLDialect.MARIADB)
+                || transactionManager.dialect.equals(SQLDialect.MYSQL)) {
             affectedRows = buildUpdateAllQueryMariadb(domainObjects).execute();
         } else {
             affectedRows = buildUpdateAllQuery(domainObjects).execute();
@@ -369,6 +398,15 @@ public abstract class AbstractRepository<
         }
 
         final var uniqueIds = new LinkedHashSet<>(ids);
+
+        if (transactionManager.dialect.equals(SQLDialect.MYSQL)) {
+            return readonlyDb()
+                    .selectFrom(table)
+                    .where(idField.in(uniqueIds))
+                    .and(notDeleted())
+                    .fetch()
+                    .map(this::fromRecord);
+        }
 
         return readonlyDb()
                 .selectFrom(table)

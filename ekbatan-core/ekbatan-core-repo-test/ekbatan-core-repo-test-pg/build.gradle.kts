@@ -21,26 +21,24 @@ repositories {
 
 tasks {
     generateJooqClasses {
-        schemas.set(listOf("public", "eventlog"))
-        basePackageName.set("io.ekbatan.examples.generated.jooq")
-        migrationLocations.setFromFilesystem("src/main/resources/db/migration")
+        schemas.set(listOf("public"))
+        basePackageName.set("io.ekbatan.core.test.generated.jooq")
+        migrationLocations.setFromFilesystem("src/test/resources/db/migration")
         outputDirectory.set(project.layout.buildDirectory.dir("generated-jooq"))
         flywayProperties.put("flyway.placeholderReplacement", "false")
         includeFlywayTable.set(false)
         outputSchemaToDefault.add("public")
-        schemaToPackageMapping.put("public", "public_schema")
-        schemaToPackageMapping.put("eventlog", "eventlog_schema")
+        schemaToPackageMapping.put("public", "")
         usingJavaConfig {
             database.withForcedTypes(
+                ForcedType()
+                    .withUserType("com.google.gson.JsonElement")
+                    .withBinding("com.example.PostgresJSONGsonBinding")
+                    .withIncludeTypes("JSONB"),
                 ForcedType()
                     .withUserType("java.time.Instant")
                     .withConverter("io.ekbatan.core.persistence.jooq.converter.InstantConverter")
                     .withIncludeTypes("TIMESTAMP")
-                    .withIncludeExpression(".*"),
-                ForcedType()
-                    .withUserType("com.fasterxml.jackson.databind.node.ObjectNode")
-                    .withConverter("io.ekbatan.core.persistence.jooq.converter.ObjectNodeConverter")
-                    .withIncludeTypes("JSONB")
                     .withIncludeExpression(".*"),
             )
         }
@@ -51,8 +49,6 @@ dependencies {
     implementation(project(":ekbatan-core"))
 
     implementation("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
-
-    implementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
     jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
 
     // Add explicit dependency on the JOOQ API
@@ -63,17 +59,18 @@ dependencies {
     implementation("org.flywaydb:flyway-core:${project.property("flywayVersion")}")
     implementation("org.flywaydb:flyway-database-postgresql:${project.property("flywayVersion")}")
 
-    // Apache Commons Lang3
-    implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
-
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:${project.property("junitPlatformLauncherVersion")}")
 
+    testImplementation(project(":ekbatan-core:ekbatan-core-repo-test"))
     testImplementation("org.testcontainers:testcontainers:${project.property("testcontainersVersion")}")
     testImplementation("org.testcontainers:testcontainers-postgresql:${project.property("testcontainersVersion")}")
+
+    testCompileOnly(project(":ekbatan-annotation-processor"))
+    testAnnotationProcessor(project(":ekbatan-annotation-processor"))
 }
 
 tasks.withType<Test> {

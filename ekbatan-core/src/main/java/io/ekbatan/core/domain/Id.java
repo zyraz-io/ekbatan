@@ -33,4 +33,9 @@ public final class Id<IDENTIFIABLE extends Identifiable<?>> extends MicroType<UU
     public int compareTo(Id<IDENTIFIABLE> o) {
         return this.getValue().compareTo(o.getValue());
     }
+
+    @Override
+    public String toString() {
+        return getValue().toString();
+    }
 }

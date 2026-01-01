@@ -1,13 +1,13 @@
 package io.ekbatan.examples.wallet.repository;
 
-import static io.ekbatan.examples.generated.jooq.tables.Wallets.WALLETS;
+import static io.ekbatan.examples.generated.jooq.public_schema.Tables.WALLETS;
 import static io.ekbatan.examples.wallet.models.WalletBuilder.wallet;
 
 import io.ekbatan.core.domain.Id;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.ModelRepository;
-import io.ekbatan.examples.generated.jooq.tables.Wallets;
-import io.ekbatan.examples.generated.jooq.tables.records.WalletsRecord;
+import io.ekbatan.examples.generated.jooq.public_schema.tables.Wallets;
+import io.ekbatan.examples.generated.jooq.public_schema.tables.records.WalletsRecord;
 import io.ekbatan.examples.wallet.models.Wallet;
 import io.ekbatan.examples.wallet.models.WalletState;
 import java.util.Currency;

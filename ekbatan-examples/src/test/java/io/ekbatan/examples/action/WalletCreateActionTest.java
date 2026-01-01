@@ -5,6 +5,8 @@ import static io.ekbatan.core.repository.RepositoryRegistry.Builder.repositoryRe
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.ekbatan.core.action.ActionExecutor;
+import io.ekbatan.core.repository.ActionEventEntityRepository;
+import io.ekbatan.core.repository.ModelEventEntityRepository;
 import io.ekbatan.examples.test.PgBaseRepositoryTest;
 import io.ekbatan.examples.wallet.action.WalletCreateAction;
 import io.ekbatan.examples.wallet.action.WalletDepositMoneyAction;
@@ -17,8 +19,13 @@ public class WalletCreateActionTest extends PgBaseRepositoryTest {
     @Test
     void test_action() throws Exception {
         final var walletRepository = new WalletRepository(transactionManager);
+        final var actionEventEntityRepository = new ActionEventEntityRepository(transactionManager);
+        final var modelEventEntityRepository = new ModelEventEntityRepository(transactionManager);
+
         final var repositoryRegistry = repositoryRegistry()
                 .withModelRepository(Wallet.class, walletRepository)
+                .withActionEventRepository(actionEventEntityRepository)
+                .withModelEventRepository(modelEventEntityRepository)
                 .build();
 
         final var actionRegistry = actionRegistry()

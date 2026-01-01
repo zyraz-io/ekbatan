@@ -11,7 +11,7 @@ import org.apache.commons.lang3.Validate;
 public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Comparable<?>, STATE extends Enum<STATE>>
         implements Persistable<ID> {
     public final ID id;
-    protected final List<ModelEvent<MODEL>> events;
+    public final List<ModelEvent<MODEL>> events;
     public final STATE state;
     public final Instant createdDate;
     public final Instant updatedDate;

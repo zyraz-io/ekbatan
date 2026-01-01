@@ -9,10 +9,16 @@ import org.apache.commons.lang3.Validate;
 
 public final class RepositoryRegistry {
     public final Map<Class<?>, Repository<? extends Persistable<?>>> repositories;
+    public final ActionEventEntityRepository actionEventRepository;
+    public final ModelEventEntityRepository modelEventRepository;
 
     private RepositoryRegistry(Builder builder) {
-        Validate.notNull(builder.repositories, "repositories should not be empty");
+        Validate.notNull(builder.repositories, "repositories cannot be empty");
         this.repositories = builder.repositories.build();
+        this.actionEventRepository =
+                Validate.notNull(builder.actionEventRepository, "actionEventRepository cannot be null");
+        this.modelEventRepository =
+                Validate.notNull(builder.modelEventRepository, "modelEventRepository cannot be null");
     }
 
     @SuppressWarnings("unchecked")
@@ -22,6 +28,8 @@ public final class RepositoryRegistry {
 
     public static final class Builder {
         private final ImmutableMap.Builder<Class<?>, Repository<?>> repositories = ImmutableMap.builder();
+        private ActionEventEntityRepository actionEventRepository;
+        private ModelEventEntityRepository modelEventRepository;
 
         private Builder() {}
 
@@ -42,6 +50,18 @@ public final class RepositoryRegistry {
             Validate.notNull(entityClass, "entityClass cannot be null");
             Validate.notNull(repository, "repository cannot be null");
             repositories.put(entityClass, repository);
+            return this;
+        }
+
+        public Builder withActionEventRepository(ActionEventEntityRepository actionEventRepository) {
+            Validate.notNull(actionEventRepository, "eventRepository cannot be null");
+            this.actionEventRepository = actionEventRepository;
+            return this;
+        }
+
+        public Builder withModelEventRepository(ModelEventEntityRepository modelEventRepository) {
+            Validate.notNull(modelEventRepository, "eventRepository cannot be null");
+            this.modelEventRepository = modelEventRepository;
             return this;
         }
 
