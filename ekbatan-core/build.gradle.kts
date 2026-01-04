@@ -37,8 +37,7 @@ dependencies {
     implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
 
     // Jackson for JSON serialization
-    api("com.fasterxml.jackson.core:jackson-databind:${project.property("jacksonDatabindVersion")}")
-    api("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${project.property("jacksonDatatypeJsr310Version")}")
+    api("tools.jackson.core:jackson-databind:${project.property("jacksonDatabindVersion")}")
 }
 
 tasks.withType<Test> {

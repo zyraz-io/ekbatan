@@ -5,35 +5,36 @@ import static io.ekbatan.core.repository.RepositoryRegistry.Builder.repositoryRe
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.ekbatan.core.action.ActionExecutor;
-import io.ekbatan.core.repository.ActionEventEntityRepository;
-import io.ekbatan.core.repository.ModelEventEntityRepository;
+import io.ekbatan.core.action.persister.event.dual_table.DualTableEventPersister;
 import io.ekbatan.examples.test.PgBaseRepositoryTest;
 import io.ekbatan.examples.wallet.action.WalletCreateAction;
 import io.ekbatan.examples.wallet.action.WalletDepositMoneyAction;
 import io.ekbatan.examples.wallet.models.Wallet;
 import io.ekbatan.examples.wallet.repository.WalletRepository;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 public class WalletCreateActionTest extends PgBaseRepositoryTest {
 
     @Test
     void test_action() throws Exception {
+        final var objectMapper = new ObjectMapper();
+
         final var walletRepository = new WalletRepository(transactionManager);
-        final var actionEventEntityRepository = new ActionEventEntityRepository(transactionManager);
-        final var modelEventEntityRepository = new ModelEventEntityRepository(transactionManager);
 
         final var repositoryRegistry = repositoryRegistry()
                 .withModelRepository(Wallet.class, walletRepository)
-                .withActionEventRepository(actionEventEntityRepository)
-                .withModelEventRepository(modelEventEntityRepository)
                 .build();
 
         final var actionRegistry = actionRegistry()
-                .withAction(WalletCreateAction.class, new WalletCreateAction())
-                .withAction(WalletDepositMoneyAction.class, new WalletDepositMoneyAction(walletRepository))
+                .withAction(WalletCreateAction.class, WalletCreateAction::new)
+                .withAction(WalletDepositMoneyAction.class, () -> new WalletDepositMoneyAction(walletRepository))
                 .build();
 
-        final var actionExecutor = new ActionExecutor(transactionManager, repositoryRegistry, actionRegistry);
+        final var eventPersister = new DualTableEventPersister(transactionManager, objectMapper);
+
+        final var actionExecutor =
+                new ActionExecutor(transactionManager, eventPersister, repositoryRegistry, actionRegistry);
 
         final var result =
                 actionExecutor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params());

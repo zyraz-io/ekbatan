@@ -26,6 +26,7 @@ out/
 
 # Local configuration files
 *.properties
+!gradle.properties
 *.yml
 *.yaml
 

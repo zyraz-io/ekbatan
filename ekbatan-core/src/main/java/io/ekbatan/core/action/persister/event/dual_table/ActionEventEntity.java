@@ -1,9 +1,9 @@
-package io.ekbatan.core.domain.event;
+package io.ekbatan.core.action.persister.event.dual_table;
 
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Instant;
 import java.util.UUID;
 import org.apache.commons.lang3.Validate;
+import tools.jackson.databind.node.ObjectNode;
 
 public class ActionEventEntity {
 

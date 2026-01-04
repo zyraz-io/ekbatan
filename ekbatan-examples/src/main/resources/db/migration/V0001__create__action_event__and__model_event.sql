@@ -15,5 +15,5 @@ CREATE TABLE eventlog.model_events (
     model_type VARCHAR(255) NOT NULL,
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
-    event_data TIMESTAMP NOT NULL
+    event_date TIMESTAMP NOT NULL
 );

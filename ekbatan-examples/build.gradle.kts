@@ -38,8 +38,8 @@ tasks {
                     .withIncludeTypes("TIMESTAMP")
                     .withIncludeExpression(".*"),
                 ForcedType()
-                    .withUserType("com.fasterxml.jackson.databind.node.ObjectNode")
-                    .withConverter("io.ekbatan.core.persistence.jooq.converter.ObjectNodeConverter")
+                    .withUserType("tools.jackson.databind.node.ObjectNode")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONBObjectNodeConverter")
                     .withIncludeTypes("JSONB")
                     .withIncludeExpression(".*"),
             )

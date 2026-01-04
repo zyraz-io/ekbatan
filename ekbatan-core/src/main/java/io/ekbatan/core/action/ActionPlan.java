@@ -1,5 +1,6 @@
 package io.ekbatan.core.action;
 
+import io.ekbatan.core.action.persister.PersistableChanges;
 import io.ekbatan.core.domain.Persistable;
 import java.util.Collection;
 import java.util.Collections;

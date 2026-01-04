@@ -1,12 +1,12 @@
 package io.ekbatan.core.persistence.jooq.converter;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.jooq.Converter;
 import org.jooq.JSONB;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
-public class ObjectNodeConverter implements Converter<JSONB, ObjectNode> {
+public class JSONBObjectNodeConverter implements Converter<JSONB, ObjectNode> {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -17,7 +17,7 @@ public class ObjectNodeConverter implements Converter<JSONB, ObjectNode> {
         }
         try {
             return OBJECT_MAPPER.readValue(databaseObject.data(), ObjectNode.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RuntimeException("Failed to convert JSONB to ObjectNode", e);
         }
     }
@@ -29,7 +29,7 @@ public class ObjectNodeConverter implements Converter<JSONB, ObjectNode> {
         }
         try {
             return JSONB.valueOf(OBJECT_MAPPER.writeValueAsString(userObject));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new RuntimeException("Failed to convert ObjectNode to JSONB", e);
         }
     }

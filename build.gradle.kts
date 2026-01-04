@@ -1,6 +1,6 @@
 plugins {
     `java-library`
-    id("com.diffplug.spotless") version "6.22.0"
+    id("com.diffplug.spotless") version "8.1.0"
     checkstyle
 }
 
@@ -21,7 +21,7 @@ spotless {
         
         // Define the formatting rules
         trimTrailingWhitespace()
-        indentWithSpaces(4) // or tabs(1)
+        leadingTabsToSpaces(4) // or tabs(1)
         endWithNewline()
     }
     
@@ -39,7 +39,7 @@ allprojects {
         isIgnoreFailures = false
         isShowViolations = true
         // Enable HTML reports for better diagnostics
-        reportsDir = file("${buildDir}/reports/checkstyle")
+        reportsDir = layout.buildDirectory.dir("reports/checkstyle").get().asFile
     }
 
     repositories {
@@ -70,7 +70,7 @@ subprojects {
             target("*.gradle.kts")
             ktlint()
             trimTrailingWhitespace()
-            indentWithSpaces(4)
+            leadingTabsToSpaces(4)
             endWithNewline()
         }
         
@@ -78,7 +78,7 @@ subprojects {
         format("misc") {
             target("*.md", ".gitignore", ".gitattributes", "*.yaml", "*.yml", "*.json")
             trimTrailingWhitespace()
-            indentWithSpaces(4)
+            leadingTabsToSpaces(4)
             endWithNewline()
         }
     }

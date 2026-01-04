@@ -1,9 +1,9 @@
-package io.ekbatan.core.domain.event;
+package io.ekbatan.core.action.persister.event.dual_table;
 
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Instant;
 import java.util.UUID;
 import org.apache.commons.lang3.Validate;
+import tools.jackson.databind.node.ObjectNode;
 
 public class ModelEventEntity {
 
@@ -13,7 +13,7 @@ public class ModelEventEntity {
     public final String modelType;
     public final String eventType;
     public final ObjectNode payload;
-    public final Instant eventData;
+    public final Instant eventDate;
 
     private ModelEventEntity(Builder builder) {
         this.id = Validate.notNull(builder.id, "id cannot be null");
@@ -22,7 +22,7 @@ public class ModelEventEntity {
         this.modelType = Validate.notNull(builder.modelType, "modelType cannot be null");
         this.eventType = Validate.notNull(builder.eventType, "eventType cannot be null");
         this.payload = Validate.notNull(builder.payload, "payload cannot be null");
-        this.eventData = Validate.notNull(builder.eventData, "eventData cannot be null");
+        this.eventDate = Validate.notNull(builder.eventData, "eventData cannot be null");
     }
 
     public static Builder createModelEventEntity(
@@ -51,7 +51,7 @@ public class ModelEventEntity {
                 .modelType(modelType)
                 .eventType(eventType)
                 .payload(payload)
-                .eventData(eventData);
+                .eventData(eventDate);
     }
 
     @Override
@@ -65,7 +65,7 @@ public class ModelEventEntity {
                 && modelType.equals(modelEventEntity.modelType)
                 && eventType.equals(modelEventEntity.eventType)
                 && payload.equals(modelEventEntity.payload)
-                && eventData.equals(modelEventEntity.eventData);
+                && eventDate.equals(modelEventEntity.eventDate);
     }
 
     @Override

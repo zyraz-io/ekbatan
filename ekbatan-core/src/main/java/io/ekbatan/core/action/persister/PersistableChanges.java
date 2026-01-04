@@ -1,4 +1,4 @@
-package io.ekbatan.core.action;
+package io.ekbatan.core.action.persister;
 
 import io.ekbatan.core.domain.Persistable;
 import java.util.Collections;
