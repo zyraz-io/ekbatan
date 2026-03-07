@@ -4,6 +4,7 @@ import org.jooq.meta.jaxb.ForcedType
 
 plugins {
     id("java")
+    id("java-test-fixtures")
     id("dev.monosoul.jooq-docker") version "8.0.9"
 }
 
@@ -46,37 +47,32 @@ tasks {
 }
 
 dependencies {
-    implementation(project(":ekbatan-core"))
+    testFixturesApi(project(":ekbatan-core"))
 
-    implementation("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
+    testFixturesApi("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
     jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
 
-    // Add explicit dependency on the JOOQ API
-    implementation("org.jooq:jooq-meta")
-    implementation("org.jooq:jooq-codegen")
+    testFixturesApi("org.jooq:jooq-meta")
+    testFixturesApi("org.jooq:jooq-codegen")
 
     // Flyway for database migrations
-    implementation("org.flywaydb:flyway-core:${project.property("flywayVersion")}")
-    implementation("org.flywaydb:flyway-database-postgresql:${project.property("flywayVersion")}")
+    testFixturesApi("org.flywaydb:flyway-core:${project.property("flywayVersion")}")
+    testFixturesApi("org.flywaydb:flyway-database-postgresql:${project.property("flywayVersion")}")
 
-    implementation("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
-    implementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
-    implementation("org.junit.jupiter:junit-jupiter")
-    implementation("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
-    runtimeOnly("org.junit.platform:junit-platform-launcher:${project.property("junitPlatformLauncherVersion")}")
+    testFixturesApi("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
+    testFixturesApi(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
+    testFixturesApi("org.junit.jupiter:junit-jupiter:${project.property("junitJupiterVersion")}")
+    testFixturesApi("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
+    testFixturesRuntimeOnly("org.junit.platform:junit-platform-launcher:${project.property("junitPlatformLauncherVersion")}")
 
-    implementation("org.testcontainers:testcontainers:${project.property("testcontainersVersion")}")
-    implementation("org.testcontainers:testcontainers-postgresql:${project.property("testcontainersVersion")}")
+    testFixturesApi("org.testcontainers:testcontainers:${project.property("testcontainersVersion")}")
+    testFixturesApi("org.testcontainers:testcontainers-postgresql:${project.property("testcontainersVersion")}")
 
-    compileOnly(project(":ekbatan-annotation-processor"))
-    annotationProcessor(project(":ekbatan-annotation-processor"))
+    testFixturesCompileOnly(project(":ekbatan-annotation-processor"))
+    testFixturesAnnotationProcessor(project(":ekbatan-annotation-processor"))
 
-    implementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
-    implementation("org.junit.jupiter:junit-jupiter:${project.property("junitJupiterVersion")}")
-    runtimeOnly("org.junit.platform:junit-platform-launcher:${project.property("junitPlatformLauncherVersion")}")
-
-    implementation("io.mockk:mockk:${project.property("mockkVersion")}")
-    implementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
+    testFixturesApi("io.mockk:mockk:${project.property("mockkVersion")}")
+    testFixturesApi("org.assertj:assertj-core:${project.property("assertjVersion")}")
 }
 
 tasks.withType<Test> {

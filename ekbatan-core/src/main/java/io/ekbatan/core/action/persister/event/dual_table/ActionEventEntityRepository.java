@@ -6,6 +6,7 @@ import io.ekbatan.core.persistence.jooq.converter.JSONBObjectNodeConverter;
 import io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter;
 import io.ekbatan.core.persistence.jooq.converter.mysql.UuidStringConverter;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.jooq.DSLContext;
 import org.jooq.Field;
@@ -14,7 +15,7 @@ import org.jooq.impl.DSL;
 import org.jooq.impl.SQLDataType;
 import tools.jackson.databind.node.ObjectNode;
 
-public class ActionEventEntityRepository {
+class ActionEventEntityRepository {
 
     private final TransactionManager transactionManager;
     private final DSLContext db;
@@ -73,7 +74,7 @@ public class ActionEventEntityRepository {
             DSL.name(SCHEMA_NAME, TABLE_NAME, "action_params"),
             SQLDataType.JSON.asConvertedDataType(new JSONObjectNodeConverter()));
 
-    public ActionEventEntityRepository(TransactionManager transactionManager) {
+    ActionEventEntityRepository(TransactionManager transactionManager) {
         this.transactionManager = transactionManager;
         this.db = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
 
@@ -102,7 +103,25 @@ public class ActionEventEntityRepository {
         return transactionManager.currentTransactionDbContext().orElse(db);
     }
 
-    public void addNoResult(ActionEventEntity entity) {
+    int count() {
+        return txDbElseDb().selectCount().from(ACTION_EVENTS).fetchOne(0, int.class);
+    }
+
+    List<ActionEventEntity> findAll() {
+        return txDbElseDb()
+                .select(idField, startedDateField, completionDateField, actionNameField, actionParamsField)
+                .from(ACTION_EVENTS)
+                .fetch()
+                .map(r -> ActionEventEntity.createActionEventEntity(
+                                r.get(idField),
+                                r.get(startedDateField),
+                                r.get(completionDateField),
+                                r.get(actionNameField),
+                                r.get(actionParamsField))
+                        .build());
+    }
+
+    void addNoResult(ActionEventEntity entity) {
         txDbElseDb()
                 .insertInto(ACTION_EVENTS)
                 .set(idField, entity.id)

@@ -7,6 +7,7 @@ import io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter;
 import io.ekbatan.core.persistence.jooq.converter.mysql.UuidStringConverter;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 import org.jooq.DSLContext;
 import org.jooq.Field;
@@ -15,7 +16,7 @@ import org.jooq.impl.DSL;
 import org.jooq.impl.SQLDataType;
 import tools.jackson.databind.node.ObjectNode;
 
-public class ModelEventEntityRepository {
+class ModelEventEntityRepository {
 
     private final TransactionManager transactionManager;
     private final DSLContext db;
@@ -86,7 +87,7 @@ public class ModelEventEntityRepository {
             DSL.name(SCHEMA_NAME, TABLE_NAME, "event_date"),
             SQLDataType.LOCALDATETIME.asConvertedDataType(new InstantConverter()));
 
-    public ModelEventEntityRepository(TransactionManager transactionManager) {
+    ModelEventEntityRepository(TransactionManager transactionManager) {
         this.transactionManager = transactionManager;
         this.db = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
 
@@ -121,7 +122,35 @@ public class ModelEventEntityRepository {
         return transactionManager.currentTransactionDbContext().orElse(db);
     }
 
-    public void addAllNoResult(Collection<ModelEventEntity> entities) {
+    int count() {
+        return txDbElseDb().selectCount().from(MODEL_EVENTS).fetchOne(0, int.class);
+    }
+
+    List<ModelEventEntity> findByActionId(UUID actionId) {
+        return txDbElseDb()
+                .select(
+                        idField,
+                        actionIdField,
+                        modelIdField,
+                        modelTypeField,
+                        eventTypeField,
+                        payloadField,
+                        eventDateField)
+                .from(MODEL_EVENTS)
+                .where(actionIdField.eq(actionId))
+                .fetch()
+                .map(r -> ModelEventEntity.createModelEventEntity(
+                                r.get(idField),
+                                r.get(actionIdField),
+                                r.get(modelIdField),
+                                r.get(modelTypeField),
+                                r.get(eventTypeField),
+                                r.get(payloadField),
+                                r.get(eventDateField))
+                        .build());
+    }
+
+    void addAllNoResult(Collection<ModelEventEntity> entities) {
         if (entities.isEmpty()) return;
         final var insert = txDbElseDb()
                 .insertInto(

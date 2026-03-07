@@ -5,7 +5,7 @@ import java.util.UUID;
 import org.apache.commons.lang3.Validate;
 import tools.jackson.databind.node.ObjectNode;
 
-public class ModelEventEntity {
+class ModelEventEntity {
 
     public final UUID id;
     public final UUID actionId;
@@ -22,7 +22,7 @@ public class ModelEventEntity {
         this.modelType = Validate.notNull(builder.modelType, "modelType cannot be null");
         this.eventType = Validate.notNull(builder.eventType, "eventType cannot be null");
         this.payload = Validate.notNull(builder.payload, "payload cannot be null");
-        this.eventDate = Validate.notNull(builder.eventData, "eventData cannot be null");
+        this.eventDate = Validate.notNull(builder.eventDate, "eventDate cannot be null");
     }
 
     public static Builder createModelEventEntity(
@@ -32,7 +32,7 @@ public class ModelEventEntity {
             String modelType,
             String eventType,
             ObjectNode payload,
-            Instant eventData) {
+            Instant eventDate) {
         return new Builder()
                 .id(id)
                 .actionId(actionId)
@@ -40,18 +40,7 @@ public class ModelEventEntity {
                 .modelType(modelType)
                 .eventType(eventType)
                 .payload(payload)
-                .eventData(eventData);
-    }
-
-    public Builder copy() {
-        return new Builder()
-                .id(id)
-                .actionId(actionId)
-                .modelId(modelId)
-                .modelType(modelType)
-                .eventType(eventType)
-                .payload(payload)
-                .eventData(eventDate);
+                .eventDate(eventDate);
     }
 
     @Override
@@ -73,14 +62,14 @@ public class ModelEventEntity {
         return id.hashCode();
     }
 
-    public static final class Builder {
+    static final class Builder {
         private UUID id;
         private UUID actionId;
         private String modelId;
         private String modelType;
         private String eventType;
         private ObjectNode payload;
-        private Instant eventData;
+        private Instant eventDate;
 
         private Builder() {}
 
@@ -118,8 +107,8 @@ public class ModelEventEntity {
             return this;
         }
 
-        public Builder eventData(Instant eventData) {
-            this.eventData = eventData;
+        public Builder eventDate(Instant eventDate) {
+            this.eventDate = eventDate;
             return this;
         }
 

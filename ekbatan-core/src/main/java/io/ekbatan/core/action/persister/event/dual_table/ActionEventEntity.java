@@ -5,7 +5,7 @@ import java.util.UUID;
 import org.apache.commons.lang3.Validate;
 import tools.jackson.databind.node.ObjectNode;
 
-public class ActionEventEntity {
+class ActionEventEntity {
 
     public final UUID id;
     public final Instant startedDate;
@@ -31,15 +31,6 @@ public class ActionEventEntity {
                 .actionParams(actionParams);
     }
 
-    public Builder copy() {
-        return new Builder()
-                .id(id)
-                .startedDate(startedDate)
-                .completionDate(completionDate)
-                .actionName(actionName)
-                .actionParams(actionParams);
-    }
-
     @Override
     public boolean equals(Object other) {
         if (this == other) return true;
@@ -57,7 +48,7 @@ public class ActionEventEntity {
         return id.hashCode();
     }
 
-    public static final class Builder {
+    static final class Builder {
         private UUID id;
         private Instant startedDate;
         private Instant completionDate;

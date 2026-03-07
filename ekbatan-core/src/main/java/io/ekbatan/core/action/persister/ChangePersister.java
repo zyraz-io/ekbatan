@@ -48,7 +48,7 @@ public class ChangePersister {
         }
 
         eventPersister.persistActionEvents(
-                action.getClass().getName(), actionStartDate, actionCompletionDate, params, modelEvents);
+                action.getClass().getSimpleName(), actionStartDate, actionCompletionDate, params, modelEvents);
     }
 
     private List<ModelEvent<?>> extractModelEvents(
