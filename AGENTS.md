@@ -111,11 +111,20 @@ Wallet updated = wallet.deposit(amount); // returns NEW wallet with event attach
 plan.update(updated);                    // registers for persistence
 ```
 
+### Single-Threaded Action Execution
+Actions execute single-threaded. Do not spawn concurrent threads inside `Action.perform()`. The `TransactionManager` uses `ScopedValue` to bind transaction context, and the underlying JDBC `Connection` is not thread-safe. Concurrent access from child threads would share that connection unsafely. Users needing parallel work should split it into separate action executions or handle concurrency at a layer above the framework. If data from multiple sources needs to be read in parallel, do so before executing the action — fan out the reads, join/aggregate the results, build the action's `Params` from the aggregated data, then execute the action. This keeps actions focused on declaring business intent, with parallelism handled by the caller.
+
+### No Composable / Nested Actions
+Actions must **not** invoke other actions within their `perform()` method. The framework intentionally does not support nested or composable action execution. An action is a self-contained unit of business work that produces a single atomic transaction — nesting actions blurs transaction boundaries, creates hidden coupling between business operations, and makes the execution flow harder to reason about. If two operations need to happen together, they belong in a single action. If they are independent, execute them separately from the caller. If one must follow the other, orchestrate that sequence at the service/application layer above the framework.
+
 ### Optimistic Locking
 Every persistable has a `version` field. On update, the repository checks that the version matches. If not, `StaleRecordException` is thrown. `nextVersion()` increments the version.
 
 ### Soft Deletion
 Records are never physically deleted. The `state` field is set to `DELETED`. Queries automatically filter out deleted records.
+
+### Idempotency
+Ekbatan does **not** provide a framework-level idempotency key abstraction (no dedicated column on `action_events`, no `idempotencyKey` field on action params). The framework's atomic transactions already guarantee that if a unique constraint fails, the entire transaction rolls back — no partial writes. Action designers who need idempotency choose their own domain-appropriate field name (e.g., `referenceId`, `transactionId`, `depositId`) and enforce uniqueness via a constraint on their domain table. This keeps the framework simple and avoids prescribing a single field/column name that may not fit every domain context.
 
 ### Event Sourcing (Dual-Table)
 Models accumulate `ModelEvent` instances. When persisted via `ChangePersister`, events are extracted and stored in two tables:
@@ -130,9 +139,328 @@ The framework supports PostgreSQL, MySQL, and MariaDB. Dialect differences are h
 - Test infrastructure — Separate test subprojects per database
 
 ### Builder Pattern
-Two variants:
-1. **Manual builders** — `Model.Builder` and `Entity.Builder` base classes with fluent API
-2. **Generated builders** — `@AutoBuilder` annotation generates builders at compile time
+
+The project uses the Builder pattern extensively. There are two categories: **infrastructure builders** (for framework classes like `ActionExecutor`, `ExecutionConfiguration`, registries) and **domain builders** (for `Model` and `Entity` subclasses). Both follow the same core principles but differ in structure.
+
+#### Core Principles
+
+1. **Target class fields are `public final`** — the target class is immutable, so fields are exposed directly. No getters needed. Builder fields are `private` — they are internal to the builder.
+2. **Builder is a `static final class` nested inside the target class** (or a separate generated class for `@AutoBuilder` domain objects).
+3. **Private constructor on the target class** — only the Builder can instantiate it. The constructor takes the Builder as its sole argument.
+4. **Private constructor on the Builder** — instantiation goes through a static factory method.
+5. **Static factory method** — named after the thing being built, returns a new Builder instance.
+6. **Setter methods just assign** — no validation in setter methods. Setters return `this` (or `self()` for generic builders) for fluent chaining.
+7. **All validation happens in the target class constructor** — the constructor reads builder fields and validates using `Validate.notNull()`, `Validate.isTrue()`, etc. This is the single place where invariants are enforced.
+8. **Default values are set on the builder field declaration** — not resolved with ternary logic in the constructor. If a field has a sensible default, assign it at the field level in the Builder. The constructor then just reads it directly.
+9. **Fields with dependent defaults** — when a default depends on another builder field (e.g., `eventPersister` depends on `transactionManager`), the default cannot be set at the field level. In this case, the builder field is left `null` and the constructor resolves it with a ternary.
+
+#### Infrastructure Builder Example
+
+```java
+public final class Foo {
+
+    public final Bar bar;                       // required field
+    public final Baz baz;                       // required field
+    public final int maxSize;                   // primitive with default
+    public final Optional<Retry> retryConfig;         // optional field
+    public final List<String> tags;             // collection with default
+    public final Qux qux;                       // field with dependent default
+
+    private Foo(Builder builder) {
+        // Required fields — validate in constructor
+        this.bar = Validate.notNull(builder.bar, "bar is required");
+        this.baz = Validate.notNull(builder.baz, "baz is required");
+
+        // Primitive with default — just assign (default set on builder field)
+        this.maxSize = builder.maxSize;
+
+        // Optional — just assign (default set on builder field)
+        this.retryConfig = builder.retryConfig;
+
+        // Collection with default — just assign (default set on builder field)
+        this.tags = List.copyOf(builder.tags);
+
+        // Dependent default — resolve here because it depends on another field
+        this.qux = builder.qux != null
+                ? builder.qux
+                : new DefaultQux(this.bar);
+    }
+
+    public static final class Builder {
+        // Required fields — no default, left null
+        private Bar bar;
+        private Baz baz;
+
+        // Primitive with default — set at field level
+        private int maxSize = 100;
+
+        // Optional field — use Optional, set default at field level
+        private Optional<Retry> retryConfig = Optional.of(StaleRecordFixedRetry.DEFAULT);
+
+        // Collection with default — initialize at field level
+        private List<String> tags = new ArrayList<>();
+
+        // Dependent default — left null, resolved in constructor
+        private Qux qux;
+
+        private Builder() {}
+
+        public static Builder foo() {
+            return new Builder();
+        }
+
+        // Setter for required object field — just assign, no validation
+        public Builder bar(Bar bar) {
+            this.bar = bar;
+            return this;
+        }
+
+        public Builder baz(Baz baz) {
+            this.baz = baz;
+            return this;
+        }
+
+        // Setter for primitive field
+        public Builder maxSize(int maxSize) {
+            this.maxSize = maxSize;
+            return this;
+        }
+
+        // Setter for Optional field — wraps in Optional.of()
+        public Builder retryConfig(Retry retryConfig) {
+            this.retryConfig = Optional.of(retryConfig);
+            return this;
+        }
+
+        // Explicit "unset" method for Optional field — sets to Optional.empty()
+        public Builder noRetry() {
+            this.retryConfig = Optional.empty();
+            return this;
+        }
+
+        // Setter for collection — replaces the list
+        public Builder tags(List<String> tags) {
+            this.tags = new ArrayList<>(tags);
+            return this;
+        }
+
+        // Additive method for collection — uses "with" prefix
+        public Builder withTag(String tag) {
+            this.tags.add(tag);
+            return this;
+        }
+
+        // Setter for field with dependent default
+        public Builder qux(Qux qux) {
+            this.qux = qux;
+            return this;
+        }
+
+        public Foo build() {
+            return new Foo(this);
+        }
+    }
+}
+```
+
+#### Field Type Rules
+
+| Field type | Builder field type | Builder default | Setter pattern | Constructor handling |
+|---|---|---|---|---|
+| Required object | `T` | `null` (no default) | `this.field = value` | `Validate.notNull(builder.field, "...")` |
+| Required primitive | `int`, `long`, etc. | explicit default or `0` | `this.field = value` | Additional validation if needed |
+| Optional object | `Optional<T>` | `Optional.of(default)` or `Optional.empty()` | `this.field = Optional.of(value)` | `this.field = builder.field` |
+| Collection | `List<T>` | `new ArrayList<>()` | Replace: `new ArrayList<>(value)`, Add: `this.list.add(value)` | `List.copyOf(builder.field)` |
+| Field with dependent default | `T` | `null` | `this.field = value` | Ternary: `builder.field != null ? builder.field : computeDefault()` |
+
+#### Naming Conventions for Builder Methods
+
+- **Static factory**: named after the thing being built — `foo()`, `actionExecutor()`, `executionConfiguration()`
+- **Setter**: named after the field — `bar(Bar bar)`, `maxSize(int maxSize)`
+- **Additive (collections)**: `with` prefix — `withTag(String tag)`, `withEvent(ModelEvent event)`, `withAction(Class action, Supplier supplier)`
+- **Replace (collections)**: named after the field — `tags(List<String> tags)`, `events(List<ModelEvent> events)`
+- **Unset (Optional)**: `no` prefix — `noRetry()`
+
+#### Domain Builder (Model/Entity)
+
+Domain builders for `Model` and `Entity` subclasses differ from infrastructure builders in structure:
+
+- They extend `Model.Builder<ID, B, M, STATE>` or `Entity.Builder<ID, B, E, STATE>` — abstract generic base classes that provide `id`, `state`, `version`, and (for Model) `events`, `createdDate`, `updatedDate`.
+- They use the **`self()` pattern** for fluent chaining across the generic hierarchy. Each setter in the base class returns `self()` (which casts `this` to the concrete builder type `B`) instead of `this`, so the return type stays as e.g. `WalletBuilder` rather than falling back to `Model.Builder`.
+- The domain class constructor takes its builder as the sole argument, calls `super(builder)` to initialize base fields, then reads and validates domain-specific fields from the builder.
+- Domain classes also define a `copy()` method that creates a builder pre-populated with the current state, enabling immutable updates.
+- All the same core principles apply: `public final` fields on the domain class, validation in the constructor, defaults on builder field declarations, setters just assign.
+
+```java
+// Domain class
+public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+
+    public final UUID ownerId;
+    public final Currency currency;
+    public final BigDecimal balance;
+
+    Wallet(WalletBuilder builder) {
+        super(builder);
+        this.ownerId = Validate.notNull(builder.ownerId, "ownerId cannot be null");
+        this.currency = Validate.notNull(builder.currency, "currency cannot be null");
+        this.balance = Validate.notNull(builder.balance, "balance cannot be null");
+    }
+
+    // Factory method for creation — returns a builder, not the object directly
+    public static WalletBuilder createWallet(UUID ownerId, Currency currency, BigDecimal balance) {
+        final var id = Id.random(Wallet.class);
+        return WalletBuilder.wallet()
+                .id(id)
+                .state(OPENED)
+                .ownerId(ownerId)
+                .currency(currency)
+                .balance(balance)
+                .withInitialVersion()
+                .withEvent(new WalletCreatedEvent(id, ownerId, currency, balance));
+    }
+
+    // copy() enables immutable updates
+    @Override
+    public WalletBuilder copy() {
+        return WalletBuilder.wallet()
+                .copyBase(this)
+                .ownerId(ownerId)
+                .currency(currency)
+                .balance(balance);
+    }
+
+    // Business method — returns a new immutable instance
+    public Wallet deposit(BigDecimal amount) {
+        return copy()
+                .balance(balance.add(amount))
+                .increaseVersion()
+                .withEvent(new WalletMoneyDepositedEvent(id, amount))
+                .build();
+    }
+}
+
+// Domain builder — extends Model.Builder
+public final class WalletBuilder extends Model.Builder<Id<Wallet>, WalletBuilder, Wallet, WalletState> {
+
+    UUID ownerId;
+    Currency currency;
+    BigDecimal balance;
+
+    private WalletBuilder() {}
+
+    public static WalletBuilder wallet() {
+        return new WalletBuilder();
+    }
+
+    public WalletBuilder ownerId(UUID ownerId) {
+        this.ownerId = ownerId;
+        return this;
+    }
+
+    public WalletBuilder currency(Currency currency) {
+        this.currency = currency;
+        return this;
+    }
+
+    public WalletBuilder balance(BigDecimal balance) {
+        this.balance = balance;
+        return this;
+    }
+
+    @Override
+    public Wallet build() {
+        return new Wallet(this);
+    }
+}
+```
+
+Note that domain builder fields are **package-private** (not `private`), because the domain class in the same package reads them directly in its constructor.
+
+**Inherited methods from `Model.Builder`:** `id()`, `state()`, `version()`, `withInitialVersion()`, `increaseVersion()`, `withEvent()`, `events()`, `createdDate()`, `updatedDate()`, `copyBase()`, `self()`, and abstract `build()`.
+
+**Inherited methods from `Entity.Builder`:** `id()`, `state()`, `version()`, `withInitialVersion()`, `increaseVersion()`, `copyBase()`, `self()`, and abstract `build()`. Entity has no events, createdDate, or updatedDate.
+
+#### @AutoBuilder (Code Generation)
+
+For domain classes (`Model` and `Entity` subclasses), writing the builder by hand is repetitive — the builder just mirrors the domain class fields with setters and getters. The `@AutoBuilder` annotation processor eliminates this boilerplate by generating the builder class at compile time.
+
+**When to use `@AutoBuilder`:** Use it for standard domain classes where the builder is a straightforward mirror of the domain fields. If a domain builder needs custom logic (conditional defaults, computed fields, specialized setter behavior), write the builder manually instead.
+
+**How it works:**
+
+1. Annotate the domain class with `@AutoBuilder`:
+   ```java
+   @AutoBuilder
+   public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+       public final UUID ownerId;
+       public final Currency currency;
+       public final BigDecimal balance;
+       public final List<String> aliases;
+
+       Wallet(WalletBuilder builder) {
+           super(builder);
+           this.ownerId = Validate.notNull(builder.ownerId, "ownerId cannot be null");
+           this.currency = Validate.notNull(builder.currency, "currency cannot be null");
+           this.balance = Validate.notNull(builder.balance, "balance cannot be null");
+           this.aliases = Objects.requireNonNullElse(builder.aliases, List.of());
+       }
+
+       // ... createWallet(), copy(), business methods ...
+   }
+   ```
+
+2. The annotation processor generates a `WalletBuilder` class at compile time (in `build/generated/sources/annotationProcessor/`):
+   ```java
+   @Generated("io.ekbatan.core.processor.AutoBuilderProcessor")
+   public final class WalletBuilder extends Model.Builder<Id<Wallet>, WalletBuilder, Wallet, WalletState> {
+       UUID ownerId;
+       Currency currency;
+       BigDecimal balance;
+       List<String> aliases;
+
+       private WalletBuilder() {}
+
+       public static WalletBuilder wallet() { return new WalletBuilder(); }
+
+       public WalletBuilder ownerId(UUID ownerId) { this.ownerId = ownerId; return this; }
+       public UUID ownerId() { return this.ownerId; }
+
+       public WalletBuilder currency(Currency currency) { this.currency = currency; return this; }
+       public Currency currency() { return this.currency; }
+
+       // ... same for balance, aliases ...
+
+       @Override
+       public Wallet build() { return new Wallet(this); }
+   }
+   ```
+
+**What @AutoBuilder generates:**
+
+- A `final` class named `<ModelName>Builder` extending `Model.Builder` or `Entity.Builder` with the correct type parameters.
+- **Package-private fields** for each non-static field declared in the domain class (not inherited fields — those come from the base builder).
+- **Fluent setter** for each field — assigns the value and returns `this`.
+- **Getter** for each field — returns the current value.
+- **Private constructor** — enforces instantiation through the static factory method.
+- **Static factory method** — named after the domain class in lowercase (e.g., `wallet()` for `Wallet`, `product()` for `Product`).
+- **`build()` override** — calls `new ModelClass(this)`.
+- **`@Generated` annotation** — marks the class as processor-generated.
+
+**What @AutoBuilder does NOT generate:**
+
+- The domain class itself — you write that manually.
+- The domain class constructor — you write that with validation logic.
+- Business methods (`deposit()`, `withdraw()`, `delete()`) — those live on the domain class.
+- The `copy()` method — you write that on the domain class.
+- Factory methods (`createWallet()`) — you write those on the domain class.
+- Any custom setter behavior — if you need special setters, write the builder manually.
+
+**Constraints:**
+
+- The annotated class must directly extend `Model` or `Entity`.
+- The annotation has source retention (`@Retention(RetentionPolicy.SOURCE)`) — it is erased from compiled bytecode.
+- Generated setters do not deep-copy mutable fields (e.g., `List`). If the domain class needs defensive copies, handle it in the domain class constructor.
+- The generated builder follows all standard builder conventions: package-private fields, private constructor, static factory, setters just assign, no validation.
 
 ### Naming Conventions
 - Java: `camelCase` fields, `PascalCase` classes

@@ -1,5 +1,7 @@
 package io.ekbatan.core.action;
 
+import static io.ekbatan.core.action.ExecutionConfiguration.Builder.executionConfiguration;
+
 import io.ekbatan.core.action.persister.ChangePersister;
 import io.ekbatan.core.action.persister.event.EventPersister;
 import io.ekbatan.core.action.persister.event.single_table.SingleTableEventPersister;
@@ -15,6 +17,7 @@ public class ActionExecutor {
     private final TransactionManager transactionManager;
     private final ActionRegistry actionRegistry;
     private final ChangePersister changePersister;
+    private final ExecutionConfiguration defaultExecutionConfiguration;
 
     private ActionExecutor(Builder builder) {
         this.transactionManager = Validate.notNull(builder.transactionManager, "transactionManager is required");
@@ -28,29 +31,31 @@ public class ActionExecutor {
                 : new SingleTableEventPersister(builder.transactionManager, objectMapper);
 
         this.changePersister = new ChangePersister(repositoryRegistry, eventPersister);
+        this.defaultExecutionConfiguration =
+                Validate.notNull(builder.defaultExecutionConfiguration, "defaultExecutionConfiguration is required");
     }
 
     public <P, R, A extends Action<P, R>> R execute(Principal principal, Class<A> actionClass, P params)
             throws Exception {
-        Validate.notNull(actionClass, "Action class cannot be null");
+        return execute(principal, actionClass, params, defaultExecutionConfiguration);
+    }
+
+    public <P, R, A extends Action<P, R>> R execute(
+            Principal principal, Class<A> actionClass, P params, ExecutionConfiguration executionConfiguration)
+            throws Exception {
+        Validate.notNull(actionClass, "actionClass cannot be null");
+        Validate.notNull(executionConfiguration, "executionConfiguration cannot be null");
 
         final var action = actionRegistry.get(actionClass);
 
-        try {
+        return Retry.<R>with(executionConfiguration.retryConfigs).execute(() -> {
             final var actionStartDate = Instant.now();
-
             final var result = action.perform(principal, params);
-
-            transactionManager.inTransaction(_ -> {
+            transactionManager.inTransactionChecked(_ -> {
                 changePersister.persist(action, params, actionStartDate);
             });
-
             return result;
-
-        } catch (Exception e) {
-            action.onFailure(e);
-            throw e;
-        }
+        });
     }
 
     public static final class Builder {
@@ -59,6 +64,8 @@ public class ActionExecutor {
         private RepositoryRegistry repositoryRegistry;
         private ActionRegistry actionRegistry;
         private EventPersister eventPersister;
+        private ExecutionConfiguration defaultExecutionConfiguration =
+                executionConfiguration().build();
 
         private Builder() {}
 
@@ -67,27 +74,32 @@ public class ActionExecutor {
         }
 
         public Builder transactionManager(TransactionManager transactionManager) {
-            this.transactionManager = Validate.notNull(transactionManager, "transactionManager cannot be null");
+            this.transactionManager = transactionManager;
             return this;
         }
 
         public Builder objectMapper(ObjectMapper objectMapper) {
-            this.objectMapper = Validate.notNull(objectMapper, "objectMapper cannot be null");
+            this.objectMapper = objectMapper;
             return this;
         }
 
         public Builder repositoryRegistry(RepositoryRegistry repositoryRegistry) {
-            this.repositoryRegistry = Validate.notNull(repositoryRegistry, "repositoryRegistry cannot be null");
+            this.repositoryRegistry = repositoryRegistry;
             return this;
         }
 
         public Builder actionRegistry(ActionRegistry actionRegistry) {
-            this.actionRegistry = Validate.notNull(actionRegistry, "actionRegistry cannot be null");
+            this.actionRegistry = actionRegistry;
             return this;
         }
 
         public Builder eventPersister(EventPersister eventPersister) {
-            this.eventPersister = Validate.notNull(eventPersister, "eventPersister cannot be null");
+            this.eventPersister = eventPersister;
+            return this;
+        }
+
+        public Builder defaultExecutionConfiguration(ExecutionConfiguration defaultExecutionConfiguration) {
+            this.defaultExecutionConfiguration = defaultExecutionConfiguration;
             return this;
         }
 
