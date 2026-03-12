@@ -7,6 +7,7 @@ import io.ekbatan.core.domain.ModelEvent;
 import io.ekbatan.core.domain.Persistable;
 import io.ekbatan.core.repository.Repository;
 import io.ekbatan.core.repository.RepositoryRegistry;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,14 +18,16 @@ public class ChangePersister {
 
     private final RepositoryRegistry repositoryRegistry;
     private final EventPersister eventPersister;
+    private final Clock clock;
 
-    public ChangePersister(RepositoryRegistry repositoryRegistry, EventPersister eventPersister) {
+    public ChangePersister(RepositoryRegistry repositoryRegistry, EventPersister eventPersister, Clock clock) {
         this.repositoryRegistry = Validate.notNull(repositoryRegistry, "repositoryRegistry cannot be null");
         this.eventPersister = Validate.notNull(eventPersister, "eventPersister cannot be null");
+        this.clock = Validate.notNull(clock, "clock cannot be null");
     }
 
     public void persist(Action<?, ?> action, Object params, Instant actionStartDate) {
-        final var actionCompletionDate = Instant.now();
+        final var actionCompletionDate = clock.instant();
         final var actionPlan = action.plan;
         final var modelEvents = new ArrayList<ModelEvent<?>>();
 

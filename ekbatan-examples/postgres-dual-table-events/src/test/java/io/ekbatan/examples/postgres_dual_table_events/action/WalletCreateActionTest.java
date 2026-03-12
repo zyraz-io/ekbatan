@@ -11,6 +11,7 @@ import io.ekbatan.examples.postgres_dual_table_events.wallet.action.WalletCreate
 import io.ekbatan.examples.postgres_dual_table_events.wallet.action.WalletDepositMoneyAction;
 import io.ekbatan.examples.postgres_dual_table_events.wallet.models.Wallet;
 import io.ekbatan.examples.postgres_dual_table_events.wallet.repository.WalletRepository;
+import java.time.Clock;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
@@ -26,9 +27,11 @@ public class WalletCreateActionTest extends PgBaseRepositoryTest {
                 .withModelRepository(Wallet.class, walletRepository)
                 .build();
 
+        final var clock = Clock.systemUTC();
+
         final var actionRegistry = actionRegistry()
-                .withAction(WalletCreateAction.class, WalletCreateAction::new)
-                .withAction(WalletDepositMoneyAction.class, () -> new WalletDepositMoneyAction(walletRepository))
+                .withAction(WalletCreateAction.class, () -> new WalletCreateAction(clock))
+                .withAction(WalletDepositMoneyAction.class, () -> new WalletDepositMoneyAction(clock, walletRepository))
                 .build();
 
         final var eventPersister = new DualTableEventPersister(transactionManager, objectMapper);

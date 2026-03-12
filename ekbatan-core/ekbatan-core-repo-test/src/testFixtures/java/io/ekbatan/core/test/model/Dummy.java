@@ -12,6 +12,7 @@ import io.ekbatan.core.test.model.events.DummyDeletedEvent;
 import io.ekbatan.core.test.model.events.DummyMoneyDepositedEvent;
 import io.ekbatan.core.test.model.events.DummyMoneyWithdrawnEvent;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Currency;
 import java.util.List;
 import java.util.Objects;
@@ -33,13 +34,14 @@ public final class Dummy extends Model<Dummy, Id<Dummy>, DummyState> {
         this.aliases = Objects.requireNonNullElse(builder.aliases, List.of());
     }
 
-    public static DummyBuilder createDummy(UUID ownerId, Currency currency, BigDecimal balance) {
+    public static DummyBuilder createDummy(UUID ownerId, Currency currency, BigDecimal balance, Instant createdDate) {
         final var id = Id.random(Dummy.class);
         return dummy().id(id)
                 .state(OPENED)
                 .ownerId(ownerId)
                 .currency(currency)
                 .balance(balance)
+                .createdDate(createdDate)
                 .withInitialVersion()
                 .withEvent(new DummyCreatedEvent(id, ownerId, currency, balance));
     }

@@ -21,10 +21,9 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
         this.id = Validate.notNull(builder.id, "id cannot be null");
         this.events = Collections.unmodifiableList(Validate.notNull(builder.events, "events cannot be null"));
         this.state = Validate.notNull(builder.state, "state cannot be null");
-        this.createdDate = builder.createdDate != null
-                ? builder.createdDate
-                : Instant.now().truncatedTo(MICROS);
-        this.updatedDate = builder.updatedDate != null ? builder.updatedDate : this.createdDate;
+        this.createdDate = Validate.notNull(builder.createdDate, "createdDate cannot be null")
+                .truncatedTo(MICROS);
+        this.updatedDate = builder.updatedDate != null ? builder.updatedDate.truncatedTo(MICROS) : this.createdDate;
         this.version = Validate.notNull(builder.version, "version cannot be null");
         Validate.isTrue(builder.version >= 1, "version must be greater than or equal to 1");
     }
@@ -88,12 +87,12 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
         }
 
         public B createdDate(Instant createdDate) {
-            this.createdDate = createdDate != null ? createdDate.truncatedTo(MICROS) : null;
+            this.createdDate = createdDate;
             return self();
         }
 
         public B updatedDate(Instant updatedDate) {
-            this.updatedDate = updatedDate != null ? updatedDate.truncatedTo(MICROS) : null;
+            this.updatedDate = updatedDate;
             return self();
         }
 

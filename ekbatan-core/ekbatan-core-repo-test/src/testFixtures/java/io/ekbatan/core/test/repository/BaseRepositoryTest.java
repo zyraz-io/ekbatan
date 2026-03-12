@@ -13,6 +13,7 @@ import io.ekbatan.core.repository.exception.EntityNotFoundException;
 import io.ekbatan.core.repository.exception.StaleRecordException;
 import io.ekbatan.core.test.model.Dummy;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
@@ -40,7 +41,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_add_correctly() {
         // GIVEN
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
 
         // WHEN
@@ -73,7 +74,7 @@ public abstract class BaseRepositoryTest {
     void should_add_correctly_in_transaction() {
         // GIVEN / WHEN
 
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
 
         transactionManager.inTransaction(_ -> {
@@ -97,7 +98,7 @@ public abstract class BaseRepositoryTest {
     void should_rollback_add_in_transaction_upon_exception() {
         // GIVEN / WHEN
 
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
 
         try {
@@ -119,7 +120,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_addNoResult() {
         // GIVEN
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
 
         // WHEN
@@ -138,7 +139,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_addNoResult_inTransaction() {
         // GIVEN
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(100))
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(100), Instant.now())
                 .build();
 
         // WHEN
@@ -162,7 +163,7 @@ public abstract class BaseRepositoryTest {
         // GIVEN
         final var dummies = new ArrayList<Dummy>();
         for (var i = 0; i < 10; i++) {
-            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
 
@@ -183,7 +184,7 @@ public abstract class BaseRepositoryTest {
         // GIVEN
         final var dummies = new ArrayList<Dummy>();
         for (int i = 0; i < 10; i++) {
-            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
 
@@ -205,7 +206,7 @@ public abstract class BaseRepositoryTest {
         // GIVEN
         final var dummies = new ArrayList<Dummy>();
         for (int i = 0; i < 10; i++) {
-            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
 
@@ -233,7 +234,8 @@ public abstract class BaseRepositoryTest {
             dummies.add(createDummy(
                             randomUUID(),
                             Currency.getInstance(i % 2 == 0 ? "EUR" : "USD"),
-                            BigDecimal.TEN.add(BigDecimal.valueOf(i)))
+                            BigDecimal.TEN.add(BigDecimal.valueOf(i)),
+                            Instant.now())
                     .build());
         }
 
@@ -258,7 +260,10 @@ public abstract class BaseRepositoryTest {
         final var dummies = new ArrayList<Dummy>();
         for (int i = 0; i < 5; i++) {
             dummies.add(createDummy(
-                            randomUUID(), Currency.getInstance(i % 2 == 0 ? "GBP" : "CHF"), BigDecimal.valueOf(100 + i))
+                            randomUUID(),
+                            Currency.getInstance(i % 2 == 0 ? "GBP" : "CHF"),
+                            BigDecimal.valueOf(100 + i),
+                            Instant.now())
                     .build());
         }
 
@@ -284,8 +289,9 @@ public abstract class BaseRepositoryTest {
         // GIVEN
         final var dummies = new ArrayList<Dummy>();
         for (int i = 0; i < 5; i++) {
-            dummies.add(createDummy(randomUUID(), Currency.getInstance("JPY"), BigDecimal.valueOf(1000 + i))
-                    .build());
+            dummies.add(
+                    createDummy(randomUUID(), Currency.getInstance("JPY"), BigDecimal.valueOf(1000 + i), Instant.now())
+                            .build());
         }
 
         // WHEN
@@ -307,7 +313,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_update() {
         // GIVEN
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.add(dummy);
         final var dummyToUpdate = dummy.withdraw(BigDecimal.TWO);
@@ -330,7 +336,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_update_inTransaction() {
         // GIVEN
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.add(dummy);
         final var dummyToUpdate = dummy.withdraw(BigDecimal.TWO);
@@ -350,7 +356,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_not_update_inTransaction_when_exception() {
         // GIVEN
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.add(dummy);
         final var dummyToUpdate = dummy.withdraw(BigDecimal.TWO);
@@ -375,7 +381,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_updateNoResult() {
         // GIVEN
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.add(dummy);
         final var dummyToUpdate = dummy.withdraw(BigDecimal.TWO);
@@ -393,7 +399,8 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_updateNoResult_inTransaction() {
         // GIVEN
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("USD"), new BigDecimal("100.50"))
+        final var dummy = createDummy(
+                        randomUUID(), Currency.getInstance("USD"), new BigDecimal("100.50"), Instant.now())
                 .build();
         repository.add(dummy);
         final var dummyToUpdate = dummy.withdraw(new BigDecimal("20.25"));
@@ -413,7 +420,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_rollback_updateNoResult_inTransaction_when_exception() {
         // GIVEN
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("GBP"), new BigDecimal("50.00"))
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("GBP"), new BigDecimal("50.00"), Instant.now())
                 .build();
         repository.add(dummy);
         final var dummyToUpdate = dummy.withdraw(BigDecimal.TEN);
@@ -437,7 +444,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_throw_StaleRecordException_when_updating_stale_version() {
         // GIVEN
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.add(dummy);
 
@@ -459,7 +466,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_throw_StaleRecordException_when_updating_stale_version_with_update_method() {
         // GIVEN
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.add(dummy);
 
@@ -483,7 +490,7 @@ public abstract class BaseRepositoryTest {
         // GIVEN
         final var dummies = new ArrayList<Dummy>();
         for (int i = 0; i < 5; i++) {
-            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
         repository.addAll(dummies);
@@ -512,7 +519,7 @@ public abstract class BaseRepositoryTest {
         // GIVEN
         final var dummies = new ArrayList<Dummy>();
         for (int i = 0; i < 5; i++) {
-            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
         repository.addAll(dummies);
@@ -539,9 +546,9 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_throw_optimistic_lock_exception_when_updateAll_with_stale_versions() {
         // GIVEN
-        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN)
+        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.addAll(List.of(dummy1, dummy2));
 
@@ -580,7 +587,7 @@ public abstract class BaseRepositoryTest {
         // GIVEN
         final var dummies = new ArrayList<Dummy>();
         for (int i = 0; i < 5; i++) {
-            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
         repository.addAll(dummies);
@@ -618,7 +625,8 @@ public abstract class BaseRepositoryTest {
             dummies.add(createDummy(
                             randomUUID(),
                             Currency.getInstance(i % 2 == 0 ? "EUR" : "USD"),
-                            BigDecimal.TEN.add(BigDecimal.valueOf(i)))
+                            BigDecimal.TEN.add(BigDecimal.valueOf(i)),
+                            Instant.now())
                     .build());
         }
         repository.addAll(dummies);
@@ -650,7 +658,8 @@ public abstract class BaseRepositoryTest {
             dummies.add(createDummy(
                             randomUUID(),
                             Currency.getInstance("GBP"),
-                            new BigDecimal("100.00").add(BigDecimal.valueOf(i * 10)))
+                            new BigDecimal("100.00").add(BigDecimal.valueOf(i * 10)),
+                            Instant.now())
                     .build());
         }
         repository.addAll(dummies);
@@ -690,7 +699,8 @@ public abstract class BaseRepositoryTest {
             dummies.add(createDummy(
                             randomUUID(),
                             Currency.getInstance("JPY"),
-                            new BigDecimal("1000").add(BigDecimal.valueOf(i * 100)))
+                            new BigDecimal("1000").add(BigDecimal.valueOf(i * 100)),
+                            Instant.now())
                     .build());
         }
         repository.addAll(dummies);
@@ -723,7 +733,7 @@ public abstract class BaseRepositoryTest {
         // GIVEN
         final var dummies = new ArrayList<Dummy>();
         for (int i = 0; i < 3; i++) {
-            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), new BigDecimal("50.00"))
+            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), new BigDecimal("50.00"), Instant.now())
                     .build());
         }
         repository.addAll(dummies);
@@ -742,7 +752,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_findById() {
         // GIVEN
-        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         dummy = repository.add(dummy);
 
@@ -766,7 +776,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_return_empty_when_findById_when_marked_as_deleted() {
         // GIVEN
-        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.add(dummy);
 
@@ -783,7 +793,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_getById() {
         // GIVEN
-        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         dummy = repository.add(dummy);
 
@@ -808,7 +818,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_throw_EntityNotFoundException_when_getById_when_marked_as_deleted() {
         // GIVEN
-        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.add(dummy);
 
@@ -825,11 +835,11 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_findAllByIds() {
         // GIVEN
-        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE, Instant.now())
                 .build();
-        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO)
+        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO, Instant.now())
                 .build();
 
         repository.addAll(List.of(dummy1, dummy2, dummy3));
@@ -846,9 +856,9 @@ public abstract class BaseRepositoryTest {
     @Test
     void findAllByIds_should_return_non_DELETED_items() {
         // GIVEN
-        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE, Instant.now())
                 .build();
 
         repository.addAll(List.of(dummy1, dummy2));
@@ -883,7 +893,8 @@ public abstract class BaseRepositoryTest {
 
         final var dummies = new ArrayList<Dummy>();
         for (int i = 0; i < 10; i++) {
-            final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i))
+            final var dummy = createDummy(
+                            randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i), Instant.now())
                     .build();
             dummies.add(dummy);
         }
@@ -906,7 +917,7 @@ public abstract class BaseRepositoryTest {
 
         final var dummies = new ArrayList<Dummy>();
         for (int i = 0; i < 10; i++) {
-            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i))
+            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i), Instant.now())
                     .build());
         }
         repository.addAll(dummies);
@@ -934,13 +945,13 @@ public abstract class BaseRepositoryTest {
                 DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
         dsl.truncate("dummies").execute();
 
-        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE, Instant.now())
                 .build();
-        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO)
+        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO, Instant.now())
                 .build();
-        final var dummy4 = createDummy(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO)
+        final var dummy4 = createDummy(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO, Instant.now())
                 .build();
 
         repository.addAll(List.of(dummy1, dummy2, dummy3, dummy4));
@@ -963,9 +974,9 @@ public abstract class BaseRepositoryTest {
                 DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
         dsl.truncate("dummies").execute();
 
-        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE, Instant.now())
                 .build();
 
         repository.addAll(List.of(dummy1, dummy2));
@@ -988,13 +999,13 @@ public abstract class BaseRepositoryTest {
                 DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
         dsl.truncate("dummies").execute();
 
-        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(20))
+        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(20), Instant.now())
                 .build();
-        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(30))
+        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(30), Instant.now())
                 .build();
-        final var dummy4 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(40))
+        final var dummy4 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(40), Instant.now())
                 .build();
 
         repository.addAll(List.of(dummy1, dummy2, dummy3, dummy4));
@@ -1022,8 +1033,9 @@ public abstract class BaseRepositoryTest {
         for (int i = 0; i < 10; i++) {
             // Dummies 0-7, 9 are EUR. Dummy 8 is USD.
             String currencyCode = (i == 8) ? "USD" : "EUR";
-            dummies.add(createDummy(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i))
-                    .build());
+            dummies.add(
+                    createDummy(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i), Instant.now())
+                            .build());
         }
         repository.addAll(dummies);
 
@@ -1047,7 +1059,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_existsById() {
         // GIVEN
-        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         dummy = repository.add(dummy);
 
@@ -1063,7 +1075,7 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_existsById_excludes_deleted() {
         // GIVEN
-        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.add(dummy);
 
@@ -1084,11 +1096,11 @@ public abstract class BaseRepositoryTest {
                 DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
         dsl.truncate("dummies").execute();
 
-        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN)
+        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("GBP"), BigDecimal.TEN)
+        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("GBP"), BigDecimal.TEN, Instant.now())
                 .build();
 
         repository.addAll(List.of(dummy1, dummy2, dummy3));
@@ -1109,13 +1121,13 @@ public abstract class BaseRepositoryTest {
                 DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
         dsl.truncate("dummies").execute();
 
-        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy4 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN)
+        final var dummy4 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN, Instant.now())
                 .build();
 
         repository.addAll(List.of(dummy1, dummy2, dummy3, dummy4));
@@ -1132,9 +1144,9 @@ public abstract class BaseRepositoryTest {
     @Test
     void should_findOneWhere_excludes_deleted() {
         // GIVEN
-        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN)
+        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN, Instant.now())
                 .build();
 
         repository.addAll(List.of(dummy1, dummy2));
@@ -1164,8 +1176,9 @@ public abstract class BaseRepositoryTest {
         for (int i = 0; i < 10; i++) {
             // Dummies 0-7, 9 are EUR. Dummy 8 is USD.
             String currencyCode = (i == 8) ? "USD" : "EUR";
-            dummies.add(createDummy(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i))
-                    .build());
+            dummies.add(
+                    createDummy(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i), Instant.now())
+                            .build());
         }
         repository.addAll(dummies);
 
@@ -1196,11 +1209,11 @@ public abstract class BaseRepositoryTest {
                 DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
         dsl.truncate("dummies").execute();
 
-        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(20))
+        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(20), Instant.now())
                 .build();
-        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(30))
+        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(30), Instant.now())
                 .build();
 
         repository.addAll(List.of(dummy1, dummy2, dummy3));
@@ -1222,7 +1235,7 @@ public abstract class BaseRepositoryTest {
                 DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
         dsl.truncate("dummies").execute();
 
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.add(dummy);
 
@@ -1240,7 +1253,7 @@ public abstract class BaseRepositoryTest {
                 DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
         dsl.truncate("dummies").execute();
 
-        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var dummy = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         repository.add(dummy);
 

@@ -11,6 +11,7 @@ import io.ekbatan.examples.postgres_dual_table_events.wallet.models.events.Walle
 import io.ekbatan.examples.postgres_dual_table_events.wallet.models.events.WalletMoneyDepositedEvent;
 import io.ekbatan.examples.postgres_dual_table_events.wallet.models.events.WalletMoneyWithdrawnEvent;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Currency;
 import java.util.List;
 import java.util.Objects;
@@ -32,7 +33,7 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
         this.aliases = Objects.requireNonNullElse(builder.aliases, List.of());
     }
 
-    public static WalletBuilder createWallet(UUID ownerId, Currency currency, BigDecimal balance) {
+    public static WalletBuilder createWallet(UUID ownerId, Currency currency, BigDecimal balance, Instant createdDate) {
         final var id = Id.random(Wallet.class);
         return WalletBuilder.wallet()
                 .id(id)
@@ -40,6 +41,7 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
                 .ownerId(ownerId)
                 .currency(currency)
                 .balance(balance)
+                .createdDate(createdDate)
                 .withInitialVersion()
                 .withEvent(new WalletCreatedEvent(id, ownerId, currency, balance));
     }

@@ -31,6 +31,7 @@ dependencies {
 
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     // Apache Commons Lang3

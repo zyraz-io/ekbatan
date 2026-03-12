@@ -8,7 +8,7 @@ import io.ekbatan.core.action.persister.event.single_table.SingleTableEventPersi
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.RepositoryRegistry;
 import java.security.Principal;
-import java.time.Instant;
+import java.time.Clock;
 import org.apache.commons.lang3.Validate;
 import tools.jackson.databind.ObjectMapper;
 
@@ -17,12 +17,14 @@ public class ActionExecutor {
     private final TransactionManager transactionManager;
     private final ActionRegistry actionRegistry;
     private final ChangePersister changePersister;
+    private final Clock clock;
     private final ExecutionConfiguration defaultExecutionConfiguration;
 
     private ActionExecutor(Builder builder) {
         this.transactionManager = Validate.notNull(builder.transactionManager, "transactionManager is required");
         final var objectMapper = Validate.notNull(builder.objectMapper, "objectMapper is required");
         this.actionRegistry = Validate.notNull(builder.actionRegistry, "actionRegistry is required");
+        this.clock = builder.clock;
 
         final var repositoryRegistry = Validate.notNull(builder.repositoryRegistry, "repositoryRegistry is required");
 
@@ -30,7 +32,7 @@ public class ActionExecutor {
                 ? builder.eventPersister
                 : new SingleTableEventPersister(builder.transactionManager, objectMapper);
 
-        this.changePersister = new ChangePersister(repositoryRegistry, eventPersister);
+        this.changePersister = new ChangePersister(repositoryRegistry, eventPersister, clock);
         this.defaultExecutionConfiguration =
                 Validate.notNull(builder.defaultExecutionConfiguration, "defaultExecutionConfiguration is required");
     }
@@ -49,7 +51,7 @@ public class ActionExecutor {
         final var action = actionRegistry.get(actionClass);
 
         return Retry.<R>with(executionConfiguration.retryConfigs).execute(() -> {
-            final var actionStartDate = Instant.now();
+            final var actionStartDate = clock.instant();
             final var result = action.perform(principal, params);
             transactionManager.inTransactionChecked(_ -> {
                 changePersister.persist(action, params, actionStartDate);
@@ -64,6 +66,7 @@ public class ActionExecutor {
         private RepositoryRegistry repositoryRegistry;
         private ActionRegistry actionRegistry;
         private EventPersister eventPersister;
+        private Clock clock = Clock.systemUTC();
         private ExecutionConfiguration defaultExecutionConfiguration =
                 executionConfiguration().build();
 
@@ -95,6 +98,11 @@ public class ActionExecutor {
 
         public Builder eventPersister(EventPersister eventPersister) {
             this.eventPersister = eventPersister;
+            return this;
+        }
+
+        public Builder clock(Clock clock) {
+            this.clock = clock;
             return this;
         }
 

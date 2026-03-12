@@ -13,6 +13,7 @@ import io.ekbatan.core.repository.exception.StaleRecordException;
 import io.ekbatan.examples.postgres_single_table_events.test.PgBaseRepositoryTest;
 import io.ekbatan.examples.postgres_single_table_events.wallet.models.Wallet;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
@@ -36,7 +37,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_add_correctly() {
         // GIVEN
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
 
         // WHEN
@@ -69,7 +70,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     void should_add_correctly_in_transaction() {
         // GIVEN / WHEN
 
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
 
         transactionManager.inTransaction(_ -> {
@@ -93,7 +94,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     void should_rollback_add_in_transaction_upon_exception() {
         // GIVEN / WHEN
 
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
 
         try {
@@ -115,7 +116,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_addNoResult() {
         // GIVEN
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
 
         // WHEN
@@ -134,7 +135,8 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_addNoResult_inTransaction() {
         // GIVEN
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(100))
+        final var wallet = createWallet(
+                        randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(100), Instant.now())
                 .build();
 
         // WHEN
@@ -158,7 +160,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         // GIVEN
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 10; i++) {
-            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
 
@@ -179,7 +181,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         // GIVEN
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 10; i++) {
-            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
 
@@ -201,7 +203,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         // GIVEN
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 10; i++) {
-            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
 
@@ -229,7 +231,8 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
             wallets.add(createWallet(
                             randomUUID(),
                             Currency.getInstance(i % 2 == 0 ? "EUR" : "USD"),
-                            BigDecimal.TEN.add(BigDecimal.valueOf(i)))
+                            BigDecimal.TEN.add(BigDecimal.valueOf(i)),
+                            Instant.now())
                     .build());
         }
 
@@ -254,7 +257,10 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 5; i++) {
             wallets.add(createWallet(
-                            randomUUID(), Currency.getInstance(i % 2 == 0 ? "GBP" : "CHF"), BigDecimal.valueOf(100 + i))
+                            randomUUID(),
+                            Currency.getInstance(i % 2 == 0 ? "GBP" : "CHF"),
+                            BigDecimal.valueOf(100 + i),
+                            Instant.now())
                     .build());
         }
 
@@ -280,8 +286,9 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         // GIVEN
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 5; i++) {
-            wallets.add(createWallet(randomUUID(), Currency.getInstance("JPY"), BigDecimal.valueOf(1000 + i))
-                    .build());
+            wallets.add(
+                    createWallet(randomUUID(), Currency.getInstance("JPY"), BigDecimal.valueOf(1000 + i), Instant.now())
+                            .build());
         }
 
         // WHEN
@@ -303,7 +310,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_update() {
         // GIVEN
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.add(wallet);
         final var walletToUpdate = wallet.withdraw(BigDecimal.TWO);
@@ -326,7 +333,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_update_inTransaction() {
         // GIVEN
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.add(wallet);
         final var walletToUpdate = wallet.withdraw(BigDecimal.TWO);
@@ -346,7 +353,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_not_update_inTransaction_when_exception() {
         // GIVEN
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.add(wallet);
         final var walletToUpdate = wallet.withdraw(BigDecimal.TWO);
@@ -371,7 +378,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_updateNoResult() {
         // GIVEN
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.add(wallet);
         final var walletToUpdate = wallet.withdraw(BigDecimal.TWO);
@@ -389,7 +396,8 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_updateNoResult_inTransaction() {
         // GIVEN
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("USD"), new BigDecimal("100.50"))
+        final var wallet = createWallet(
+                        randomUUID(), Currency.getInstance("USD"), new BigDecimal("100.50"), Instant.now())
                 .build();
         walletRepository.add(wallet);
         final var walletToUpdate = wallet.withdraw(new BigDecimal("20.25"));
@@ -409,7 +417,8 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_rollback_updateNoResult_inTransaction_when_exception() {
         // GIVEN
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("GBP"), new BigDecimal("50.00"))
+        final var wallet = createWallet(
+                        randomUUID(), Currency.getInstance("GBP"), new BigDecimal("50.00"), Instant.now())
                 .build();
         walletRepository.add(wallet);
         final var walletToUpdate = wallet.withdraw(BigDecimal.TEN);
@@ -433,7 +442,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_throw_StaleRecordException_when_updating_stale_version() {
         // GIVEN
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.add(wallet);
 
@@ -457,7 +466,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         // GIVEN
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 5; i++) {
-            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
         walletRepository.addAll(wallets);
@@ -486,7 +495,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         // GIVEN
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 5; i++) {
-            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
         walletRepository.addAll(wallets);
@@ -513,9 +522,9 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_throw_optimistic_lock_exception_when_updateAll_with_stale_versions() {
         // GIVEN
-        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN)
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.addAll(List.of(wallet1, wallet2));
 
@@ -552,7 +561,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_throw_StaleRecordException_when_updating_stale_version_with_update_method() {
         // GIVEN
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.add(wallet);
 
@@ -576,7 +585,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         // GIVEN
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 5; i++) {
-            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                     .build());
         }
         walletRepository.addAll(wallets);
@@ -614,7 +623,8 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
             wallets.add(createWallet(
                             randomUUID(),
                             Currency.getInstance(i % 2 == 0 ? "EUR" : "USD"),
-                            BigDecimal.TEN.add(BigDecimal.valueOf(i)))
+                            BigDecimal.TEN.add(BigDecimal.valueOf(i)),
+                            Instant.now())
                     .build());
         }
         walletRepository.addAll(wallets);
@@ -646,7 +656,8 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
             wallets.add(createWallet(
                             randomUUID(),
                             Currency.getInstance("GBP"),
-                            new BigDecimal("100.00").add(BigDecimal.valueOf(i * 10)))
+                            new BigDecimal("100.00").add(BigDecimal.valueOf(i * 10)),
+                            Instant.now())
                     .build());
         }
         walletRepository.addAll(wallets);
@@ -686,7 +697,8 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
             wallets.add(createWallet(
                             randomUUID(),
                             Currency.getInstance("JPY"),
-                            new BigDecimal("1000").add(BigDecimal.valueOf(i * 100)))
+                            new BigDecimal("1000").add(BigDecimal.valueOf(i * 100)),
+                            Instant.now())
                     .build());
         }
         walletRepository.addAll(wallets);
@@ -719,7 +731,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         // GIVEN
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 3; i++) {
-            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), new BigDecimal("50.00"))
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), new BigDecimal("50.00"), Instant.now())
                     .build());
         }
         walletRepository.addAll(wallets);
@@ -738,7 +750,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_findById() {
         // GIVEN
-        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         wallet = walletRepository.add(wallet);
 
@@ -762,7 +774,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_return_empty_when_findById_when_marked_as_deleted() {
         // GIVEN
-        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.add(wallet);
 
@@ -779,7 +791,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_getById() {
         // GIVEN
-        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         wallet = walletRepository.add(wallet);
 
@@ -804,7 +816,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_throw_EntityNotFoundException_when_getById_when_marked_as_deleted() {
         // GIVEN
-        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.add(wallet);
 
@@ -821,11 +833,11 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_findAllByIds() {
         // GIVEN
-        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE, Instant.now())
                 .build();
-        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO)
+        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO, Instant.now())
                 .build();
 
         walletRepository.addAll(List.of(wallet1, wallet2, wallet3));
@@ -842,9 +854,9 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void findAllByIds_should_return_non_DELETED_items() {
         // GIVEN
-        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE, Instant.now())
                 .build();
 
         walletRepository.addAll(List.of(wallet1, wallet2));
@@ -878,7 +890,8 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 10; i++) {
-            final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i))
+            final var wallet = createWallet(
+                            randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i), Instant.now())
                     .build();
             wallets.add(wallet);
         }
@@ -900,7 +913,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         final var wallets = new ArrayList<Wallet>();
         for (int i = 0; i < 10; i++) {
-            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i))
+            wallets.add(createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i), Instant.now())
                     .build());
         }
         walletRepository.addAll(wallets);
@@ -927,13 +940,13 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
         dsl.truncate(WALLETS).cascade().execute();
 
-        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE, Instant.now())
                 .build();
-        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO)
+        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO, Instant.now())
                 .build();
-        final var wallet4 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO)
+        final var wallet4 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.ZERO, Instant.now())
                 .build();
 
         walletRepository.addAll(List.of(wallet1, wallet2, wallet3, wallet4));
@@ -955,9 +968,9 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
         dsl.truncate(WALLETS).cascade().execute();
 
-        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE)
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.ONE, Instant.now())
                 .build();
 
         walletRepository.addAll(List.of(wallet1, wallet2));
@@ -979,13 +992,16 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
         dsl.truncate(WALLETS).cascade().execute();
 
-        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(20))
+        final var wallet2 = createWallet(
+                        randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(20), Instant.now())
                 .build();
-        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(30))
+        final var wallet3 = createWallet(
+                        randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(30), Instant.now())
                 .build();
-        final var wallet4 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(40))
+        final var wallet4 = createWallet(
+                        randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(40), Instant.now())
                 .build();
 
         walletRepository.addAll(List.of(wallet1, wallet2, wallet3, wallet4));
@@ -1011,8 +1027,9 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         for (int i = 0; i < 10; i++) {
             // Wallets 0-7, 9 are EUR. Wallet 8 is USD.
             String currencyCode = (i == 8) ? "USD" : "EUR";
-            wallets.add(createWallet(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i))
-                    .build());
+            wallets.add(
+                    createWallet(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i), Instant.now())
+                            .build());
         }
         walletRepository.addAll(wallets);
 
@@ -1035,7 +1052,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_existsById() {
         // GIVEN
-        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         wallet = walletRepository.add(wallet);
 
@@ -1051,7 +1068,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_existsById_excludes_deleted() {
         // GIVEN
-        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.add(wallet);
 
@@ -1071,11 +1088,11 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
         dsl.truncate(WALLETS).cascade().execute();
 
-        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN)
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.TEN)
+        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("GBP"), BigDecimal.TEN, Instant.now())
                 .build();
 
         walletRepository.addAll(List.of(wallet1, wallet2, wallet3));
@@ -1095,13 +1112,13 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
         dsl.truncate(WALLETS).cascade().execute();
 
-        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet4 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN)
+        final var wallet4 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN, Instant.now())
                 .build();
 
         walletRepository.addAll(List.of(wallet1, wallet2, wallet3, wallet4));
@@ -1118,9 +1135,9 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
     @Test
     void should_findOneWhere_excludes_deleted() {
         // GIVEN
-        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN)
+        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.TEN, Instant.now())
                 .build();
 
         walletRepository.addAll(List.of(wallet1, wallet2));
@@ -1149,8 +1166,9 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         for (int i = 0; i < 10; i++) {
             // Wallets 0-7, 9 are EUR. Wallet 8 is USD.
             String currencyCode = (i == 8) ? "USD" : "EUR";
-            wallets.add(createWallet(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i))
-                    .build());
+            wallets.add(
+                    createWallet(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i), Instant.now())
+                            .build());
         }
         walletRepository.addAll(wallets);
 
@@ -1177,11 +1195,13 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
         dsl.truncate(WALLETS).cascade().execute();
 
-        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet1 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
-        final var wallet2 = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(20))
+        final var wallet2 = createWallet(
+                        randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(20), Instant.now())
                 .build();
-        final var wallet3 = createWallet(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(30))
+        final var wallet3 = createWallet(
+                        randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(30), Instant.now())
                 .build();
 
         walletRepository.addAll(List.of(wallet1, wallet2, wallet3));
@@ -1202,7 +1222,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
         dsl.truncate(WALLETS).cascade().execute();
 
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.add(wallet);
 
@@ -1219,7 +1239,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
         final var dsl = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), SQLDialect.POSTGRES);
         dsl.truncate(WALLETS).cascade().execute();
 
-        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN)
+        final var wallet = createWallet(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
                 .build();
         walletRepository.add(wallet);
 
