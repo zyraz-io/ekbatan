@@ -9,8 +9,8 @@ public class VirtualClock extends Clock {
 
     private final Clock realClock;
     private Instant frozenInstant;
-    private Instant offsetBase;
-    private Instant offsetRealBase;
+    private Instant virtualAnchor;
+    private Instant realAnchor;
 
     public VirtualClock() {
         this(Clock.systemUTC());
@@ -29,8 +29,8 @@ public class VirtualClock extends Clock {
         if (frozenInstant != null) {
             return frozenInstant;
         }
-        if (offsetBase != null) {
-            return offsetBase.plus(Duration.between(offsetRealBase, realClock.instant()));
+        if (virtualAnchor != null) {
+            return virtualAnchor.plus(Duration.between(realAnchor, realClock.instant()));
         }
         return realClock.instant();
     }
@@ -44,21 +44,21 @@ public class VirtualClock extends Clock {
     public Clock withZone(ZoneId zone) {
         var clock = new VirtualClock(realClock.withZone(zone));
         clock.frozenInstant = this.frozenInstant;
-        clock.offsetBase = this.offsetBase;
-        clock.offsetRealBase = this.offsetRealBase;
+        clock.virtualAnchor = this.virtualAnchor;
+        clock.realAnchor = this.realAnchor;
         return clock;
     }
 
     public void pause() {
         this.frozenInstant = instant();
-        this.offsetBase = null;
-        this.offsetRealBase = null;
+        this.virtualAnchor = null;
+        this.realAnchor = null;
     }
 
     public void pauseAt(Instant instant) {
         this.frozenInstant = instant;
-        this.offsetBase = null;
-        this.offsetRealBase = null;
+        this.virtualAnchor = null;
+        this.realAnchor = null;
     }
 
     public void advance(Duration duration) {
@@ -70,13 +70,13 @@ public class VirtualClock extends Clock {
 
     public void resumeFrom(Instant instant) {
         this.frozenInstant = null;
-        this.offsetBase = instant;
-        this.offsetRealBase = realClock.instant();
+        this.virtualAnchor = instant;
+        this.realAnchor = realClock.instant();
     }
 
     public void resume() {
         this.frozenInstant = null;
-        this.offsetBase = null;
-        this.offsetRealBase = null;
+        this.virtualAnchor = null;
+        this.realAnchor = null;
     }
 }

@@ -1,5 +1,6 @@
 plugins {
     `java-library`
+    `java-test-fixtures`
     `maven-publish`
 }
 
@@ -32,6 +33,8 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
+    testImplementation("org.mockito:mockito-core:${project.property("mockitoVersion")}")
+    testImplementation("net.javacrumbs.json-unit:json-unit-assertj:${project.property("jsonUnitVersion")}")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     // Apache Commons Lang3

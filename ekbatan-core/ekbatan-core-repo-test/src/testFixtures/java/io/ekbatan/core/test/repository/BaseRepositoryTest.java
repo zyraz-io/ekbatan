@@ -6,7 +6,7 @@ import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.ekbatan.core.domain.MicroType;
+import io.ekbatan.core.domain.TypedValue;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.repository.exception.EntityNotFoundException;
@@ -172,7 +172,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchDummies).hasSize(10);
         assertThat(fetchDummies).hasSameElementsAs(addedDummies);
@@ -195,7 +195,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchDummies).hasSize(10);
     }
@@ -221,7 +221,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchDummies).hasSize(0);
     }
@@ -244,7 +244,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchDummies).hasSize(10);
         assertThat(fetchDummies).allSatisfy(w -> {
@@ -274,7 +274,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchDummies).hasSize(5);
         assertThat(fetchDummies).allSatisfy(w -> {
@@ -305,7 +305,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchDummies).isEmpty();
     }
@@ -503,7 +503,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchedDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
         assertThat(fetchedDummies).hasSize(5);
         assertThat(fetchedDummies).hasSameElementsAs(updatedDummies);
 
@@ -534,7 +534,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchedDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchedDummies).hasSize(5);
         fetchedDummies.forEach(w -> {
@@ -608,7 +608,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchedDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchedDummies).hasSize(5);
         fetchedDummies.forEach(w -> {
@@ -639,7 +639,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchedDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchedDummies).hasSize(5);
         fetchedDummies.forEach(w -> {
@@ -674,7 +674,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchedDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchedDummies).hasSize(3);
         fetchedDummies.forEach(w -> {
@@ -719,7 +719,7 @@ public abstract class BaseRepositoryTest {
 
         // THEN
         final var fetchedDummies = repository.findAllByIds(
-                dummies.stream().map(Dummy::getId).map(MicroType::getValue).toList());
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchedDummies).hasSize(4);
         fetchedDummies.forEach(w -> {

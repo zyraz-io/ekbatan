@@ -22,7 +22,7 @@ The repository layer is built directly on **JOOQ** rather than JPA or Hibernate.
 ekbatan/
 ├── ekbatan-core/                          # Core framework library
 │   ├── src/main/java/io/ekbatan/core/
-│   │   ├── domain/                        # Domain abstractions (Model, Entity, ModelEvent, Id, MicroType)
+│   │   ├── domain/                        # Domain abstractions (Model, Entity, ModelEvent, Id, TypedValue)
 │   │   ├── repository/                    # Repository pattern (AbstractRepository, ModelRepository, EntityRepository)
 │   │   ├── action/                        # Action/Command pattern (Action, ActionExecutor, ActionPlan)
 │   │   │   └── persister/                 # Change & event persistence
@@ -56,7 +56,7 @@ The foundation. Two kinds of domain objects:
 - **`Entity`** — Simpler stateful object with `id`, `state`, `version`. No events. Immutable.
 - **`ModelEvent<M>`** — Base class for domain events. Carries `modelId` and `modelName`. Serializable.
 - **`Id<T extends Identifiable>`** — Type-safe UUID wrapper. Prevents mixing IDs of different types at compile time.
-- **`MicroType<T>`** — Base value object wrapper for type safety.
+- **`TypedValue<T>`** — Base value object wrapper for type safety.
 - **`Persistable`** — Interface adding `version` and `nextVersion()` for optimistic locking.
 - **`GenericState`** — Default state enum (ACTIVE, DELETED) for entities without custom states.
 
@@ -306,7 +306,15 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
         this.balance = Validate.notNull(builder.balance, "balance cannot be null");
     }
 
-    // Factory method for creation — returns a builder, not the object directly
+    // Creation factory method — the "official" way to create a new Wallet.
+    // Named createXxx() where Xxx matches the class name, so it reads clearly with static imports:
+    //     import static ...Wallet.createWallet;
+    //     createWallet(ownerId, currency, balance);
+    // This method sets up id, state, initial version, AND emits the creation event.
+    // Use this ONLY when you want the full creation ceremony including the event.
+    // If you need a Wallet instance WITHOUT the creation event (e.g., test fixtures
+    // simulating a model already loaded from the DB), use WalletBuilder.wallet()
+    // (or Wallet.Builder.wallet() if the builder is a nested class) directly.
     public static WalletBuilder createWallet(UUID ownerId, Currency currency, BigDecimal balance) {
         final var id = Id.random(Wallet.class);
         return WalletBuilder.wallet()
@@ -478,9 +486,79 @@ For domain classes (`Model` and `Entity` subclasses), writing the builder by han
 
 ### Test Stack
 - JUnit 5 (Jupiter)
-- MockK (mocking)
+- Mockito (mocking in ekbatan-core), MockK (mocking in ekbatan-core-repo-test)
 - AssertJ (fluent assertions)
+- JsonUnit (JSON assertions)
 - TestContainers (database containers)
+
+### Test Structure — GIVEN / WHEN / THEN
+
+All tests use `// GIVEN`, `// WHEN`, `// THEN` comments to separate setup, action, and assertion phases. This makes the test's intent immediately clear. Combine or extend phases as appropriate:
+
+```java
+// Standard form
+@Test
+void should_create_wallet() throws Exception {
+    // GIVEN
+    var clock = new VirtualClock();
+    clock.pauseAt(Instant.parse("2025-01-01T00:00:00Z"));
+
+    // WHEN
+    var result = ActionSpec.of(new CreateAction(clock))
+            .withPrincipal(() -> "user")
+            .execute(new CreateAction.Params("wallet"));
+
+    // THEN
+    result.assertAdded(Wallet.class, w -> {
+        assertThat(w.name).isEqualTo("wallet");
+    });
+}
+
+// Combined GIVEN / WHEN — when setup and action are trivially interleaved
+@Test
+void constructor_rejects_null() {
+    // GIVEN / WHEN / THEN
+    assertThatThrownBy(() -> new Foo(null))
+            .isInstanceOf(NullPointerException.class);
+}
+
+// Combined WHEN / THEN — when action and assertion are a single expression
+@Test
+void returns_empty_for_unknown_type() {
+    // GIVEN
+    var registry = repositoryRegistry().build();
+
+    // WHEN / THEN
+    assertThat(registry.repository(Wallet.class)).isNull();
+}
+
+// Multiple rounds — when a test exercises a sequence of actions
+@Test
+void retry_recovers_after_transient_failure() throws Exception {
+    // GIVEN
+    var attempts = new AtomicInteger(0);
+    var retry = Retry.with(Map.of(IllegalStateException.class, new RetryConfig(2, Duration.ZERO)));
+
+    // WHEN
+    var result = retry.execute(() -> {
+        if (attempts.incrementAndGet() <= 1) throw new IllegalStateException("transient");
+        return "ok";
+    });
+
+    // THEN
+    assertThat(result).isEqualTo("ok");
+
+    // AND
+    assertThat(attempts.get()).isEqualTo(2);
+}
+```
+
+**Rules:**
+- Every test must have at least `// GIVEN / WHEN / THEN` or `// GIVEN`, `// WHEN`, `// THEN` as separate comments.
+- Use `// AND` for additional assertions that verify a different aspect of the result.
+- Use `// GIVEN / WHEN / THEN` (combined on one line) only for single-expression tests like null-rejection checks.
+- Use `// WHEN / THEN` when the action and assertion are a single fluent call.
+- Phases can repeat (`// WHEN`, `// THEN`, `// AND`, `// WHEN`, `// THEN`) for multi-step scenarios.
 
 ### Running Tests
 ```bash

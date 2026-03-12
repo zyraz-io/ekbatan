@@ -7,7 +7,7 @@ import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.ekbatan.core.domain.MicroType;
+import io.ekbatan.core.domain.TypedValue;
 import io.ekbatan.core.repository.exception.EntityNotFoundException;
 import io.ekbatan.core.repository.exception.StaleRecordException;
 import io.ekbatan.examples.postgres_dual_table_events.test.PgBaseRepositoryTest;
@@ -169,7 +169,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchWallets).hasSize(10);
         assertThat(fetchWallets).hasSameElementsAs(addedWallets);
@@ -192,7 +192,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchWallets).hasSize(10);
     }
@@ -218,7 +218,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchWallets).hasSize(0);
     }
@@ -241,7 +241,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchWallets).hasSize(10);
         assertThat(fetchWallets).allSatisfy(w -> {
@@ -271,7 +271,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchWallets).hasSize(5);
         assertThat(fetchWallets).allSatisfy(w -> {
@@ -302,7 +302,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchWallets).isEmpty();
     }
@@ -479,7 +479,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchedWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
         assertThat(fetchedWallets).hasSize(5);
         assertThat(fetchedWallets).hasSameElementsAs(updatedWallets);
 
@@ -510,7 +510,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchedWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchedWallets).hasSize(5);
         fetchedWallets.forEach(w -> {
@@ -606,7 +606,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchedWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchedWallets).hasSize(5);
         fetchedWallets.forEach(w -> {
@@ -637,7 +637,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchedWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchedWallets).hasSize(5);
         fetchedWallets.forEach(w -> {
@@ -672,7 +672,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchedWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchedWallets).hasSize(3);
         fetchedWallets.forEach(w -> {
@@ -717,7 +717,7 @@ class WalletRepositoryTest extends PgBaseRepositoryTest {
 
         // THEN
         final var fetchedWallets = walletRepository.findAllByIds(
-                wallets.stream().map(Wallet::getId).map(MicroType::getValue).toList());
+                wallets.stream().map(Wallet::getId).map(TypedValue::getValue).toList());
 
         assertThat(fetchedWallets).hasSize(4);
         fetchedWallets.forEach(w -> {

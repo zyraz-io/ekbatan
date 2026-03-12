@@ -73,6 +73,7 @@ dependencies {
 
     testFixturesApi("io.mockk:mockk:${project.property("mockkVersion")}")
     testFixturesApi("org.assertj:assertj-core:${project.property("assertjVersion")}")
+    testFixturesApi("net.javacrumbs.json-unit:json-unit-assertj:${project.property("jsonUnitVersion")}")
 }
 
 tasks.withType<Test> {

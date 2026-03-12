@@ -3,21 +3,21 @@ package io.ekbatan.core.domain;
 import org.apache.commons.lang3.Validate;
 
 /**
- * Base class for micro types that wrap a single value.
+ * Base class for typed value wrappers that give a raw value a domain-specific type.
  * Provides type safety and value semantics.
  *
  * @param <T> The type of the wrapped value
  */
-public abstract class MicroType<T> {
+public abstract class TypedValue<T> {
     private final T value;
 
     /**
-     * Creates a new MicroType with the given value.
+     * Creates a new typed value wrapper.
      *
      * @param value The value to wrap (must not be null)
      * @throws IllegalArgumentException if value is null
      */
-    protected MicroType(T value) {
+    protected TypedValue(T value) {
         this.value = Validate.notNull(value, "value cannot be null");
     }
 
@@ -34,7 +34,7 @@ public abstract class MicroType<T> {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        MicroType<?> microType = (MicroType<?>) o;
+        TypedValue<?> microType = (TypedValue<?>) o;
         return value.equals(microType.value);
     }
 

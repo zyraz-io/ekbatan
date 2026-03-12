@@ -71,6 +71,8 @@ dependencies {
     // Apache Commons Lang3
     implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
 
+    testImplementation(testFixtures(project(":ekbatan-core")))
+    testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")

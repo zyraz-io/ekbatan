@@ -1,4 +1,4 @@
-package io.ekbatan.examples.postgres_dual_table_events.action;
+package io.ekbatan.examples.postgres_dual_table_events.wallet.action;
 
 import static io.ekbatan.core.action.ActionExecutor.Builder.actionExecutor;
 import static io.ekbatan.core.action.ActionRegistry.Builder.actionRegistry;
@@ -7,18 +7,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.ekbatan.core.action.persister.event.dual_table.DualTableEventPersister;
 import io.ekbatan.examples.postgres_dual_table_events.test.PgBaseRepositoryTest;
-import io.ekbatan.examples.postgres_dual_table_events.wallet.action.WalletCreateAction;
-import io.ekbatan.examples.postgres_dual_table_events.wallet.action.WalletDepositMoneyAction;
 import io.ekbatan.examples.postgres_dual_table_events.wallet.models.Wallet;
 import io.ekbatan.examples.postgres_dual_table_events.wallet.repository.WalletRepository;
 import java.time.Clock;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
-public class WalletCreateActionTest extends PgBaseRepositoryTest {
+public class WalletActionIntegrationTest extends PgBaseRepositoryTest {
 
     @Test
     void test_action() throws Exception {
+        // GIVEN
         final var objectMapper = new ObjectMapper();
 
         final var walletRepository = new WalletRepository(transactionManager);
@@ -44,19 +43,20 @@ public class WalletCreateActionTest extends PgBaseRepositoryTest {
                 .eventPersister(eventPersister)
                 .build();
 
+        // WHEN
         final var result =
                 actionExecutor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params());
 
+        // THEN
         final var fetchedWallet = walletRepository.getById(result.getId().getValue());
         assertThat(result).isEqualTo(fetchedWallet);
 
+        // WHEN
         final var result2 = actionExecutor.execute(
                 () -> "test-user", WalletDepositMoneyAction.class, new WalletDepositMoneyAction.Params(result.getId()));
 
+        // THEN
         final var fetchedWallet2 = walletRepository.getById(result2.getId().getId());
-
         assertThat(result2).isEqualTo(fetchedWallet2);
-        //        assertThat(result2).usingRecursiveComparison().ignoringFields("version").isEqualTo(fetchedWallet2);
-
     }
 }

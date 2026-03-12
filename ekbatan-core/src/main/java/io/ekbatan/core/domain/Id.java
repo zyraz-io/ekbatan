@@ -3,7 +3,7 @@ package io.ekbatan.core.domain;
 import java.util.UUID;
 import org.apache.commons.lang3.Validate;
 
-public final class Id<IDENTIFIABLE extends Identifiable<?>> extends MicroType<UUID>
+public final class Id<IDENTIFIABLE extends Identifiable<?>> extends TypedValue<UUID>
         implements ModelId<UUID>, Comparable<Id<IDENTIFIABLE>> {
 
     private Id(UUID value) {
