@@ -4,7 +4,8 @@ import static io.ekbatan.core.action.persister.event.single_table.ModelEventEmbe
 
 import io.ekbatan.core.action.persister.event.EventPersister;
 import io.ekbatan.core.domain.ModelEvent;
-import io.ekbatan.core.persistence.TransactionManager;
+import io.ekbatan.core.shard.DatabaseRegistry;
+import io.ekbatan.core.shard.ShardIdentifier;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.UUID;
@@ -16,10 +17,10 @@ public class SingleTableEventPersister implements EventPersister {
     private final ActionEventEntityRepository actionEventEntityRepository;
     private final ObjectMapper objectMapper;
 
-    public SingleTableEventPersister(TransactionManager transactionManager, ObjectMapper objectMapper) {
-        Validate.notNull(transactionManager, "transactionManager cannot be null");
+    public SingleTableEventPersister(DatabaseRegistry databaseRegistry, ObjectMapper objectMapper) {
+        Validate.notNull(databaseRegistry, "databaseRegistry cannot be null");
         this.objectMapper = Validate.notNull(objectMapper, "objectMapper cannot be null");
-        this.actionEventEntityRepository = new ActionEventEntityRepository(transactionManager, objectMapper);
+        this.actionEventEntityRepository = new ActionEventEntityRepository(databaseRegistry, objectMapper);
     }
 
     @Override
@@ -28,9 +29,9 @@ public class SingleTableEventPersister implements EventPersister {
             Instant startedDate,
             Instant completionDate,
             Object actionParams,
-            Collection<ModelEvent<?>> modelEvents) {
-
-        final var actionEventId = UUID.randomUUID();
+            Collection<ModelEvent<?>> modelEvents,
+            ShardIdentifier shard,
+            UUID actionEventId) {
 
         final var modelEventEmbeddedList = modelEvents.stream()
                 .map(event -> createModelEventEmbedded(
@@ -53,6 +54,6 @@ public class SingleTableEventPersister implements EventPersister {
                         objectMapper.valueToTree(actionParams))
                 .build();
 
-        actionEventEntityRepository.addNoResult(actionEvent);
+        actionEventEntityRepository.addNoResult(actionEvent, shard);
     }
 }

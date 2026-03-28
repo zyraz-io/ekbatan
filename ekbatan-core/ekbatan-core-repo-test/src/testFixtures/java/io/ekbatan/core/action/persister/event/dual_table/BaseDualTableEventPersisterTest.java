@@ -1,10 +1,13 @@
 package io.ekbatan.core.action.persister.event.dual_table;
 
+import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.ekbatan.core.domain.ModelEvent;
 import io.ekbatan.core.persistence.TransactionManager;
+import io.ekbatan.core.shard.DatabaseRegistry;
+import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.core.test.event.TestActionParams;
 import io.ekbatan.core.test.event.TestModelEvent;
 import io.ekbatan.core.test.event.TestStatusChangedEvent;
@@ -18,21 +21,26 @@ import tools.jackson.databind.ObjectMapper;
 public abstract class BaseDualTableEventPersisterTest {
 
     protected final TransactionManager transactionManager;
+    protected final DatabaseRegistry databaseRegistry;
 
     public BaseDualTableEventPersisterTest(TransactionManager transactionManager) {
         this.transactionManager = transactionManager;
+        this.databaseRegistry = databaseRegistry()
+                .withDatabase(ShardIdentifier.DEFAULT, transactionManager)
+                .defaultShard(ShardIdentifier.DEFAULT)
+                .build();
     }
 
     private DualTableEventPersister createPersister(ObjectMapper objectMapper) {
-        return new DualTableEventPersister(transactionManager, objectMapper);
+        return new DualTableEventPersister(databaseRegistry, objectMapper);
     }
 
     private ActionEventEntityRepository createActionRepo() {
-        return new ActionEventEntityRepository(transactionManager);
+        return new ActionEventEntityRepository(databaseRegistry);
     }
 
     private ModelEventEntityRepository createModelEventRepo() {
-        return new ModelEventEntityRepository(transactionManager);
+        return new ModelEventEntityRepository(databaseRegistry);
     }
 
     private ActionEventEntity persistAndFetchAction(
@@ -44,11 +52,20 @@ public abstract class BaseDualTableEventPersisterTest {
             List<ModelEvent<?>> modelEvents) {
         var persister = createPersister(objectMapper);
         var actionRepo = createActionRepo();
-        var existingIds = actionRepo.findAll().stream().map(e -> e.id).toList();
+        var existingIds = actionRepo.findAll(ShardIdentifier.DEFAULT).stream()
+                .map(e -> e.id)
+                .toList();
 
-        persister.persistActionEvents(actionName, startedDate, completionDate, actionParams, modelEvents);
+        persister.persistActionEvents(
+                actionName,
+                startedDate,
+                completionDate,
+                actionParams,
+                modelEvents,
+                ShardIdentifier.DEFAULT,
+                java.util.UUID.randomUUID());
 
-        return actionRepo.findAll().stream()
+        return actionRepo.findAll(ShardIdentifier.DEFAULT).stream()
                 .filter(e -> !existingIds.contains(e.id))
                 .findFirst()
                 .orElseThrow();
@@ -93,7 +110,7 @@ public abstract class BaseDualTableEventPersisterTest {
         assertThat(actionEvent.actionName).isEqualTo("NoOpAction");
 
         // AND
-        var relatedModelEvents = modelEventRepo.findByActionId(actionEvent.id);
+        var relatedModelEvents = modelEventRepo.findByActionId(actionEvent.id, ShardIdentifier.DEFAULT);
         assertThat(relatedModelEvents).isEmpty();
     }
 
@@ -127,7 +144,7 @@ public abstract class BaseDualTableEventPersisterTest {
                 List.of(event));
 
         // THEN
-        var modelEvents = modelEventRepo.findByActionId(actionEvent.id);
+        var modelEvents = modelEventRepo.findByActionId(actionEvent.id, ShardIdentifier.DEFAULT);
         assertThat(modelEvents).hasSize(1);
 
         var persisted = modelEvents.getFirst();
@@ -177,7 +194,7 @@ public abstract class BaseDualTableEventPersisterTest {
                 objectMapper, "BatchAction", Instant.now(), Instant.now(), new TestActionParams("batch", 3), events);
 
         // THEN
-        var modelEvents = modelEventRepo.findByActionId(actionEvent.id);
+        var modelEvents = modelEventRepo.findByActionId(actionEvent.id, ShardIdentifier.DEFAULT);
         assertThat(modelEvents).hasSize(2);
         assertThat(modelEvents).allSatisfy(e -> {
             assertThat(e.eventType).isEqualTo("TestModelEvent");
@@ -211,7 +228,7 @@ public abstract class BaseDualTableEventPersisterTest {
                 objectMapper, "MixedAction", Instant.now(), Instant.now(), new TestActionParams("mixed", 2), events);
 
         // THEN
-        var modelEvents = modelEventRepo.findByActionId(actionEvent.id);
+        var modelEvents = modelEventRepo.findByActionId(actionEvent.id, ShardIdentifier.DEFAULT);
         assertThat(modelEvents).hasSize(2);
 
         var byType = modelEvents.stream().collect(java.util.stream.Collectors.toMap(e -> e.eventType, e -> e));
@@ -262,7 +279,7 @@ public abstract class BaseDualTableEventPersisterTest {
                 objectMapper, "IdAction", Instant.now(), Instant.now(), new TestActionParams("ids", 0), events);
 
         // THEN
-        var modelEvents = modelEventRepo.findByActionId(actionEvent.id);
+        var modelEvents = modelEventRepo.findByActionId(actionEvent.id, ShardIdentifier.DEFAULT);
         var ids = modelEvents.stream().map(e -> e.id).toList();
         assertThat(ids).hasSize(2);
         assertThat(ids.get(0)).isNotEqualTo(ids.get(1));

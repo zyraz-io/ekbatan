@@ -8,14 +8,17 @@ import java.util.Map;
 public final class ExecutionConfiguration {
 
     public final Map<Class<? extends Exception>, RetryConfig> retryConfigs;
+    public final boolean allowCrossShard;
 
     private ExecutionConfiguration(Builder builder) {
         this.retryConfigs = Map.copyOf(builder.retryConfigs);
+        this.allowCrossShard = builder.allowCrossShard;
     }
 
     public static final class Builder {
         private final Map<Class<? extends Exception>, RetryConfig> retryConfigs =
                 new LinkedHashMap<>(Map.of(StaleRecordException.class, new RetryConfig(1, Duration.ofMillis(100))));
+        private boolean allowCrossShard = false;
 
         private Builder() {}
 
@@ -36,6 +39,11 @@ public final class ExecutionConfiguration {
 
         public Builder noRetry() {
             this.retryConfigs.clear();
+            return this;
+        }
+
+        public Builder allowCrossShard(boolean allowCrossShard) {
+            this.allowCrossShard = allowCrossShard;
             return this;
         }
 

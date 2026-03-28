@@ -1,7 +1,5 @@
 package io.ekbatan.core.action.persister.event.dual_table;
 
-import static java.util.Optional.empty;
-
 import io.ekbatan.core.config.DataSourceConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
@@ -22,7 +20,8 @@ class MariadbDualTableEventPersisterTest extends BaseDualTableEventPersisterTest
             .withPassword("test")
             .withCopyFileToContainer(
                     MountableFile.forClasspathResource("mariadb_init.sql"),
-                    "/docker-entrypoint-initdb.d/mariadb_init.sql");
+                    "/docker-entrypoint-initdb.d/mariadb_init.sql")
+            .withEnv("TZ", "UTC");
 
     private static final TransactionManager TRANSACTION_MANAGER;
 
@@ -33,10 +32,14 @@ class MariadbDualTableEventPersisterTest extends BaseDualTableEventPersisterTest
         var username = DB_CONTAINER.getUsername();
         var password = DB_CONTAINER.getPassword();
 
-        var dataSourceConfig =
-                new DataSourceConfig(jdbcUrl, username, password, empty(), 10, empty(), empty(), empty());
-        var primaryConnectionProvider = ConnectionProvider.hikariConnectionProvider(dataSourceConfig, true);
-        var secondaryConnectionProvider = ConnectionProvider.hikariConnectionProvider(dataSourceConfig, false);
+        var dataSourceConfig = DataSourceConfig.Builder.dataSourceConfig()
+                .jdbcUrl(jdbcUrl)
+                .username(username)
+                .password(password)
+                .maximumPoolSize(10)
+                .build();
+        var primaryConnectionProvider = ConnectionProvider.hikariConnectionProvider(dataSourceConfig);
+        var secondaryConnectionProvider = ConnectionProvider.hikariConnectionProvider(dataSourceConfig);
         TRANSACTION_MANAGER =
                 new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider, SQLDialect.MARIADB);
 

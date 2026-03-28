@@ -885,60 +885,6 @@ public abstract class BaseRepositoryTest {
     }
 
     @Test
-    void should_findAll_with_offset_and_limit_and_sortFields() {
-        // GIVEN
-        final var dsl =
-                DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
-        dsl.truncate("dummies").execute();
-
-        final var dummies = new ArrayList<Dummy>();
-        for (int i = 0; i < 10; i++) {
-            final var dummy = createDummy(
-                            randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i), Instant.now())
-                    .build();
-            dummies.add(dummy);
-        }
-        repository.addAll(dummies);
-
-        // WHEN
-        final var result = repository.findAll(2, 5, DSL.field("CREATED_DATE").asc());
-
-        // THEN
-        assertThat(result).hasSize(5);
-        assertThat(result).containsExactlyElementsOf(dummies.subList(2, 7));
-    }
-
-    @Test
-    void should_findAll_with_offset_and_limit_and_sortFields_excludes_deleted() {
-        // GIVEN
-        final var dsl =
-                DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
-        dsl.truncate("dummies").execute();
-
-        final var dummies = new ArrayList<Dummy>();
-        for (int i = 0; i < 10; i++) {
-            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(i), Instant.now())
-                    .build());
-        }
-        repository.addAll(dummies);
-
-        final var deletedDummies = List.of(
-                dummies.get(2).delete(), dummies.get(5).delete(), dummies.get(8).delete());
-        repository.updateAll(deletedDummies);
-
-        // WHEN
-        // Active dummies indices: 0, 1, 3, 4, 6, 7, 9 (Total 7)
-        final var result = repository.findAll(2, 3, DSL.field("BALANCE").asc());
-
-        // THEN
-        // Offset 2 skips (0, 1). Limit 3 takes (3, 4, 6).
-        assertThat(result).hasSize(3);
-        assertThat(result)
-                .extracting(w -> w.id)
-                .containsExactly(dummies.get(3).id, dummies.get(4).id, dummies.get(6).id);
-    }
-
-    @Test
     void should_findAll() {
         // GIVEN
         final var dsl =
@@ -990,70 +936,6 @@ public abstract class BaseRepositoryTest {
         // THEN
         assertThat(result).hasSize(1);
         assertThat(result).extracting(w -> w.id).containsExactly(dummy2.id);
-    }
-
-    @Test
-    void should_findAllWhere_with_condition_and_sort_excludes_deleted() {
-        // GIVEN
-        final var dsl =
-                DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
-        dsl.truncate("dummies").execute();
-
-        final var dummy1 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
-                .build();
-        final var dummy2 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(20), Instant.now())
-                .build();
-        final var dummy3 = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.valueOf(30), Instant.now())
-                .build();
-        final var dummy4 = createDummy(randomUUID(), Currency.getInstance("USD"), BigDecimal.valueOf(40), Instant.now())
-                .build();
-
-        repository.addAll(List.of(dummy1, dummy2, dummy3, dummy4));
-
-        final var deletedDummy2 = dummy2.delete();
-        repository.update(deletedDummy2);
-
-        // WHEN
-        final var result = repository.findAllWhere(
-                DSL.field("CURRENCY").eq("EUR"), DSL.field("BALANCE").desc());
-
-        // THEN
-        assertThat(result).hasSize(2);
-        assertThat(result).extracting(w -> w.id).containsExactly(dummy3.id, dummy1.id);
-    }
-
-    @Test
-    void should_findAllWhere_with_condition_offset_limit_and_sort_excludes_deleted() {
-        // GIVEN
-        final var dsl =
-                DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
-        dsl.truncate("dummies").execute();
-
-        final var dummies = new ArrayList<Dummy>();
-        for (int i = 0; i < 10; i++) {
-            // Dummies 0-7, 9 are EUR. Dummy 8 is USD.
-            String currencyCode = (i == 8) ? "USD" : "EUR";
-            dummies.add(
-                    createDummy(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i), Instant.now())
-                            .build());
-        }
-        repository.addAll(dummies);
-
-        // Delete Dummy 2 and Dummy 5 (both are EUR)
-        final var deletedDummies =
-                List.of(dummies.get(2).delete(), dummies.get(5).delete());
-        repository.updateAll(deletedDummies);
-
-        // WHEN
-        // Active EUR indices sorted by balance: 0, 1, 3, 4, 6, 7, 9
-        final var result = repository.findAllWhere(
-                DSL.field("CURRENCY").eq("EUR"), 2, 3, DSL.field("BALANCE").asc());
-
-        // THEN
-        assertThat(result).hasSize(3);
-        assertThat(result)
-                .extracting(w -> w.id)
-                .containsExactly(dummies.get(3).id, dummies.get(4).id, dummies.get(6).id);
     }
 
     @Test
@@ -1163,43 +1045,6 @@ public abstract class BaseRepositoryTest {
         assertThat(foundDeleted).isEmpty();
         assertThat(foundActive).isPresent();
         assertThat(foundActive.get().id).isEqualTo(dummy2.id);
-    }
-
-    @Test
-    void should_findAllWhere_with_condition_offset_limit_and_collection_sort_excludes_deleted() {
-        // GIVEN
-        final var dsl =
-                DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
-        dsl.truncate("dummies").execute();
-
-        final var dummies = new ArrayList<Dummy>();
-        for (int i = 0; i < 10; i++) {
-            // Dummies 0-7, 9 are EUR. Dummy 8 is USD.
-            String currencyCode = (i == 8) ? "USD" : "EUR";
-            dummies.add(
-                    createDummy(randomUUID(), Currency.getInstance(currencyCode), BigDecimal.valueOf(i), Instant.now())
-                            .build());
-        }
-        repository.addAll(dummies);
-
-        // Delete Dummy 2 and Dummy 5 (both are EUR)
-        final var deletedDummies =
-                List.of(dummies.get(2).delete(), dummies.get(5).delete());
-        repository.updateAll(deletedDummies);
-
-        // WHEN
-        // Active EUR indices sorted by balance: 0, 1, 3, 4, 6, 7, 9
-        final var result = repository.findAllWhere(
-                DSL.field("CURRENCY").eq("EUR"),
-                2,
-                3,
-                List.of(DSL.field("BALANCE").asc()));
-
-        // THEN
-        assertThat(result).hasSize(3);
-        assertThat(result)
-                .extracting(w -> w.id)
-                .containsExactly(dummies.get(3).id, dummies.get(4).id, dummies.get(6).id);
     }
 
     @Test

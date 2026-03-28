@@ -1,3 +1,9 @@
+# Claude Code
+.claude/
+
+# OpenSpec
+openspec/
+
 # Gradle files
 .gradle/
 build/

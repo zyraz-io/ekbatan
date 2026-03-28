@@ -3,21 +3,25 @@ package io.ekbatan.core.action;
 import static io.ekbatan.core.action.ActionExecutor.Builder.actionExecutor;
 import static io.ekbatan.core.action.ActionRegistry.Builder.actionRegistry;
 import static io.ekbatan.core.repository.RepositoryRegistry.Builder.repositoryRegistry;
+import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import com.zaxxer.hikari.HikariDataSource;
 import io.ekbatan.core.action.persister.event.EventPersister;
 import io.ekbatan.core.domain.GenericState;
 import io.ekbatan.core.domain.Id;
 import io.ekbatan.core.domain.Model;
 import io.ekbatan.core.domain.ModelEvent;
+import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.Repository;
+import io.ekbatan.core.shard.DatabaseRegistry;
+import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.core.time.VirtualClock;
 import java.security.Principal;
 import java.time.Duration;
@@ -26,8 +30,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.jooq.DSLContext;
+import org.jooq.SQLDialect;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
 import tools.jackson.databind.ObjectMapper;
 
 class ActionExecutorTest {
@@ -124,6 +131,11 @@ class ActionExecutorTest {
         final List<Item> updated = new ArrayList<>();
 
         @Override
+        public io.ekbatan.core.shard.ShardingStrategy<?> shardingStrategy() {
+            return new io.ekbatan.core.shard.NoShardingStrategy<>();
+        }
+
+        @Override
         public Item add(Item model) {
             added.add(model);
             return model;
@@ -183,7 +195,9 @@ class ActionExecutorTest {
                 Instant startedDate,
                 Instant completionDate,
                 Object actionParams,
-                Collection<ModelEvent<?>> modelEvents) {
+                Collection<ModelEvent<?>> modelEvents,
+                io.ekbatan.core.shard.ShardIdentifier shard,
+                java.util.UUID actionEventId) {
             actionNames.add(actionName);
             allModelEvents.add(modelEvents);
         }
@@ -192,27 +206,38 @@ class ActionExecutorTest {
     // --- Test setup ---
 
     private TransactionManager transactionManager;
+    private DatabaseRegistry databaseRegistry;
     private VirtualClock clock;
 
     @BeforeEach
     void setUp() throws Exception {
-        transactionManager = mock(TransactionManager.class);
+        var mockPrimaryProvider = mock(ConnectionProvider.class);
+        var mockSecondaryProvider = mock(ConnectionProvider.class);
+        var mockDataSource = mock(HikariDataSource.class);
+        org.mockito.Mockito.when(mockPrimaryProvider.getDataSource()).thenReturn(mockDataSource);
+        org.mockito.Mockito.when(mockSecondaryProvider.getDataSource()).thenReturn(mockDataSource);
+        transactionManager = org.mockito.Mockito.spy(
+                new TransactionManager(mockPrimaryProvider, mockSecondaryProvider, SQLDialect.POSTGRES));
+        databaseRegistry = databaseRegistry()
+                .withDatabase(ShardIdentifier.DEFAULT, transactionManager)
+                .defaultShard(ShardIdentifier.DEFAULT)
+                .build();
         clock = new VirtualClock();
 
         // Make inTransactionChecked execute the block directly (no real DB)
         doAnswer(invocation -> {
-                    var consumer = invocation.getArgument(0, TransactionManager.CheckedConsumer.class);
+                    TransactionManager.CheckedConsumer<DSLContext> consumer = invocation.getArgument(0);
                     consumer.accept(null);
                     return null;
                 })
                 .when(transactionManager)
-                .inTransactionChecked(any(TransactionManager.CheckedConsumer.class));
+                .inTransactionChecked(ArgumentMatchers.<TransactionManager.CheckedConsumer<DSLContext>>any());
     }
 
     private ActionExecutor buildExecutor(
             RecordingRepository repo, RecordingEventPersister eventPersister, ActionRegistry actionRegistry) {
         return actionExecutor()
-                .transactionManager(transactionManager)
+                .databaseRegistry(databaseRegistry)
                 .objectMapper(new ObjectMapper())
                 .repositoryRegistry(repositoryRegistry()
                         .withModelRepository(Item.class, repo)
@@ -303,7 +328,8 @@ class ActionExecutorTest {
         executor.execute(() -> "user", CreateItemAction.class, new CreateItemAction.Params("wallet"));
 
         // THEN
-        verify(transactionManager, times(1)).inTransactionChecked(any(TransactionManager.CheckedConsumer.class));
+        verify(transactionManager, times(1))
+                .inTransactionChecked(ArgumentMatchers.<TransactionManager.CheckedConsumer<DSLContext>>any());
     }
 
     @Test
@@ -441,7 +467,7 @@ class ActionExecutorTest {
     // --- Builder validation ---
 
     @Test
-    void build_rejects_null_transactionManager() {
+    void build_rejects_null_databaseRegistry() {
         // WHEN / THEN
         assertThatThrownBy(() -> actionExecutor()
                         .objectMapper(new ObjectMapper())
@@ -449,6 +475,6 @@ class ActionExecutorTest {
                         .actionRegistry(actionRegistry().build())
                         .build())
                 .isInstanceOf(NullPointerException.class)
-                .hasMessageContaining("transactionManager is required");
+                .hasMessageContaining("databaseRegistry is required");
     }
 }

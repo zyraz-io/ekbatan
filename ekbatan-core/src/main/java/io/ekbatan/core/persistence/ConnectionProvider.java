@@ -35,17 +35,17 @@ public class ConnectionProvider {
         return pool;
     }
 
-    public static ConnectionProvider hikariConnectionProvider(DataSourceConfig cfg, boolean primary) {
+    public static ConnectionProvider hikariConnectionProvider(DataSourceConfig cfg) {
         var hikari = new com.zaxxer.hikari.HikariConfig();
-        hikari.setJdbcUrl(cfg.jdbcUrl()
-                + (primary ? "?targetServerType=master" : "?targetServerType=preferSlave&loadBalanceHosts=true"));
-        hikari.setUsername(cfg.username());
-        hikari.setPassword(cfg.password());
-        cfg.driverClassName().ifPresent(hikari::setDriverClassName);
-        hikari.setMaximumPoolSize(cfg.maximumPoolSize());
-        cfg.minimumIdle().ifPresent(hikari::setMinimumIdle);
-        cfg.idleTimeout().ifPresent(hikari::setIdleTimeout);
-        cfg.leakDetectionThreshold().ifPresent(hikari::setLeakDetectionThreshold);
+        hikari.setJdbcUrl(cfg.jdbcUrl);
+        hikari.setUsername(cfg.username);
+        hikari.setPassword(cfg.password);
+        cfg.driverClassName.ifPresent(hikari::setDriverClassName);
+        hikari.setMaximumPoolSize(cfg.maximumPoolSize);
+        hikari.setInitializationFailTimeout(-1);
+        cfg.minimumIdle.ifPresent(hikari::setMinimumIdle);
+        cfg.idleTimeout.ifPresent(hikari::setIdleTimeout);
+        cfg.leakDetectionThreshold.ifPresent(hikari::setLeakDetectionThreshold);
         return new ConnectionProvider(new HikariDataSource(hikari));
     }
 }

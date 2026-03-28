@@ -1,7 +1,8 @@
 package io.ekbatan.core.repository;
 
 import io.ekbatan.core.domain.Entity;
-import io.ekbatan.core.persistence.TransactionManager;
+import io.ekbatan.core.shard.DatabaseRegistry;
+import io.ekbatan.core.shard.ShardingStrategy;
 import org.jooq.Table;
 import org.jooq.TableField;
 import org.jooq.TableRecord;
@@ -9,24 +10,33 @@ import org.jooq.TableRecord;
 /**
  * Base repository implementation using JOOQ for database operations on Entity classes.
  *
- * @param <ENTITY>    The domain entity type
- * @param <RECORD>    The JOOQ record type
- * @param <ENTITY_ID> The ID type of the entity
- * @param <TABLE>     The JOOQ table type
+ * @param <ENTITY> The domain entity type
+ * @param <RECORD> The JOOQ record type
+ * @param <DB_ID>  The ID type of the entity
+ * @param <TABLE>  The JOOQ table type
  */
 public abstract class EntityRepository<
                 ENTITY extends Entity<ENTITY, ?, ?>,
                 RECORD extends TableRecord<?>,
                 TABLE extends Table<RECORD>,
-                ENTITY_ID extends Comparable<ENTITY_ID>>
-        extends AbstractRepository<ENTITY, RECORD, TABLE, ENTITY_ID> {
+                DB_ID extends Comparable<DB_ID>>
+        extends AbstractRepository<ENTITY, RECORD, TABLE, DB_ID> {
 
     protected EntityRepository(
             Class<ENTITY> entityClass,
             TABLE table,
-            TableField<RECORD, ENTITY_ID> idField,
-            TransactionManager transactionManager) {
-        super(entityClass, table, idField, transactionManager);
+            TableField<RECORD, DB_ID> idField,
+            DatabaseRegistry databaseRegistry) {
+        super(entityClass, table, idField, databaseRegistry);
+    }
+
+    protected EntityRepository(
+            Class<ENTITY> entityClass,
+            TABLE table,
+            TableField<RECORD, DB_ID> idField,
+            DatabaseRegistry databaseRegistry,
+            ShardingStrategy<DB_ID> shardingStrategy) {
+        super(entityClass, table, idField, databaseRegistry, shardingStrategy);
     }
 
     @Override

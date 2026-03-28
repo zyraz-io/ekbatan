@@ -112,6 +112,11 @@ class ChangePersisterTest {
         final List<Item> updated = new ArrayList<>();
 
         @Override
+        public io.ekbatan.core.shard.ShardingStrategy<?> shardingStrategy() {
+            return new io.ekbatan.core.shard.NoShardingStrategy<>();
+        }
+
+        @Override
         public Item add(Item model) {
             added.add(model);
             return model;
@@ -175,7 +180,9 @@ class ChangePersisterTest {
                 Instant startedDate,
                 Instant completionDate,
                 Object actionParams,
-                Collection<ModelEvent<?>> modelEvents) {
+                Collection<ModelEvent<?>> modelEvents,
+                io.ekbatan.core.shard.ShardIdentifier shard,
+                java.util.UUID actionEventId) {
             this.actionName = actionName;
             this.startedDate = startedDate;
             this.completionDate = completionDate;
@@ -201,7 +208,13 @@ class ChangePersisterTest {
         action.perform(() -> "user", new CreateItemAction.Params());
 
         // WHEN
-        persister.persist(action, new CreateItemAction.Params(), Instant.now());
+        persister.persist(
+                action.getClass().getSimpleName(),
+                new CreateItemAction.Params(),
+                Instant.now(),
+                action.plan.changes(),
+                io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
+                java.util.UUID.randomUUID());
 
         // THEN
         assertThat(repo.added).hasSize(1);
@@ -229,7 +242,13 @@ class ChangePersisterTest {
         action.perform(() -> "user", new UpdateItemAction.Params());
 
         // WHEN
-        persister.persist(action, new UpdateItemAction.Params(), Instant.now());
+        persister.persist(
+                action.getClass().getSimpleName(),
+                new UpdateItemAction.Params(),
+                Instant.now(),
+                action.plan.changes(),
+                io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
+                java.util.UUID.randomUUID());
 
         // THEN
         assertThat(repo.updated).hasSize(1);
@@ -250,7 +269,13 @@ class ChangePersisterTest {
         action.perform(() -> "user", new CreateItemAction.Params());
 
         // WHEN
-        persister.persist(action, new CreateItemAction.Params(), Instant.now());
+        persister.persist(
+                action.getClass().getSimpleName(),
+                new CreateItemAction.Params(),
+                Instant.now(),
+                action.plan.changes(),
+                io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
+                java.util.UUID.randomUUID());
 
         // THEN
         assertThat(eventPersister.modelEvents).hasSize(1);
@@ -271,7 +296,13 @@ class ChangePersisterTest {
         action.perform(() -> "user", new CreateItemAction.Params());
 
         // WHEN
-        persister.persist(action, new CreateItemAction.Params(), Instant.now());
+        persister.persist(
+                action.getClass().getSimpleName(),
+                new CreateItemAction.Params(),
+                Instant.now(),
+                action.plan.changes(),
+                io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
+                java.util.UUID.randomUUID());
 
         // THEN
         assertThat(eventPersister.actionName).isEqualTo("CreateItemAction");
@@ -293,7 +324,13 @@ class ChangePersisterTest {
 
         // WHEN
         var startDate = Instant.parse("2025-06-01T11:59:59Z");
-        persister.persist(action, new CreateItemAction.Params(), startDate);
+        persister.persist(
+                action.getClass().getSimpleName(),
+                new CreateItemAction.Params(),
+                startDate,
+                action.plan.changes(),
+                io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
+                java.util.UUID.randomUUID());
 
         // THEN
         assertThat(eventPersister.startedDate).isEqualTo(startDate);
@@ -312,7 +349,13 @@ class ChangePersisterTest {
         action.perform(() -> "user", new NoOpAction.Params());
 
         // WHEN
-        persister.persist(action, new NoOpAction.Params(), Instant.now());
+        persister.persist(
+                action.getClass().getSimpleName(),
+                new NoOpAction.Params(),
+                Instant.now(),
+                action.plan.changes(),
+                io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
+                java.util.UUID.randomUUID());
 
         // THEN
         assertThat(eventPersister.callCount).isEqualTo(1);
@@ -332,7 +375,13 @@ class ChangePersisterTest {
         action.perform(() -> "user", new CreateItemAction.Params());
 
         // WHEN / THEN
-        assertThatThrownBy(() -> persister.persist(action, new CreateItemAction.Params(), Instant.now()))
+        assertThatThrownBy(() -> persister.persist(
+                        action.getClass().getSimpleName(),
+                        new CreateItemAction.Params(),
+                        Instant.now(),
+                        action.plan.changes(),
+                        io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
+                        java.util.UUID.randomUUID()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("No repository found for entity type");
     }
@@ -352,7 +401,13 @@ class ChangePersisterTest {
         action.perform(() -> "user", params);
 
         // WHEN
-        persister.persist(action, params, Instant.now());
+        persister.persist(
+                action.getClass().getSimpleName(),
+                params,
+                Instant.now(),
+                action.plan.changes(),
+                io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
+                java.util.UUID.randomUUID());
 
         // THEN
         assertThat(eventPersister.actionParams).isSameAs(params);

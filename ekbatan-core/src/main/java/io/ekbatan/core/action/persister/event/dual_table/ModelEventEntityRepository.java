@@ -1,10 +1,11 @@
 package io.ekbatan.core.action.persister.event.dual_table;
 
-import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.persistence.jooq.converter.InstantConverter;
 import io.ekbatan.core.persistence.jooq.converter.JSONBObjectNodeConverter;
 import io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter;
 import io.ekbatan.core.persistence.jooq.converter.mysql.UuidStringConverter;
+import io.ekbatan.core.shard.DatabaseRegistry;
+import io.ekbatan.core.shard.ShardIdentifier;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -18,7 +19,7 @@ import tools.jackson.databind.node.ObjectNode;
 
 class ModelEventEntityRepository {
 
-    private final TransactionManager transactionManager;
+    private final DatabaseRegistry databaseRegistry;
     private final DSLContext db;
     private final Field<UUID> idField;
     private final Field<UUID> actionIdField;
@@ -87,11 +88,13 @@ class ModelEventEntityRepository {
             DSL.name(SCHEMA_NAME, TABLE_NAME, "event_date"),
             SQLDataType.LOCALDATETIME.asConvertedDataType(new InstantConverter()));
 
-    ModelEventEntityRepository(TransactionManager transactionManager) {
-        this.transactionManager = transactionManager;
-        this.db = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
+    ModelEventEntityRepository(DatabaseRegistry databaseRegistry) {
+        this.databaseRegistry = databaseRegistry;
+        var defaultTransactionManager = databaseRegistry.defaultTransactionManager();
+        this.db = DSL.using(
+                defaultTransactionManager.primaryConnectionProvider.getDataSource(), defaultTransactionManager.dialect);
 
-        if (transactionManager.dialect.family() == SQLDialect.MYSQL) {
+        if (defaultTransactionManager.dialect.family() == SQLDialect.MYSQL) {
             this.idField = MYSQL_ID;
             this.actionIdField = MYSQL_ACTION_ID;
             this.modelIdField = MYSQL_MODEL_ID;
@@ -99,7 +102,7 @@ class ModelEventEntityRepository {
             this.eventTypeField = MYSQL_EVENT_TYPE;
             this.payloadField = MYSQL_PAYLOAD;
             this.eventDateField = MYSQL_EVENT_DATE;
-        } else if (transactionManager.dialect.family() == SQLDialect.MARIADB) {
+        } else if (defaultTransactionManager.dialect.family() == SQLDialect.MARIADB) {
             this.idField = MARIADB_ID;
             this.actionIdField = MARIADB_ACTION_ID;
             this.modelIdField = MARIADB_MODEL_ID;
@@ -118,16 +121,19 @@ class ModelEventEntityRepository {
         }
     }
 
-    private DSLContext txDbElseDb() {
-        return transactionManager.currentTransactionDbContext().orElse(db);
+    private DSLContext txDbElseDb(ShardIdentifier shard) {
+        return databaseRegistry
+                .transactionManager(shard)
+                .currentTransactionDbContext()
+                .orElse(db);
     }
 
-    int count() {
-        return txDbElseDb().selectCount().from(MODEL_EVENTS).fetchOne(0, int.class);
+    int count(ShardIdentifier shard) {
+        return txDbElseDb(shard).selectCount().from(MODEL_EVENTS).fetchOne(0, int.class);
     }
 
-    List<ModelEventEntity> findByActionId(UUID actionId) {
-        return txDbElseDb()
+    List<ModelEventEntity> findByActionId(UUID actionId, ShardIdentifier shard) {
+        return txDbElseDb(shard)
                 .select(
                         idField,
                         actionIdField,
@@ -150,9 +156,9 @@ class ModelEventEntityRepository {
                         .build());
     }
 
-    void addAllNoResult(Collection<ModelEventEntity> entities) {
+    void addAllNoResult(Collection<ModelEventEntity> entities, ShardIdentifier shard) {
         if (entities.isEmpty()) return;
-        final var insert = txDbElseDb()
+        final var insert = txDbElseDb(shard)
                 .insertInto(
                         MODEL_EVENTS,
                         idField,

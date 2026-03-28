@@ -1,8 +1,10 @@
 package io.ekbatan.core.action.persister.event;
 
 import io.ekbatan.core.domain.ModelEvent;
+import io.ekbatan.core.shard.ShardIdentifier;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.UUID;
 
 public interface EventPersister {
 
@@ -11,5 +13,7 @@ public interface EventPersister {
             Instant startedDate,
             Instant completionDate,
             Object actionParams,
-            Collection<ModelEvent<?>> modelEvents);
+            Collection<ModelEvent<?>> modelEvents,
+            ShardIdentifier shard,
+            UUID actionEventId);
 }

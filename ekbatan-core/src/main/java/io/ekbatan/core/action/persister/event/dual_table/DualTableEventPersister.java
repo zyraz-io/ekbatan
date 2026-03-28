@@ -5,7 +5,8 @@ import static io.ekbatan.core.action.persister.event.dual_table.ModelEventEntity
 
 import io.ekbatan.core.action.persister.event.EventPersister;
 import io.ekbatan.core.domain.ModelEvent;
-import io.ekbatan.core.persistence.TransactionManager;
+import io.ekbatan.core.shard.DatabaseRegistry;
+import io.ekbatan.core.shard.ShardIdentifier;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.UUID;
@@ -19,10 +20,10 @@ public class DualTableEventPersister implements EventPersister {
     private final ModelEventEntityRepository modelEventRepository;
     private final ObjectMapper objectMapper;
 
-    public DualTableEventPersister(TransactionManager transactionManager, ObjectMapper objectMapper) {
-        Validate.notNull(transactionManager, "transactionManager cannot be null");
-        this.actionEventRepository = new ActionEventEntityRepository(transactionManager);
-        this.modelEventRepository = new ModelEventEntityRepository(transactionManager);
+    public DualTableEventPersister(DatabaseRegistry databaseRegistry, ObjectMapper objectMapper) {
+        Validate.notNull(databaseRegistry, "databaseRegistry cannot be null");
+        this.actionEventRepository = new ActionEventEntityRepository(databaseRegistry);
+        this.modelEventRepository = new ModelEventEntityRepository(databaseRegistry);
         this.objectMapper = Validate.notNull(objectMapper, "objectMapper cannot be null");
     }
 
@@ -32,15 +33,15 @@ public class DualTableEventPersister implements EventPersister {
             Instant startedDate,
             Instant completionDate,
             Object actionParams,
-            Collection<ModelEvent<?>> modelEvents) {
-
-        final var actionEventId = UUID.randomUUID();
+            Collection<ModelEvent<?>> modelEvents,
+            ShardIdentifier shard,
+            UUID actionEventId) {
 
         final var actionEvent = createActionEventEntity(
                         actionEventId, startedDate, completionDate, actionName, objectMapper.valueToTree(actionParams))
                 .build();
 
-        actionEventRepository.addNoResult(actionEvent);
+        actionEventRepository.addNoResult(actionEvent, shard);
 
         if (CollectionUtils.isNotEmpty(modelEvents)) {
             final var modelEventEntities = modelEvents.stream()
@@ -54,7 +55,7 @@ public class DualTableEventPersister implements EventPersister {
                                     completionDate)
                             .build())
                     .toList();
-            modelEventRepository.addAllNoResult(modelEventEntities);
+            modelEventRepository.addAllNoResult(modelEventEntities, shard);
         }
     }
 }

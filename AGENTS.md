@@ -27,6 +27,7 @@ ekbatan/
 │   │   ├── action/                        # Action/Command pattern (Action, ActionExecutor, ActionPlan)
 │   │   │   └── persister/                 # Change & event persistence
 │   │   │       └── event/dual_table/      # Dual-table event store implementation
+│   │   ├── shard/                         # Sharding: ShardIdentifier, DatabaseRegistry, ShardingStrategy
 │   │   ├── persistence/                   # Transaction management, JOOQ converters
 │   │   └── config/                        # DataSourceConfig
 │   └── ekbatan-core-repo-test/            # Shared test infrastructure for repositories
@@ -36,12 +37,10 @@ ekbatan/
 │       ├── ekbatan-core-repo-test-mysql/  # MySQL test runner
 │       └── ekbatan-core-repo-test-mariadb/# MariaDB test runner
 ├── ekbatan-annotation-processor/          # @AutoBuilder annotation processor (JavaPoet)
-├── ekbatan-examples/                      # Example wallet application
-│   ├── src/main/java/io/ekbatan/examples/wallet/
-│   │   ├── models/                        # Wallet (Model), Product (Entity), events
-│   │   ├── repository/                    # WalletRepository, ProductRepository
-│   │   └── action/                        # WalletCreateAction, WalletDepositMoneyAction
-│   └── src/main/resources/db/migration/   # Flyway SQL migrations (PostgreSQL)
+├── ekbatan-integration-tests/              # End-to-end integration tests (package: io.ekbatan.test)
+│   ├── postgres-dual-table-events/        # Dual-table event persistence (PostgreSQL)
+│   ├── postgres-single-table-events/      # Single-table event persistence (PostgreSQL)
+│   └── postgres-sharded/                  # Sharded wallet with cross-shard tests (PostgreSQL)
 ├── buildSrc/                              # Gradle build conventions
 └── config/checkstyle/                     # Checkstyle rules
 ```
@@ -66,7 +65,7 @@ Key pattern: Domain objects are **immutable**. Mutations create new instances. M
 
 JOOQ-based persistence:
 
-- **`AbstractRepository`** — Core implementation with full CRUD, optimistic locking (version field), soft deletion (filters DELETED state), and dialect-aware SQL for MySQL vs MariaDB vs PostgreSQL.
+- **`AbstractRepository`** — Core implementation with full CRUD, optimistic locking (version field), soft deletion (filters DELETED state), dialect-aware SQL for MySQL vs MariaDB vs PostgreSQL, and shard-aware routing (scatter-gather reads, ID-based writes, batch single-shard validation).
 - **`ModelRepository`** — Adds `created_date`/`updated_date` field validation.
 - **`EntityRepository`** — Simpler variant for entities.
 - **`RepositoryRegistry`** — Type-safe map of `Class -> Repository` with builder pattern.
@@ -130,6 +129,59 @@ Ekbatan does **not** provide a framework-level idempotency key abstraction (no d
 Models accumulate `ModelEvent` instances. When persisted via `ChangePersister`, events are extracted and stored in two tables:
 - `action_events` — One row per action execution (action name, params, timestamps)
 - `model_events` — One row per domain event (model ID, event type, JSON payload, linked to action)
+
+### Event IDs and Sharding
+Only domain entity IDs (e.g., `wallets.id`) use `ShardedUUID` for shard routing. Event infrastructure tables use regular UUIDs:
+
+- **`action_events.id`** — Regular UUID. In single-shard actions, the record is written to that shard. In cross-shard actions (when `allowCrossShard=true`), the same action record (same UUID) is duplicated across all involved shards so that each shard has a self-contained picture of the action and its events.
+- **`model_events.id`** — Regular UUID. Always co-located with the model it describes — no independent shard routing needed.
+
+This design ensures each shard is self-contained: its `model_events` reference an `action_events` record on the same shard, with no cross-shard foreign keys.
+
+### Sharding
+
+Ekbatan supports horizontal sharding with a two-level hierarchy: **group** (business/regulatory constraint, e.g., "Mexico data stays in Mexico") and **member** (performance scaling within a group).
+
+#### Core Concepts
+
+- **`ShardIdentifier(int group, int member)`** — Numeric shard address. `DEFAULT = (0, 0)`. Fixed 4-bit group + 8-bit member, supporting up to 16 groups x 256 members.
+- **`ShardedUUID`** — UUID v7 with shard bits (group + member) encoded in `rand_b`. Self-describing: the shard can be decoded from the UUID without any lookup.
+- **`ShardedId<T>`** — Type-safe ID wrapper around `ShardedUUID`, independent from `Id<T>`. Implements `ShardAwareId`.
+- **`DatabaseRegistry`** — Unified entry point for all database access. Maps `ShardIdentifier → TransactionManager`. Provides `primary`/`secondary` DSLContext maps and `effectiveShard()` for logical-to-physical shard mapping.
+- **`ShardingStrategy<DB_ID>`** — Pluggable interface on `Repository`. `NoShardingStrategy` (default, zero impact) and `EmbeddedBitsShardingStrategy` (decodes shard from UUID v7 bits).
+- **`CrossShardException`** — Thrown when a batch or action spans multiple shards without `allowCrossShard=true`.
+
+#### Shard Routing in AbstractRepository
+
+AbstractRepository resolves shards via `effectiveShard()` overloads, which combine strategy resolution with `DatabaseRegistry.effectiveShard()` for logical-to-physical mapping. This means unregistered shards (e.g., Australia using group 2 when only default and Mexico are deployed) automatically fall back to the default shard.
+
+**DB access methods** — four tiers, each with overloads for `()`, `(DB_ID)`, `(PERSISTABLE)`, `(ShardIdentifier)`:
+- `db()` / `readonlyDb()` — primary/secondary DSLContext
+- `txDb()` — current transaction context (returns `Optional`)
+- `txDbElseDb()` — transaction context or fallback to non-transactional
+- `dbs()` / `readonlyDbs()` — all shard contexts (strategy-aware: returns only default for `NoShardingStrategy`)
+
+**Write routing** — single-entity methods use `effectiveShard(domainObject)`. Batch methods use `effectiveShard(Collection)` which validates all entities resolve to the same effective shard or throws `CrossShardException`.
+
+**Read routing** — ID-based methods (`findById`, `existsById`) route to the specific shard via `effectiveShard(id)`. Condition-based methods (`findAll`, `findAllWhere`, `count`, `countWhere`, `findOneWhere`, `existsWhere`) scatter-gather across `dbs()`. `findAllByIds` groups IDs by shard and queries each shard with its subset.
+
+**Dialect resolution** — each CRUD method resolves dialect from the target shard via `dialect(shard)` rather than assuming a global dialect, so mixed-dialect setups are theoretically supported.
+
+**No offset/limit methods** — `findAll(offset, limit)` and `findAllWhere(condition, offset, limit)` are intentionally not provided. Offset/limit pagination doesn't work correctly with scatter-gather. Sharded systems should use cursor-based (keyset/temporal) pagination, implemented in concrete repository subclasses.
+
+**ID-based strategy guard** — `rejectNonIdBasedStrategy()` is centralized inside `effectiveShard(DB_ID)`. It allows `NoShardingStrategy` through (no constraint needed) and rejects custom strategies that don't support `usesShardAwareId()`.
+
+#### Cross-Shard Enforcement in ActionExecutor
+
+`ActionExecutor.persistChanges()` groups plan changes by shard using each repository's `shardingStrategy()`. If changes span multiple shards and `ExecutionConfiguration.allowCrossShard` is `false` (the default), `CrossShardException` is thrown. When allowed, each shard gets its own transaction, and action events are duplicated to all involved shards with the same UUID.
+
+### Timezone Convention — Always UTC
+All timestamps in Ekbatan should be stored and processed in **UTC**. This applies to:
+
+- **Database server timezone** — set the database machine or container to `TZ=UTC`. Ekbatan uses `java.time.Instant` (always UTC) for `created_date` and `updated_date` fields. If the database server runs in a non-UTC timezone, `TIMESTAMP` columns (without time zone) will silently shift values on read, causing mismatches between what Java wrote and what the database returns.
+- **Table column values** — all timestamps persisted by the framework represent UTC instants. Do not store local times. If a business requirement needs a local time representation, store it as a separate field alongside the UTC instant.
+- **TestContainers** — always configure with `.withEnv("TZ", "UTC")` to avoid timezone-dependent test failures (e.g., daylight saving time shifts).
+- **JDBC connections** — when connecting to PostgreSQL, MySQL, or MariaDB, ensure the session timezone is UTC. For PostgreSQL this is typically the default; for MySQL/MariaDB, consider adding `serverTimezone=UTC` to the JDBC URL if needed.
 
 ### Multi-Database Support
 The framework supports PostgreSQL, MySQL, and MariaDB. Dialect differences are handled in:
@@ -479,7 +531,8 @@ For domain classes (`Model` and `Entity` subclasses), writing the builder by han
 ## Testing
 
 ### Test Infrastructure
-- **`BaseRepositoryTest`** — Large abstract test class in `ekbatan-core-repo-test` covering all CRUD operations, optimistic locking, soft deletion, pagination
+- **`BaseRepositoryTest`** — Large abstract test class in `ekbatan-core-repo-test` covering all CRUD operations, optimistic locking, soft deletion
+- **`BaseShardedRepositoryTest`** — Abstract test class covering shard-aware operations: scatter-gather reads, ID-based routing, cross-shard batch rejection, shard isolation
 - **`Dummy` model** — Test-only model mirroring the Wallet structure
 - **Database-specific runners** — Separate subprojects for PostgreSQL, MySQL, MariaDB using TestContainers
 - **Flyway migrations** — Per-database test migrations in each test subproject
@@ -566,7 +619,7 @@ void retry_recovers_after_transient_failure() throws Exception {
 ./gradlew :ekbatan-core:ekbatan-core-repo-test:ekbatan-core-repo-test-pg:test    # PostgreSQL only
 ./gradlew :ekbatan-core:ekbatan-core-repo-test:ekbatan-core-repo-test-mysql:test # MySQL only
 ./gradlew :ekbatan-core:ekbatan-core-repo-test:ekbatan-core-repo-test-mariadb:test # MariaDB only
-./gradlew :ekbatan-examples:test                  # Example tests
+./gradlew :ekbatan-integration-tests:test          # Integration tests
 ```
 
 ## Build & Tooling

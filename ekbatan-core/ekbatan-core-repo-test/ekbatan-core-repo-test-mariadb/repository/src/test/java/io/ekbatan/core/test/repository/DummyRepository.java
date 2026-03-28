@@ -4,8 +4,8 @@ import static io.ekbatan.core.test.generated.jooq.tables.Dummies.DUMMIES;
 import static io.ekbatan.core.test.model.DummyBuilder.dummy;
 
 import io.ekbatan.core.domain.Id;
-import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.ModelRepository;
+import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.test.generated.jooq.tables.Dummies;
 import io.ekbatan.core.test.generated.jooq.tables.records.DummiesRecord;
 import io.ekbatan.core.test.model.Dummy;
@@ -15,8 +15,8 @@ import java.util.UUID;
 
 public class DummyRepository extends ModelRepository<Dummy, DummiesRecord, Dummies, UUID> {
 
-    public DummyRepository(TransactionManager transactionManager) {
-        super(Dummy.class, DUMMIES, DUMMIES.ID, transactionManager);
+    public DummyRepository(DatabaseRegistry databaseRegistry) {
+        super(Dummy.class, DUMMIES, DUMMIES.ID, databaseRegistry);
     }
 
     @Override

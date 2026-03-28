@@ -1,10 +1,13 @@
 package io.ekbatan.core.action.persister.event.single_table;
 
+import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.ekbatan.core.domain.ModelEvent;
 import io.ekbatan.core.persistence.TransactionManager;
+import io.ekbatan.core.shard.DatabaseRegistry;
+import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.core.test.event.TestActionParams;
 import io.ekbatan.core.test.event.TestModelEvent;
 import io.ekbatan.core.test.event.TestStatusChangedEvent;
@@ -18,17 +21,22 @@ import tools.jackson.databind.ObjectMapper;
 public abstract class BaseSingleTableEventPersisterTest {
 
     protected final TransactionManager transactionManager;
+    protected final DatabaseRegistry databaseRegistry;
 
     public BaseSingleTableEventPersisterTest(TransactionManager transactionManager) {
         this.transactionManager = transactionManager;
+        this.databaseRegistry = databaseRegistry()
+                .withDatabase(ShardIdentifier.DEFAULT, transactionManager)
+                .defaultShard(ShardIdentifier.DEFAULT)
+                .build();
     }
 
     private SingleTableEventPersister createPersister(ObjectMapper objectMapper) {
-        return new SingleTableEventPersister(transactionManager, objectMapper);
+        return new SingleTableEventPersister(databaseRegistry, objectMapper);
     }
 
     private ActionEventEntityRepository createRepo(ObjectMapper objectMapper) {
-        return new ActionEventEntityRepository(transactionManager, objectMapper);
+        return new ActionEventEntityRepository(databaseRegistry, objectMapper);
     }
 
     private ActionEventEntity persistAndFetch(
@@ -40,11 +48,19 @@ public abstract class BaseSingleTableEventPersisterTest {
             List<ModelEvent<?>> modelEvents) {
         var persister = createPersister(objectMapper);
         var repo = createRepo(objectMapper);
-        var existingIds = repo.findAll().stream().map(e -> e.id).toList();
+        var existingIds =
+                repo.findAll(ShardIdentifier.DEFAULT).stream().map(e -> e.id).toList();
 
-        persister.persistActionEvents(actionName, startedDate, completionDate, actionParams, modelEvents);
+        persister.persistActionEvents(
+                actionName,
+                startedDate,
+                completionDate,
+                actionParams,
+                modelEvents,
+                ShardIdentifier.DEFAULT,
+                java.util.UUID.randomUUID());
 
-        return repo.findAll().stream()
+        return repo.findAll(ShardIdentifier.DEFAULT).stream()
                 .filter(e -> !existingIds.contains(e.id))
                 .findFirst()
                 .orElseThrow();

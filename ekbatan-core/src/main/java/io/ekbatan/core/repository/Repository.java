@@ -1,14 +1,13 @@
 package io.ekbatan.core.repository;
 
 import io.ekbatan.core.domain.Persistable;
+import io.ekbatan.core.shard.ShardingStrategy;
 import java.util.Collection;
 import java.util.List;
 
-/**
- * Marker interface for all repositories
- *
- */
 public interface Repository<PERSISTABLE extends Persistable<?>> {
+
+    ShardingStrategy<?> shardingStrategy();
 
     PERSISTABLE add(PERSISTABLE model);
 

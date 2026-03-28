@@ -3,18 +3,24 @@ package io.ekbatan.core.repository;
 import static java.lang.String.format;
 
 import io.ekbatan.core.domain.Persistable;
-import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.exception.EntityNotFoundException;
 import io.ekbatan.core.repository.exception.StaleRecordException;
+import io.ekbatan.core.shard.CrossShardException;
+import io.ekbatan.core.shard.DatabaseRegistry;
+import io.ekbatan.core.shard.NoShardingStrategy;
+import io.ekbatan.core.shard.ShardIdentifier;
+import io.ekbatan.core.shard.ShardingStrategy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.Validate;
 import org.jooq.Condition;
 import org.jooq.DSLContext;
@@ -23,7 +29,6 @@ import org.jooq.Record;
 import org.jooq.RowN;
 import org.jooq.SQLDialect;
 import org.jooq.Select;
-import org.jooq.SortField;
 import org.jooq.Table;
 import org.jooq.TableField;
 import org.jooq.TableRecord;
@@ -40,14 +45,13 @@ public abstract class AbstractRepository<
                 PERSISTABLE extends Persistable<?>,
                 RECORD extends TableRecord<?>,
                 TABLE extends Table<RECORD>,
-                ID extends Comparable<?>>
+                DB_ID extends Comparable<?>>
         implements Repository<PERSISTABLE> {
 
-    public final TransactionManager transactionManager;
-    private final DSLContext db;
-    private final DSLContext readonlyDb;
+    public final DatabaseRegistry databaseRegistry;
+    public final ShardingStrategy<DB_ID> shardingStrategy;
     protected final TABLE table;
-    public final TableField<RECORD, ID> idField;
+    public final TableField<RECORD, DB_ID> idField;
     protected final TableField<RECORD, Long> versionField;
     protected final TableField<RECORD, String> stateField;
     protected final Class<PERSISTABLE> domainClass;
@@ -58,12 +62,19 @@ public abstract class AbstractRepository<
     protected AbstractRepository(
             Class<PERSISTABLE> domainClass,
             TABLE table,
-            TableField<RECORD, ID> idField,
-            TransactionManager transactionManager) {
-        this.transactionManager = Validate.notNull(transactionManager, "transactionManager cannot be null");
-        this.db = DSL.using(transactionManager.primaryConnectionProvider.getDataSource(), transactionManager.dialect);
-        this.readonlyDb =
-                DSL.using(transactionManager.secondaryConnectionProvider.getDataSource(), transactionManager.dialect);
+            TableField<RECORD, DB_ID> idField,
+            DatabaseRegistry databaseRegistry) {
+        this(domainClass, table, idField, databaseRegistry, new NoShardingStrategy<>());
+    }
+
+    protected AbstractRepository(
+            Class<PERSISTABLE> domainClass,
+            TABLE table,
+            TableField<RECORD, DB_ID> idField,
+            DatabaseRegistry databaseRegistry,
+            ShardingStrategy<DB_ID> shardingStrategy) {
+        this.databaseRegistry = Validate.notNull(databaseRegistry, "databaseRegistry cannot be null");
+        this.shardingStrategy = Validate.notNull(shardingStrategy, "shardingStrategy cannot be null");
         this.table = table;
         this.idField = idField;
         this.domainClass = Validate.notNull(domainClass, "domainClass cannot be null");
@@ -77,38 +88,119 @@ public abstract class AbstractRepository<
                 "Table " + table.getName() + " must have a 'state' field");
     }
 
+    @Override
+    public ShardingStrategy<DB_ID> shardingStrategy() {
+        return shardingStrategy;
+    }
+
     protected abstract String getDomainTypeName();
 
     public abstract PERSISTABLE fromRecord(RECORD record);
 
     public abstract RECORD toRecord(PERSISTABLE domainObject);
 
+    // --- db() variants ---
+
+    protected DSLContext db() {
+        return databaseRegistry.primary.get(databaseRegistry.defaultShard);
+    }
+
+    protected DSLContext db(DB_ID id) {
+        return db(effectiveShard(id));
+    }
+
+    protected DSLContext db(PERSISTABLE p) {
+        return db(effectiveShard(p));
+    }
+
+    protected DSLContext db(ShardIdentifier shard) {
+        return databaseRegistry.primary.get(shard);
+    }
+
+    protected Collection<DSLContext> dbs() {
+        if (shardingStrategy instanceof NoShardingStrategy<?>) {
+            return List.of(db());
+        }
+        return databaseRegistry.primary.values();
+    }
+
+    // --- readonlyDb() variants ---
+
+    protected DSLContext readonlyDb() {
+        return databaseRegistry.secondary.get(databaseRegistry.defaultShard);
+    }
+
+    protected DSLContext readonlyDb(DB_ID id) {
+        return readonlyDb(effectiveShard(id));
+    }
+
+    protected DSLContext readonlyDb(ShardIdentifier shard) {
+        return databaseRegistry.secondary.get(shard);
+    }
+
+    protected Collection<DSLContext> readonlyDbs() {
+        if (shardingStrategy instanceof NoShardingStrategy<?>) {
+            return List.of(readonlyDb());
+        }
+        return databaseRegistry.secondary.values();
+    }
+
+    // --- txDb() variants ---
+
+    protected Optional<DSLContext> txDb() {
+        return databaseRegistry.defaultTransactionManager().currentTransactionDbContext();
+    }
+
+    protected Optional<DSLContext> txDb(DB_ID id) {
+        return txDb(effectiveShard(id));
+    }
+
+    protected Optional<DSLContext> txDb(PERSISTABLE p) {
+        return txDb(effectiveShard(p));
+    }
+
+    protected Optional<DSLContext> txDb(ShardIdentifier shard) {
+        return databaseRegistry.transactionManager(shard).currentTransactionDbContext();
+    }
+
+    // --- txDbElseDb() variants ---
+
     protected DSLContext txDbElseDb() {
         return txDb().orElseGet(this::db);
     }
 
-    protected Optional<DSLContext> txDb() {
-        return transactionManager.currentTransactionDbContext();
+    protected DSLContext txDbElseDb(DB_ID id) {
+        return txDb(id).orElseGet(() -> db(id));
     }
 
-    protected DSLContext db() {
-        return db;
+    protected DSLContext txDbElseDb(PERSISTABLE p) {
+        return txDb(p).orElseGet(() -> db(p));
     }
 
-    protected DSLContext readonlyDb() {
-        return readonlyDb;
+    protected DSLContext txDbElseDb(ShardIdentifier shard) {
+        return txDb(shard).orElseGet(() -> db(shard));
     }
+
+    // --- dialect helper ---
+
+    private SQLDialect dialect(ShardIdentifier shard) {
+        return databaseRegistry.transactionManager(shard).dialect;
+    }
+
+    // --- CRUD operations ---
 
     @Override
     public PERSISTABLE add(PERSISTABLE domainObject) {
         Validate.notNull(domainObject, getDomainTypeName() + " cannot be null");
+        var shard = effectiveShard(domainObject);
+        var dialect = dialect(shard);
 
-        if (transactionManager.dialect.equals(SQLDialect.MYSQL)) {
-            txDbElseDb().insertInto(table).set(toRecord(domainObject)).execute();
+        if (dialect.equals(SQLDialect.MYSQL)) {
+            txDbElseDb(shard).insertInto(table).set(toRecord(domainObject)).execute();
             return domainObject;
         }
 
-        return txDbElseDb()
+        return txDbElseDb(shard)
                 .insertInto(table)
                 .set(toRecord(domainObject))
                 .returning()
@@ -121,7 +213,8 @@ public abstract class AbstractRepository<
     @Override
     public void addNoResult(PERSISTABLE domainObject) {
         Validate.notNull(domainObject, getDomainTypeName() + " cannot be null");
-        txDbElseDb().insertInto(table).set(toRecord(domainObject)).execute();
+        var shard = effectiveShard(domainObject);
+        txDbElseDb(shard).insertInto(table).set(toRecord(domainObject)).execute();
     }
 
     @Override
@@ -143,15 +236,17 @@ public abstract class AbstractRepository<
                 })
                 .toList();
 
+        final var shard = effectiveShard(domainObjects);
+        final var dialect = dialect(shard);
         final var fields = records.getFirst().fields();
-        final var insert = txDbElseDb().insertInto(table, fields);
+        final var insert = txDbElseDb(shard).insertInto(table, fields);
 
         for (RECORD record : records) {
             final var values = Arrays.stream(fields).map(record::get).toArray();
             insert.values(values);
         }
 
-        if (transactionManager.dialect.equals(SQLDialect.MYSQL)) {
+        if (dialect.equals(SQLDialect.MYSQL)) {
             insert.execute();
             return List.copyOf(domainObjects);
         }
@@ -176,7 +271,8 @@ public abstract class AbstractRepository<
 
         final var records = domainObjects.stream().map(this::toRecord).toList();
         final var fields = records.getFirst().fields();
-        final var insert = txDbElseDb().insertInto(table, fields);
+        final var shard = effectiveShard(domainObjects);
+        final var insert = txDbElseDb(shard).insertInto(table, fields);
 
         records.forEach(
                 record -> insert.values(Arrays.stream(fields).map(record::get).toArray()));
@@ -194,9 +290,11 @@ public abstract class AbstractRepository<
         final RECORD record = toRecord(domainObject);
         final Long newVersion = currentVersion + 1;
         record.set(versionField, newVersion);
+        var shard = effectiveShard(domainObject);
+        var dialect = dialect(shard);
 
-        if (transactionManager.dialect.equals(SQLDialect.MYSQL)) {
-            final var affectedRows = txDbElseDb()
+        if (dialect.equals(SQLDialect.MYSQL)) {
+            final var affectedRows = txDbElseDb(shard)
                     .update(table)
                     .set(record)
                     .where(idField.eq(record.get(idField)))
@@ -211,7 +309,7 @@ public abstract class AbstractRepository<
             return (PERSISTABLE) domainObject.nextVersion();
         }
 
-        var updatedRecord = txDbElseDb()
+        var updatedRecord = txDbElseDb(shard)
                 .update(table)
                 .set(record)
                 .where(idField.eq(record.get(idField)))
@@ -239,7 +337,9 @@ public abstract class AbstractRepository<
         final Long newVersion = currentVersion + 1;
         record.set(versionField, newVersion);
 
-        int affectedRows = txDbElseDb()
+        final var shard = effectiveShard(domainObject);
+
+        int affectedRows = txDbElseDb(shard)
                 .update(table)
                 .set(record)
                 .where(idField.eq(record.get(idField)))
@@ -268,10 +368,11 @@ public abstract class AbstractRepository<
             return List.of(update(domainObjects.iterator().next()));
         }
 
+        final var shard = effectiveShard(domainObjects);
+        final var dialect = dialect(shard);
         final List<PERSISTABLE> updatedObjects;
-        if (transactionManager.dialect.equals(SQLDialect.MARIADB)
-                || transactionManager.dialect.equals(SQLDialect.MYSQL)) {
-            int affectedRows = buildUpdateAllQueryMariadb(domainObjects).execute();
+        if (dialect.equals(SQLDialect.MARIADB) || dialect.equals(SQLDialect.MYSQL)) {
+            int affectedRows = buildUpdateAllQueryMariadb(shard, domainObjects).execute();
 
             if (affectedRows < domainObjects.size()) {
                 throw new StaleRecordException(format(
@@ -282,7 +383,7 @@ public abstract class AbstractRepository<
                     .map(d -> (PERSISTABLE) d.nextVersion())
                     .toList();
         } else {
-            var updateQuery = buildUpdateAllQuery(domainObjects).returning();
+            var updateQuery = buildUpdateAllQuery(shard, domainObjects).returning();
             updatedObjects = updateQuery.fetch().map(this::fromRecord);
         }
 
@@ -307,11 +408,12 @@ public abstract class AbstractRepository<
         }
 
         int affectedRows;
-        if (transactionManager.dialect.equals(SQLDialect.MARIADB)
-                || transactionManager.dialect.equals(SQLDialect.MYSQL)) {
-            affectedRows = buildUpdateAllQueryMariadb(domainObjects).execute();
+        var shard = effectiveShard(domainObjects);
+        var dialect = dialect(shard);
+        if (dialect.equals(SQLDialect.MARIADB) || dialect.equals(SQLDialect.MYSQL)) {
+            affectedRows = buildUpdateAllQueryMariadb(shard, domainObjects).execute();
         } else {
-            affectedRows = buildUpdateAllQuery(domainObjects).execute();
+            affectedRows = buildUpdateAllQuery(shard, domainObjects).execute();
         }
 
         if (affectedRows != domainObjects.size()) {
@@ -320,7 +422,8 @@ public abstract class AbstractRepository<
         }
     }
 
-    private UpdateConditionStep<RECORD> buildUpdateAllQuery(Collection<PERSISTABLE> domainObjects) {
+    private UpdateConditionStep<RECORD> buildUpdateAllQuery(
+            ShardIdentifier shard, Collection<PERSISTABLE> domainObjects) {
         final var records = domainObjects.stream().map(this::toRecord).toList();
         final var fields = records.getFirst().fields();
 
@@ -330,7 +433,7 @@ public abstract class AbstractRepository<
 
         var values = DSL.values(rows).as("v", columnNames);
 
-        var update = txDbElseDb()
+        var update = txDbElseDb(shard)
                 .update(table)
                 .set(versionField, values.field(versionField).plus(1));
 
@@ -346,7 +449,7 @@ public abstract class AbstractRepository<
     }
 
     @SuppressWarnings("unchecked")
-    private Update<?> buildUpdateAllQueryMariadb(Collection<PERSISTABLE> domainObjects) {
+    private Update<?> buildUpdateAllQueryMariadb(ShardIdentifier shard, Collection<PERSISTABLE> domainObjects) {
         final var records = domainObjects.stream().map(this::toRecord).toList();
         final var fields = records.getFirst().fields();
 
@@ -368,7 +471,7 @@ public abstract class AbstractRepository<
 
         final var joinedTable = table.join(v).on(joinCondition);
 
-        var update = txDbElseDb().update(joinedTable);
+        var update = txDbElseDb(shard).update(joinedTable);
 
         var vVersion = v.field(versionField.getName(), versionField.getType());
         var step = update.set(versionField, vVersion.plus(1));
@@ -382,110 +485,145 @@ public abstract class AbstractRepository<
         return step;
     }
 
-    public Optional<PERSISTABLE> findById(ID id) {
-        return findOneWhere(idField.eq(id));
+    public Optional<PERSISTABLE> findById(DB_ID id) {
+        return Optional.ofNullable(db(id).selectFrom(table)
+                        .where(idField.eq(id).and(notDeleted()))
+                        .fetchOne())
+                .map(this::fromRecord);
     }
 
-    public PERSISTABLE getById(ID id) {
+    public PERSISTABLE getById(DB_ID id) {
         return findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
                         format("No entity found with id: %s[id=%s]", domainClass.getSimpleName(), id)));
     }
 
-    public List<PERSISTABLE> findAllByIds(Collection<ID> ids) {
+    public List<PERSISTABLE> findAllByIds(Collection<DB_ID> ids) {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
         }
 
         final var uniqueIds = new LinkedHashSet<>(ids);
+        var idsByShard = groupIdsByShard(uniqueIds);
 
-        if (transactionManager.dialect.equals(SQLDialect.MYSQL)) {
-            return readonlyDb()
-                    .selectFrom(table)
-                    .where(idField.in(uniqueIds))
-                    .and(notDeleted())
-                    .fetch()
-                    .map(this::fromRecord);
-        }
-
-        return readonlyDb()
-                .selectFrom(table)
-                .where(idField.eq(
-                        DSL.any(DSL.val(uniqueIds, idField.getDataType().getArrayDataType()))))
-                .and(notDeleted())
-                .fetch()
-                .map(this::fromRecord);
-    }
-
-    public List<PERSISTABLE> findAll(int offset, int limit, SortField<?>... sortFields) {
-        Validate.isTrue(ArrayUtils.isNotEmpty(sortFields), "Sort fields cannot be empty");
-        var query = readonlyDb().selectFrom(table).where(notDeleted());
-
-        return query.orderBy(sortFields).limit(offset, limit).fetch().map(this::fromRecord);
+        return idsByShard.entrySet().stream()
+                .flatMap(entry -> {
+                    var shard = entry.getKey();
+                    var dialect = dialect(shard);
+                    var ctx = db(shard);
+                    var shardIds = entry.getValue();
+                    if (dialect.equals(SQLDialect.MYSQL)) {
+                        return ctx
+                                .selectFrom(table)
+                                .where(idField.in(shardIds))
+                                .and(notDeleted())
+                                .fetch()
+                                .map(this::fromRecord)
+                                .stream();
+                    }
+                    return ctx
+                            .selectFrom(table)
+                            .where(idField.eq(DSL.any(
+                                    DSL.val(shardIds, idField.getDataType().getArrayDataType()))))
+                            .and(notDeleted())
+                            .fetch()
+                            .map(this::fromRecord)
+                            .stream();
+                })
+                .toList();
     }
 
     @Override
     public List<PERSISTABLE> findAll() {
-        return db().selectFrom(table).where(notDeleted()).fetch().map(this::fromRecord);
+        return dbs().stream()
+                .flatMap(ctx -> ctx.selectFrom(table).where(notDeleted()).fetch().map(this::fromRecord).stream())
+                .toList();
     }
 
-    public List<PERSISTABLE> findAllWhere(Condition condition, SortField<?>... sortFields) {
-        var query = db().selectFrom(table).where(condition.and(notDeleted()));
-
-        if (ArrayUtils.isNotEmpty(sortFields)) {
-            return query.orderBy(sortFields).fetch().map(this::fromRecord);
-        }
-
-        return query.fetch().map(this::fromRecord);
-    }
-
-    public List<PERSISTABLE> findAllWhere(Condition condition, int offset, int limit, SortField<?>... sortFields) {
-        var query = db().selectFrom(table).where(condition.and(notDeleted()));
-
-        if (ArrayUtils.isNotEmpty(sortFields)) {
-            return query.orderBy(sortFields).limit(offset, limit).fetch().map(this::fromRecord);
-        }
-
-        return query.limit(offset, limit).fetch().map(this::fromRecord);
-    }
-
-    public boolean existsById(ID id) {
-        return db().fetchExists(
-                        db().selectOne().from(table).where(idField.eq(id).and(notDeleted())));
+    public boolean existsById(DB_ID id) {
+        final var shard = effectiveShard(id);
+        var ctx = db(shard);
+        return ctx.fetchExists(ctx.selectOne().from(table).where(idField.eq(id).and(notDeleted())));
     }
 
     public long count() {
-        return db().fetchCount(table, notDeleted());
+        return dbs().stream()
+                .mapToLong(ctx -> ctx.fetchCount(table, notDeleted()))
+                .sum();
     }
 
     public long countWhere(Condition condition) {
-        return db().fetchCount(table, condition.and(notDeleted()));
+        return dbs().stream()
+                .mapToLong(ctx -> ctx.fetchCount(table, condition.and(notDeleted())))
+                .sum();
     }
 
     public Optional<PERSISTABLE> findOneWhere(Condition condition) {
-        return Optional.ofNullable(db().selectFrom(table)
-                        .where(condition.and(notDeleted()))
-                        .fetchOne())
-                .map(this::fromRecord);
-    }
-
-    public List<PERSISTABLE> findAllWhere(
-            Condition condition, int offset, int limit, Collection<SortField<?>> sortFields) {
-        var query = db().selectFrom(table).where(condition.and(notDeleted()));
-
-        if (CollectionUtils.isNotEmpty(sortFields)) {
-            return query.orderBy(sortFields).limit(offset, limit).fetch().map(this::fromRecord);
-        }
-
-        return query.limit(offset, limit).fetch().map(this::fromRecord);
+        return dbs().stream()
+                .map(ctx ->
+                        ctx.selectFrom(table).where(condition.and(notDeleted())).fetchOne())
+                .filter(Objects::nonNull)
+                .map(this::fromRecord)
+                .findFirst();
     }
 
     public List<PERSISTABLE> findAllWhere(Condition condition) {
-        return db().selectFrom(table).where(condition.and(notDeleted())).fetch().map(this::fromRecord);
+        return dbs().stream()
+                .flatMap(ctx ->
+                        ctx.selectFrom(table).where(condition.and(notDeleted())).fetch().map(this::fromRecord).stream())
+                .toList();
     }
 
     public boolean existsWhere(Condition condition) {
-        return db().fetchExists(db().selectOne().from(table).where(condition.and(notDeleted())));
+        return dbs().stream()
+                .anyMatch(ctx -> ctx.fetchExists(ctx.selectOne().from(table).where(condition.and(notDeleted()))));
+    }
+
+    protected ShardIdentifier effectiveShard(PERSISTABLE domainObject) {
+        var shard = shardingStrategy.resolveShardIdentifier(domainObject).orElse(databaseRegistry.defaultShard);
+        return databaseRegistry.effectiveShard(shard);
+    }
+
+    protected ShardIdentifier effectiveShard(DB_ID id) {
+        rejectNonIdBasedStrategy();
+        var shard = shardingStrategy.resolveShardIdentifierById(id).orElse(databaseRegistry.defaultShard);
+        return databaseRegistry.effectiveShard(shard);
+    }
+
+    protected ShardIdentifier effectiveShard(Collection<PERSISTABLE> domainObjects) {
+        if (shardingStrategy instanceof NoShardingStrategy<?>) {
+            return databaseRegistry.defaultShard;
+        }
+        ShardIdentifier first = null;
+        for (var p : domainObjects) {
+            var shard = databaseRegistry.effectiveShard(
+                    shardingStrategy.resolveShardIdentifier(p).orElse(databaseRegistry.defaultShard));
+            if (first == null) {
+                first = shard;
+            } else if (!first.equals(shard)) {
+                throw new CrossShardException(first, shard);
+            }
+        }
+        return first != null ? first : databaseRegistry.defaultShard;
+    }
+
+    private Map<ShardIdentifier, Collection<DB_ID>> groupIdsByShard(Collection<DB_ID> ids) {
+        var result = new LinkedHashMap<ShardIdentifier, Collection<DB_ID>>();
+        for (var id : ids) {
+            final var shard = effectiveShard(id);
+            result.computeIfAbsent(shard, _ -> new ArrayList<>()).add(id);
+        }
+        return result;
+    }
+
+    private void rejectNonIdBasedStrategy() {
+        if (shardingStrategy instanceof NoShardingStrategy<?>) {
+            return;
+        }
+        if (!shardingStrategy.usesShardAwareId()) {
+            throw new UnsupportedOperationException(
+                    "Sharding strategy does not support ID-based shard resolution. Override this method in your repository subclass.");
+        }
     }
 
     private Condition notDeleted() {
@@ -509,7 +647,6 @@ public abstract class AbstractRepository<
         return null;
     }
 
-    @SuppressWarnings("unchecked")
     private <T, R extends Record> UpdateSetMoreStep<R> setField(
             UpdateSetStep<R> update, Field<T> targetField, Table<?> values) {
         final var sourceField = values.field(targetField.getName(), targetField.getType());

@@ -15,7 +15,8 @@ include(
     "ekbatan-core:ekbatan-core-repo-test:ekbatan-core-repo-test-pg:repository",
     "ekbatan-core:ekbatan-core-repo-test:ekbatan-core-repo-test-pg:dual-table-events",
     "ekbatan-core:ekbatan-core-repo-test:ekbatan-core-repo-test-pg:single-table-events",
-    "ekbatan-examples:postgres-dual-table-events",
-    "ekbatan-examples:postgres-single-table-events",
+    "ekbatan-integration-tests:postgres-dual-table-events",
+    "ekbatan-integration-tests:postgres-single-table-events",
+    "ekbatan-integration-tests:postgres-sharded",
     "ekbatan-annotation-processor"
 )

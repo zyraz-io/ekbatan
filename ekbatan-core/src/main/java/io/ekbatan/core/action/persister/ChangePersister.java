@@ -1,16 +1,17 @@
 package io.ekbatan.core.action.persister;
 
-import io.ekbatan.core.action.Action;
 import io.ekbatan.core.action.persister.event.EventPersister;
 import io.ekbatan.core.domain.Model;
 import io.ekbatan.core.domain.ModelEvent;
 import io.ekbatan.core.domain.Persistable;
 import io.ekbatan.core.repository.Repository;
 import io.ekbatan.core.repository.RepositoryRegistry;
+import io.ekbatan.core.shard.ShardIdentifier;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.Validate;
 
@@ -26,32 +27,34 @@ public class ChangePersister {
         this.clock = Validate.notNull(clock, "clock cannot be null");
     }
 
-    public void persist(Action<?, ?> action, Object params, Instant actionStartDate) {
+    public void persist(
+            String actionName,
+            Object params,
+            Instant actionStartDate,
+            Map<Class<? extends Persistable<?>>, PersistableChanges<?, ?>> changes,
+            ShardIdentifier shard,
+            java.util.UUID actionEventId) {
         final var actionCompletionDate = clock.instant();
-        final var actionPlan = action.plan;
         final var modelEvents = new ArrayList<ModelEvent<?>>();
 
-        if (actionPlan.hasChanges()) {
+        for (var entry : changes.entrySet()) {
+            final var entityClass = entry.getKey();
+            final var entityChanges = entry.getValue();
+            final var repository = repositoryRegistry.repository(entityClass);
 
-            for (var entry : actionPlan.changes().entrySet()) {
-                final var entityClass = entry.getKey();
-                final var changes = entry.getValue();
-                final var repository = repositoryRegistry.repository(entityClass);
-
-                if (Model.class.isAssignableFrom(entityClass)) {
-                    modelEvents.addAll(extractModelEvents(changes));
-                }
-
-                if (repository == null) {
-                    throw new IllegalStateException("No repository found for entity type: " + entityClass.getName());
-                }
-
-                applyChanges(repository, changes);
+            if (Model.class.isAssignableFrom(entityClass)) {
+                modelEvents.addAll(extractModelEvents(entityChanges));
             }
+
+            if (repository == null) {
+                throw new IllegalStateException("No repository found for entity type: " + entityClass.getName());
+            }
+
+            applyChanges(repository, entityChanges);
         }
 
         eventPersister.persistActionEvents(
-                action.getClass().getSimpleName(), actionStartDate, actionCompletionDate, params, modelEvents);
+                actionName, actionStartDate, actionCompletionDate, params, modelEvents, shard, actionEventId);
     }
 
     private List<ModelEvent<?>> extractModelEvents(

@@ -12,7 +12,7 @@ class PersistableChangesTest {
 
     // Minimal entity for testing
     static class Item extends Entity<Item, Id<Item>, GenericState> {
-        Item(Builder builder) {
+        Item(ItemBuilder builder) {
             super(builder);
         }
 
