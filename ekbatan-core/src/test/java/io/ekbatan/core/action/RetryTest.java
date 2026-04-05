@@ -13,7 +13,7 @@ class RetryTest {
     @Test
     void execute_returns_result_on_success() throws Exception {
         // GIVEN
-        var retry = Retry.with(Map.of());
+        var retry = Retry.with(Map.of(), "TestAction");
 
         // WHEN
         var result = retry.execute(() -> "ok");
@@ -25,7 +25,7 @@ class RetryTest {
     @Test
     void execute_throws_when_no_retry_configured() {
         // GIVEN
-        var retry = Retry.with(Map.of());
+        var retry = Retry.with(Map.of(), "TestAction");
 
         // WHEN / THEN
         assertThatThrownBy(() -> retry.execute(() -> {
@@ -39,7 +39,7 @@ class RetryTest {
     void execute_retries_on_configured_exception() throws Exception {
         // GIVEN
         var config = new RetryConfig(2, Duration.ZERO);
-        var retry = Retry.with(Map.of(IllegalStateException.class, config));
+        var retry = Retry.with(Map.of(IllegalStateException.class, config), "TestAction");
         var attempts = new AtomicInteger(0);
 
         // WHEN
@@ -61,7 +61,7 @@ class RetryTest {
     void execute_throws_after_max_attempts_exhausted() {
         // GIVEN
         var config = new RetryConfig(1, Duration.ZERO);
-        var retry = Retry.with(Map.of(IllegalStateException.class, config));
+        var retry = Retry.with(Map.of(IllegalStateException.class, config), "TestAction");
         var attempts = new AtomicInteger(0);
 
         // WHEN / THEN
@@ -79,7 +79,7 @@ class RetryTest {
     void execute_does_not_retry_unconfigured_exception_type() {
         // GIVEN
         var config = new RetryConfig(3, Duration.ZERO);
-        var retry = Retry.with(Map.of(IllegalStateException.class, config));
+        var retry = Retry.with(Map.of(IllegalStateException.class, config), "TestAction");
         var attempts = new AtomicInteger(0);
 
         // WHEN / THEN
@@ -97,7 +97,7 @@ class RetryTest {
     void execute_with_zero_max_attempts_does_not_retry() {
         // GIVEN
         var config = new RetryConfig(0, Duration.ZERO);
-        var retry = Retry.with(Map.of(IllegalStateException.class, config));
+        var retry = Retry.with(Map.of(IllegalStateException.class, config), "TestAction");
         var attempts = new AtomicInteger(0);
 
         // WHEN / THEN
@@ -115,7 +115,7 @@ class RetryTest {
     void execute_retries_exact_number_of_times() throws Exception {
         // GIVEN
         var config = new RetryConfig(3, Duration.ZERO);
-        var retry = Retry.with(Map.of(IllegalStateException.class, config));
+        var retry = Retry.with(Map.of(IllegalStateException.class, config), "TestAction");
         var attempts = new AtomicInteger(0);
 
         // WHEN

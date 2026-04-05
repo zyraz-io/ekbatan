@@ -17,16 +17,20 @@ import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import java.security.Principal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.Validate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tools.jackson.databind.ObjectMapper;
 
 public class ActionExecutor {
 
+    private static final Logger LOG = LoggerFactory.getLogger(ActionExecutor.class);
     private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
 
     private final DatabaseRegistry databaseRegistry;
@@ -66,13 +70,17 @@ public class ActionExecutor {
 
         final var action = actionRegistry.get(actionClass);
         final var actionName = actionClass.getSimpleName();
+        final var principalName = principal != null ? principal.getName() : "";
+        final var startTime = clock.instant();
+
+        LOG.info("Executing {} [principal={}]", actionName, principalName);
 
         final var actionSpan = TRACER.spanBuilder("ekbatan.action.execute")
                 .setAttribute("ekbatan.action.name", actionName)
-                .setAttribute("ekbatan.action.principal", principal != null ? principal.getName() : "")
+                .setAttribute("ekbatan.action.principal", principalName)
                 .startSpan();
         try (var _ = actionSpan.makeCurrent()) {
-            final var result = Retry.<R>with(executionConfiguration.retryConfigs)
+            final var result = Retry.<R>with(executionConfiguration.retryConfigs, actionName)
                     .execute(() -> {
                         final var actionStartDate = clock.instant();
 
@@ -94,11 +102,17 @@ public class ActionExecutor {
                     });
 
             actionSpan.setAttribute("ekbatan.action.outcome", "success");
+            LOG.info(
+                    "{} completed in {}ms [principal={}]",
+                    actionName,
+                    Duration.between(startTime, clock.instant()).toMillis(),
+                    principalName);
             return result;
         } catch (Exception e) {
             actionSpan.setAttribute("ekbatan.action.outcome", "error");
             actionSpan.setStatus(StatusCode.ERROR, e.getMessage());
             actionSpan.recordException(e);
+            LOG.error("{} failed: {}: {}", actionName, e.getClass().getSimpleName(), e.getMessage());
             throw e;
         } finally {
             actionSpan.end();
@@ -111,10 +125,24 @@ public class ActionExecutor {
         final var persistSpan = TRACER.spanBuilder("ekbatan.action.persist").startSpan();
         try (var _ = persistSpan.makeCurrent()) {
             var changesByShard = groupChangesByShard(action.plan);
-            enforceSingleShard(changesByShard.keySet(), config);
+
+            if (!changesByShard.isEmpty()) {
+                LOG.debug(
+                        "Resolved {} entity types across {} shards [shards={}]",
+                        action.plan.changes().size(),
+                        changesByShard.size(),
+                        changesByShard.keySet());
+            }
+
+            enforceSingleShard(action.getClass().getSimpleName(), changesByShard.keySet(), config);
 
             if (changesByShard.size() > 1) {
                 persistSpan.setAttribute("ekbatan.shard.cross_shard", true);
+                LOG.warn(
+                        "{} spans {} shards: {} [allowCrossShard=true]",
+                        action.getClass().getSimpleName(),
+                        changesByShard.size(),
+                        changesByShard.keySet());
             }
 
             if (changesByShard.isEmpty()) {
@@ -200,8 +228,10 @@ public class ActionExecutor {
         return databaseRegistry.effectiveShard(shard);
     }
 
-    private void enforceSingleShard(Set<ShardIdentifier> shards, ExecutionConfiguration executionConfiguration) {
+    private void enforceSingleShard(
+            String actionName, Set<ShardIdentifier> shards, ExecutionConfiguration executionConfiguration) {
         if (shards.size() > 1 && !executionConfiguration.allowCrossShard) {
+            LOG.error("{} rejected: spans {} shards {} but cross-shard is disabled", actionName, shards.size(), shards);
             var iterator = shards.iterator();
             throw new CrossShardException(iterator.next(), iterator.next());
         }

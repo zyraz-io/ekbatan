@@ -43,6 +43,9 @@ dependencies {
     // Jackson for JSON serialization
     api("tools.jackson.core:jackson-databind:${project.property("jacksonDatabindVersion")}")
 
+    // SLF4J API (no-op when no backend is present)
+    api("org.slf4j:slf4j-api:${project.property("slf4jVersion")}")
+
     // OpenTelemetry API (no-op when no SDK is present)
     api("io.opentelemetry:opentelemetry-api:${project.property("opentelemetryVersion")}")
 

@@ -12,9 +12,12 @@ import java.util.function.Function;
 import org.apache.commons.lang3.Validate;
 import org.jooq.DSLContext;
 import org.jooq.SQLDialect;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TransactionManager {
 
+    private static final Logger LOG = LoggerFactory.getLogger(TransactionManager.class);
     private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
 
     public final SQLDialect dialect;
@@ -89,11 +92,18 @@ public class TransactionManager {
             return ScopedValue.where(currentTransaction, wrapper).call(() -> {
                 try {
                     wrapper.begin();
+                    LOG.debug("Transaction started [shard=({},{})]", shardIdentifier.group, shardIdentifier.member);
                     final var result = block.apply(wrapper.dslContext());
                     wrapper.commit();
+                    LOG.debug("Transaction committed [shard=({},{})]", shardIdentifier.group, shardIdentifier.member);
                     return result;
                 } catch (Exception e) {
                     wrapper.rollback();
+                    LOG.warn(
+                            "Transaction rolled back [shard=({},{})]: {}",
+                            shardIdentifier.group,
+                            shardIdentifier.member,
+                            e.getClass().getSimpleName());
                     span.setStatus(StatusCode.ERROR, e.getMessage());
                     span.recordException(e);
                     throw e;

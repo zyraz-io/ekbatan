@@ -9,24 +9,92 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.ekbatan.core.action.ActionExecutor;
+import io.ekbatan.core.config.DataSourceConfig;
+import io.ekbatan.core.persistence.ConnectionProvider;
+import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.CrossShardException;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
-import io.ekbatan.test.postgres_sharded.test.PgShardedBaseTest;
 import io.ekbatan.test.postgres_sharded.wallet.models.Wallet;
 import io.ekbatan.test.postgres_sharded.wallet.repository.WalletRepository;
 import java.time.Clock;
-import org.junit.jupiter.api.BeforeEach;
+import org.flywaydb.core.Flyway;
+import org.jooq.SQLDialect;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
-public class ShardedWalletIntegrationTest extends PgShardedBaseTest {
+@Testcontainers
+public class ShardedWalletIntegrationTest {
 
-    private WalletRepository walletRepo;
-    private ActionExecutor executor;
+    @Container
+    private static final PostgreSQLContainer globalDb = new PostgreSQLContainer("postgres:latest")
+            .withDatabaseName("global_db")
+            .withUsername("test")
+            .withPassword("test")
+            .withEnv("TZ", "UTC");
 
-    @BeforeEach
-    void setUp() {
+    @Container
+    private static final PostgreSQLContainer mexicoDb = new PostgreSQLContainer("postgres:latest")
+            .withDatabaseName("mexico_db")
+            .withUsername("test")
+            .withPassword("test")
+            .withEnv("TZ", "UTC");
+
+    private static final ShardIdentifier GLOBAL_SHARD = ShardIdentifier.of(0, 0);
+    private static final ShardIdentifier MEXICO_SHARD = ShardIdentifier.of(1, 0);
+
+    private static DatabaseRegistry databaseRegistry;
+    private static WalletRepository walletRepo;
+    private static ActionExecutor executor;
+
+    @BeforeAll
+    static void setUp() {
+        var globalConfig = DataSourceConfig.Builder.dataSourceConfig()
+                .jdbcUrl(globalDb.getJdbcUrl())
+                .username(globalDb.getUsername())
+                .password(globalDb.getPassword())
+                .maximumPoolSize(10)
+                .build();
+        var globalTm = new TransactionManager(
+                ConnectionProvider.hikariConnectionProvider(globalConfig),
+                ConnectionProvider.hikariConnectionProvider(globalConfig),
+                SQLDialect.POSTGRES,
+                GLOBAL_SHARD);
+
+        var mexicoConfig = DataSourceConfig.Builder.dataSourceConfig()
+                .jdbcUrl(mexicoDb.getJdbcUrl())
+                .username(mexicoDb.getUsername())
+                .password(mexicoDb.getPassword())
+                .maximumPoolSize(10)
+                .build();
+        var mexicoTm = new TransactionManager(
+                ConnectionProvider.hikariConnectionProvider(mexicoConfig),
+                ConnectionProvider.hikariConnectionProvider(mexicoConfig),
+                SQLDialect.POSTGRES,
+                MEXICO_SHARD);
+
+        databaseRegistry = databaseRegistry()
+                .withDatabase(globalTm.shardIdentifier, globalTm)
+                .withDatabase(mexicoTm.shardIdentifier, mexicoTm)
+                .defaultShard(GLOBAL_SHARD)
+                .build();
+
+        Flyway.configure()
+                .dataSource(globalDb.getJdbcUrl(), globalDb.getUsername(), globalDb.getPassword())
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+
+        Flyway.configure()
+                .dataSource(mexicoDb.getJdbcUrl(), mexicoDb.getUsername(), mexicoDb.getPassword())
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+
         walletRepo = new WalletRepository(databaseRegistry);
 
         var repositoryRegistry = repositoryRegistry()

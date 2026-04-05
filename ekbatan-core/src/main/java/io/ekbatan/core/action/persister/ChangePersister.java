@@ -14,8 +14,12 @@ import java.util.List;
 import java.util.Map;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.Validate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ChangePersister {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ChangePersister.class);
 
     private final RepositoryRegistry repositoryRegistry;
     private final EventPersister eventPersister;
@@ -37,6 +41,12 @@ public class ChangePersister {
         final var actionCompletionDate = clock.instant();
         final var modelEvents = new ArrayList<ModelEvent<?>>();
 
+        final var addCount =
+                changes.values().stream().mapToInt(c -> c.additions().size()).sum();
+        final var updateCount =
+                changes.values().stream().mapToInt(c -> c.updates().size()).sum();
+        LOG.debug("Persisting {} additions, {} updates", addCount, updateCount);
+
         for (var entry : changes.entrySet()) {
             final var entityClass = entry.getKey();
             final var entityChanges = entry.getValue();
@@ -55,6 +65,7 @@ public class ChangePersister {
 
         eventPersister.persistActionEvents(
                 actionName, actionStartDate, actionCompletionDate, params, modelEvents, shard, actionEventId);
+        LOG.debug("Persisted events for action {} [actionEventId={}]", actionName, actionEventId);
     }
 
     private List<ModelEvent<?>> extractModelEvents(

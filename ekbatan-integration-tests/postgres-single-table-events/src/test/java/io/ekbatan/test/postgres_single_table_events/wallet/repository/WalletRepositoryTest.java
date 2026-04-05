@@ -8,10 +8,12 @@ import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.ekbatan.core.config.DataSourceConfig;
 import io.ekbatan.core.domain.TypedValue;
+import io.ekbatan.core.persistence.ConnectionProvider;
+import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.exception.EntityNotFoundException;
 import io.ekbatan.core.repository.exception.StaleRecordException;
-import io.ekbatan.test.postgres_single_table_events.test.PgRepositoryTest;
 import io.ekbatan.test.postgres_single_table_events.wallet.models.Wallet;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -20,18 +22,48 @@ import java.util.Currency;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import org.flywaydb.core.Flyway;
 import org.jooq.DSLContext;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
-class WalletRepositoryTest extends PgRepositoryTest {
+@Testcontainers
+class WalletRepositoryTest {
 
-    private WalletRepository walletRepository;
+    @Container
+    private static final PostgreSQLContainer db = new PostgreSQLContainer("postgres:latest")
+            .withDatabaseName("testdb")
+            .withUsername("test")
+            .withPassword("test")
+            .withEnv("TZ", "UTC");
 
-    @BeforeEach
-    void setUp() {
+    private static TransactionManager transactionManager;
+    private static WalletRepository walletRepository;
+
+    @BeforeAll
+    static void setUp() {
+        var dataSourceConfig = DataSourceConfig.Builder.dataSourceConfig()
+                .jdbcUrl(db.getJdbcUrl())
+                .username(db.getUsername())
+                .password(db.getPassword())
+                .maximumPoolSize(10)
+                .build();
+        transactionManager = new TransactionManager(
+                ConnectionProvider.hikariConnectionProvider(dataSourceConfig),
+                ConnectionProvider.hikariConnectionProvider(dataSourceConfig),
+                SQLDialect.POSTGRES);
+
+        Flyway.configure()
+                .dataSource(db.getJdbcUrl(), db.getUsername(), db.getPassword())
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+
         var databaseRegistry = databaseRegistry()
                 .withDatabase(transactionManager.shardIdentifier, transactionManager)
                 .defaultShard(transactionManager.shardIdentifier)

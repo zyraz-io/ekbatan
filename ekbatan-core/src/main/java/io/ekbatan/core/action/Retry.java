@@ -3,17 +3,23 @@ package io.ekbatan.core.action;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.trace.Span;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 final class Retry<R> {
 
-    public final Map<Class<? extends Exception>, RetryConfig> retryConfigs;
+    private static final Logger LOG = LoggerFactory.getLogger(Retry.class);
 
-    private Retry(Map<Class<? extends Exception>, RetryConfig> retryConfigs) {
+    public final Map<Class<? extends Exception>, RetryConfig> retryConfigs;
+    private final String actionName;
+
+    private Retry(Map<Class<? extends Exception>, RetryConfig> retryConfigs, String actionName) {
         this.retryConfigs = retryConfigs;
+        this.actionName = actionName;
     }
 
-    public static <R> Retry<R> with(Map<Class<? extends Exception>, RetryConfig> retryConfigs) {
-        return new Retry<>(retryConfigs);
+    public static <R> Retry<R> with(Map<Class<? extends Exception>, RetryConfig> retryConfigs, String actionName) {
+        return new Retry<>(retryConfigs, actionName);
     }
 
     public R execute(CheckedSupplier<R> operation) throws Exception {
@@ -29,6 +35,13 @@ final class Retry<R> {
                     throw e;
                 }
                 currentRetryCount++;
+                LOG.warn(
+                        "Retrying {} (retry {}/{}) due to {}: {}",
+                        actionName,
+                        currentRetryCount,
+                        config.maxRetries,
+                        e.getClass().getSimpleName(),
+                        e.getMessage());
                 Span.current()
                         .addEvent(
                                 "retry",
