@@ -18,7 +18,7 @@ class ExecutionConfigurationTest {
         // THEN
         assertThat(config.retryConfigs).containsKey(StaleRecordException.class);
         var retryConfig = config.retryConfigs.get(StaleRecordException.class);
-        assertThat(retryConfig.maxAttempts).isEqualTo(1);
+        assertThat(retryConfig.maxRetries).isEqualTo(1);
         assertThat(retryConfig.delay).isEqualTo(Duration.ofMillis(100));
     }
 
@@ -33,7 +33,7 @@ class ExecutionConfigurationTest {
         assertThat(config.retryConfigs).hasSize(2);
         assertThat(config.retryConfigs).containsKey(StaleRecordException.class);
         assertThat(config.retryConfigs).containsKey(IllegalStateException.class);
-        assertThat(config.retryConfigs.get(IllegalStateException.class).maxAttempts)
+        assertThat(config.retryConfigs.get(IllegalStateException.class).maxRetries)
                 .isEqualTo(3);
     }
 
@@ -46,7 +46,7 @@ class ExecutionConfigurationTest {
 
         // THEN
         assertThat(config.retryConfigs).hasSize(1);
-        assertThat(config.retryConfigs.get(StaleRecordException.class).maxAttempts)
+        assertThat(config.retryConfigs.get(StaleRecordException.class).maxRetries)
                 .isEqualTo(5);
     }
 

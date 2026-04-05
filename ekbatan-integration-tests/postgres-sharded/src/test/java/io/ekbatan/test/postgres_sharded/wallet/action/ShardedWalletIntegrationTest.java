@@ -260,8 +260,9 @@ public class ShardedWalletIntegrationTest extends PgShardedBaseTest {
     // --- Helpers ---
 
     private DatabaseRegistry singleShardRegistry(ShardIdentifier shard) {
+        var tm = databaseRegistry.transactionManager(shard);
         return databaseRegistry()
-                .withDatabase(shard, databaseRegistry.transactionManager(shard))
+                .withDatabase(tm.shardIdentifier, tm)
                 .defaultShard(shard)
                 .build();
     }

@@ -11,7 +11,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.ekbatan.core.domain.TypedValue;
 import io.ekbatan.core.repository.exception.EntityNotFoundException;
 import io.ekbatan.core.repository.exception.StaleRecordException;
-import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.test.postgres_single_table_events.test.PgRepositoryTest;
 import io.ekbatan.test.postgres_single_table_events.wallet.models.Wallet;
 import java.math.BigDecimal;
@@ -34,8 +33,8 @@ class WalletRepositoryTest extends PgRepositoryTest {
     @BeforeEach
     void setUp() {
         var databaseRegistry = databaseRegistry()
-                .withDatabase(ShardIdentifier.DEFAULT, transactionManager)
-                .defaultShard(ShardIdentifier.DEFAULT)
+                .withDatabase(transactionManager.shardIdentifier, transactionManager)
+                .defaultShard(transactionManager.shardIdentifier)
                 .build();
         walletRepository = new WalletRepository(databaseRegistry);
     }

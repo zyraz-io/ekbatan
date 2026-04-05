@@ -39,12 +39,12 @@ public class MariadbShardedRepositoryTest extends BaseShardedRepositoryTest {
         SHARD_A_CONTAINER.start();
         SHARD_B_CONTAINER.start();
 
-        var tmA = createTransactionManager(SHARD_A_CONTAINER);
-        var tmB = createTransactionManager(SHARD_B_CONTAINER);
+        var tmA = createTransactionManager(SHARD_A_CONTAINER, SHARD_A);
+        var tmB = createTransactionManager(SHARD_B_CONTAINER, SHARD_B);
 
         DATABASE_REGISTRY = databaseRegistry()
-                .withDatabase(SHARD_A, tmA)
-                .withDatabase(SHARD_B, tmB)
+                .withDatabase(tmA.shardIdentifier, tmA)
+                .withDatabase(tmB.shardIdentifier, tmB)
                 .defaultShard(SHARD_A)
                 .build();
 
@@ -63,7 +63,8 @@ public class MariadbShardedRepositoryTest extends BaseShardedRepositoryTest {
         return new ShardedDummyRepository(registry);
     }
 
-    private static TransactionManager createTransactionManager(MariaDBContainer container) {
+    private static TransactionManager createTransactionManager(
+            MariaDBContainer container, io.ekbatan.core.shard.ShardIdentifier shard) {
         var config = DataSourceConfig.Builder.dataSourceConfig()
                 .jdbcUrl(container.getJdbcUrl())
                 .username(container.getUsername())
@@ -72,7 +73,8 @@ public class MariadbShardedRepositoryTest extends BaseShardedRepositoryTest {
                 .build();
         var primaryConnectionProvider = ConnectionProvider.hikariConnectionProvider(config);
         var secondaryConnectionProvider = ConnectionProvider.hikariConnectionProvider(config);
-        return new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider, SQLDialect.MARIADB);
+        return new TransactionManager(
+                primaryConnectionProvider, secondaryConnectionProvider, SQLDialect.MARIADB, shard);
     }
 
     private static void runMigrations(MariaDBContainer container) {

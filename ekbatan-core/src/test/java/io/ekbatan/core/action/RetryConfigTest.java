@@ -14,7 +14,7 @@ class RetryConfigTest {
         var config = new RetryConfig(3, Duration.ofMillis(200));
 
         // THEN
-        assertThat(config.maxAttempts).isEqualTo(3);
+        assertThat(config.maxRetries).isEqualTo(3);
 
         // AND
         assertThat(config.delay).isEqualTo(Duration.ofMillis(200));
@@ -26,7 +26,7 @@ class RetryConfigTest {
         var config = new RetryConfig(0, Duration.ZERO);
 
         // THEN
-        assertThat(config.maxAttempts).isZero();
+        assertThat(config.maxRetries).isZero();
     }
 
     @Test
@@ -34,7 +34,7 @@ class RetryConfigTest {
         // GIVEN / WHEN / THEN
         assertThatThrownBy(() -> new RetryConfig(-1, Duration.ZERO))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("maxAttempts must be non-negative");
+                .hasMessageContaining("maxRetries must be non-negative");
     }
 
     @Test

@@ -5,7 +5,6 @@ import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import io.ekbatan.core.config.DataSourceConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
-import io.ekbatan.core.shard.ShardIdentifier;
 import org.flywaydb.core.Flyway;
 import org.jooq.SQLDialect;
 import org.testcontainers.junit.jupiter.Container;
@@ -50,8 +49,8 @@ public class PgRepositoryTest extends BaseRepositoryTest {
         flyway.migrate();
 
         var databaseRegistry = databaseRegistry()
-                .withDatabase(ShardIdentifier.DEFAULT, TRANSACTION_MANAGER)
-                .defaultShard(ShardIdentifier.DEFAULT)
+                .withDatabase(TRANSACTION_MANAGER.shardIdentifier, TRANSACTION_MANAGER)
+                .defaultShard(TRANSACTION_MANAGER.shardIdentifier)
                 .build();
         REPOSITORY = new DummyRepository(databaseRegistry);
     }

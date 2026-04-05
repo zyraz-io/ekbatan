@@ -42,10 +42,32 @@ dependencies {
 
     // Jackson for JSON serialization
     api("tools.jackson.core:jackson-databind:${project.property("jacksonDatabindVersion")}")
+
+    // OpenTelemetry API (no-op when no SDK is present)
+    api("io.opentelemetry:opentelemetry-api:${project.property("opentelemetryVersion")}")
+
+    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:${project.property("opentelemetryVersion")}")
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// Tracing tests require a separate JVM fork because the OTel SDK must be registered
+// before any instrumented class loads its static Tracer field via GlobalOpenTelemetry.
+tasks.register<Test>("tracingTest") {
+    useJUnitPlatform {
+        includeTags("tracing")
+    }
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform {
+        excludeTags("tracing")
+    }
+    finalizedBy("tracingTest")
 }
 
 publishing {

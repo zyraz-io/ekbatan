@@ -10,6 +10,9 @@ import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.NoShardingStrategy;
 import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.core.shard.ShardingStrategy;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.Tracer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -55,6 +58,8 @@ public abstract class AbstractRepository<
     protected final TableField<RECORD, Long> versionField;
     protected final TableField<RECORD, String> stateField;
     protected final Class<PERSISTABLE> domainClass;
+
+    private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
 
     private static final String VERSION_FIELD_NAME = "version";
     private static final String STATE_FIELD_NAME = "state";
@@ -269,14 +274,27 @@ public abstract class AbstractRepository<
             return;
         }
 
-        final var records = domainObjects.stream().map(this::toRecord).toList();
-        final var fields = records.getFirst().fields();
-        final var shard = effectiveShard(domainObjects);
-        final var insert = txDbElseDb(shard).insertInto(table, fields);
+        final var span = TRACER.spanBuilder("ekbatan.repository")
+                .setAttribute("db.operation.name", "BATCH_INSERT")
+                .setAttribute("ekbatan.entity.type", domainClass.getSimpleName())
+                .setAttribute("ekbatan.batch.size", domainObjects.size())
+                .startSpan();
+        try (var _ = span.makeCurrent()) {
+            final var records = domainObjects.stream().map(this::toRecord).toList();
+            final var fields = records.getFirst().fields();
+            final var shard = effectiveShard(domainObjects);
+            final var insert = txDbElseDb(shard).insertInto(table, fields);
 
-        records.forEach(
-                record -> insert.values(Arrays.stream(fields).map(record::get).toArray()));
-        insert.execute();
+            records.forEach(record ->
+                    insert.values(Arrays.stream(fields).map(record::get).toArray()));
+            insert.execute();
+        } catch (Exception e) {
+            span.setStatus(StatusCode.ERROR, e.getMessage());
+            span.recordException(e);
+            throw e;
+        } finally {
+            span.end();
+        }
     }
 
     @Override
@@ -402,23 +420,36 @@ public abstract class AbstractRepository<
             return;
         }
 
-        if (domainObjects.size() == 1) {
-            updateNoResult(domainObjects.iterator().next());
-            return;
-        }
+        final var span = TRACER.spanBuilder("ekbatan.repository")
+                .setAttribute("db.operation.name", "BATCH_UPDATE")
+                .setAttribute("ekbatan.entity.type", domainClass.getSimpleName())
+                .setAttribute("ekbatan.batch.size", (long) domainObjects.size())
+                .startSpan();
+        try (var _ = span.makeCurrent()) {
+            if (domainObjects.size() == 1) {
+                updateNoResult(domainObjects.iterator().next());
+                return;
+            }
 
-        int affectedRows;
-        var shard = effectiveShard(domainObjects);
-        var dialect = dialect(shard);
-        if (dialect.equals(SQLDialect.MARIADB) || dialect.equals(SQLDialect.MYSQL)) {
-            affectedRows = buildUpdateAllQueryMariadb(shard, domainObjects).execute();
-        } else {
-            affectedRows = buildUpdateAllQuery(shard, domainObjects).execute();
-        }
+            int affectedRows;
+            var shard = effectiveShard(domainObjects);
+            var dialect = dialect(shard);
+            if (dialect.equals(SQLDialect.MARIADB) || dialect.equals(SQLDialect.MYSQL)) {
+                affectedRows = buildUpdateAllQueryMariadb(shard, domainObjects).execute();
+            } else {
+                affectedRows = buildUpdateAllQuery(shard, domainObjects).execute();
+            }
 
-        if (affectedRows != domainObjects.size()) {
-            throw new StaleRecordException(
-                    format("Expected to update %d records but only updated %d", domainObjects.size(), affectedRows));
+            if (affectedRows != domainObjects.size()) {
+                throw new StaleRecordException(format(
+                        "Expected to update %d records but only updated %d", domainObjects.size(), affectedRows));
+            }
+        } catch (Exception e) {
+            span.setStatus(StatusCode.ERROR, e.getMessage());
+            span.recordException(e);
+            throw e;
+        } finally {
+            span.end();
         }
     }
 

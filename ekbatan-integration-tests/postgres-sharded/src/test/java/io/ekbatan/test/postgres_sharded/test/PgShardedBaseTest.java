@@ -50,7 +50,8 @@ public abstract class PgShardedBaseTest {
         var globalTm = new TransactionManager(
                 ConnectionProvider.hikariConnectionProvider(globalConfig),
                 ConnectionProvider.hikariConnectionProvider(globalConfig),
-                SQLDialect.POSTGRES);
+                SQLDialect.POSTGRES,
+                GLOBAL_SHARD);
 
         // Mexico shard
         var mexicoConfig = DataSourceConfig.Builder.dataSourceConfig()
@@ -62,12 +63,13 @@ public abstract class PgShardedBaseTest {
         var mexicoTm = new TransactionManager(
                 ConnectionProvider.hikariConnectionProvider(mexicoConfig),
                 ConnectionProvider.hikariConnectionProvider(mexicoConfig),
-                SQLDialect.POSTGRES);
+                SQLDialect.POSTGRES,
+                MEXICO_SHARD);
 
         // Registry with two shards
         databaseRegistry = databaseRegistry()
-                .withDatabase(GLOBAL_SHARD, globalTm)
-                .withDatabase(MEXICO_SHARD, mexicoTm)
+                .withDatabase(globalTm.shardIdentifier, globalTm)
+                .withDatabase(mexicoTm.shardIdentifier, mexicoTm)
                 .defaultShard(GLOBAL_SHARD)
                 .build();
 

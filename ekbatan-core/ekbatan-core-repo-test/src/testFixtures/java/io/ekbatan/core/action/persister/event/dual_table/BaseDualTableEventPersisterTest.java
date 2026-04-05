@@ -26,8 +26,8 @@ public abstract class BaseDualTableEventPersisterTest {
     public BaseDualTableEventPersisterTest(TransactionManager transactionManager) {
         this.transactionManager = transactionManager;
         this.databaseRegistry = databaseRegistry()
-                .withDatabase(ShardIdentifier.DEFAULT, transactionManager)
-                .defaultShard(ShardIdentifier.DEFAULT)
+                .withDatabase(transactionManager.shardIdentifier, transactionManager)
+                .defaultShard(transactionManager.shardIdentifier)
                 .build();
     }
 

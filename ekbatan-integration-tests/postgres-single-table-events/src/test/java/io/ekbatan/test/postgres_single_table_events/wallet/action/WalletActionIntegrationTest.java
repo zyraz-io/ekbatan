@@ -6,7 +6,6 @@ import static io.ekbatan.core.repository.RepositoryRegistry.Builder.repositoryRe
 import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.core.time.VirtualClock;
 import io.ekbatan.test.postgres_single_table_events.test.PgRepositoryTest;
 import io.ekbatan.test.postgres_single_table_events.wallet.models.Wallet;
@@ -24,8 +23,8 @@ public class WalletActionIntegrationTest extends PgRepositoryTest {
         final var objectMapper = new ObjectMapper();
 
         var databaseRegistry = databaseRegistry()
-                .withDatabase(ShardIdentifier.DEFAULT, transactionManager)
-                .defaultShard(ShardIdentifier.DEFAULT)
+                .withDatabase(transactionManager.shardIdentifier, transactionManager)
+                .defaultShard(transactionManager.shardIdentifier)
                 .build();
 
         final var walletRepository = new WalletRepository(databaseRegistry);
@@ -71,8 +70,8 @@ public class WalletActionIntegrationTest extends PgRepositoryTest {
         final var objectMapper = new ObjectMapper();
 
         var databaseRegistry = databaseRegistry()
-                .withDatabase(ShardIdentifier.DEFAULT, transactionManager)
-                .defaultShard(ShardIdentifier.DEFAULT)
+                .withDatabase(transactionManager.shardIdentifier, transactionManager)
+                .defaultShard(transactionManager.shardIdentifier)
                 .build();
 
         final var walletRepository = new WalletRepository(databaseRegistry);

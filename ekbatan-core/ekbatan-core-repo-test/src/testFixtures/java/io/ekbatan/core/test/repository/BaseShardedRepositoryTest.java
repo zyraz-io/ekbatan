@@ -71,14 +71,16 @@ public abstract class BaseShardedRepositoryTest {
         assertThat(repository.findById(dummyB.id.getValue())).isPresent();
 
         // AND — create per-shard repos to verify isolation
+        var shardATm = databaseRegistry.transactionManager(SHARD_A);
         var shardAOnlyRegistry = databaseRegistry()
-                .withDatabase(SHARD_A, databaseRegistry.transactionManager(SHARD_A))
+                .withDatabase(shardATm.shardIdentifier, shardATm)
                 .defaultShard(SHARD_A)
                 .build();
         var shardAOnlyRepo = createRepository(shardAOnlyRegistry);
 
+        var shardBTm = databaseRegistry.transactionManager(SHARD_B);
         var shardBOnlyRegistry = databaseRegistry()
-                .withDatabase(SHARD_B, databaseRegistry.transactionManager(SHARD_B))
+                .withDatabase(shardBTm.shardIdentifier, shardBTm)
                 .defaultShard(SHARD_B)
                 .build();
         var shardBOnlyRepo = createRepository(shardBOnlyRegistry);
@@ -650,8 +652,9 @@ public abstract class BaseShardedRepositoryTest {
     protected abstract AbstractRepository<Dummy, ?, ?, UUID> createRepository(DatabaseRegistry registry);
 
     private DatabaseRegistry singleShardRegistry(ShardIdentifier shard) {
+        var tm = databaseRegistry.transactionManager(shard);
         return databaseRegistry()
-                .withDatabase(shard, databaseRegistry.transactionManager(shard))
+                .withDatabase(tm.shardIdentifier, tm)
                 .defaultShard(shard)
                 .build();
     }

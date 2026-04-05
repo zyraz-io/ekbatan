@@ -190,6 +190,44 @@ The framework supports PostgreSQL, MySQL, and MariaDB. Dialect differences are h
 - UUID handling — Native UUID (PostgreSQL) vs binary/string (MySQL)
 - Test infrastructure — Separate test subprojects per database
 
+### OpenTelemetry Tracing
+
+Ekbatan instruments its action execution pipeline using the **OpenTelemetry API** (`opentelemetry-api`). The library depends only on the API — no SDK. When no OTel SDK is registered at runtime, all tracing calls are no-ops with zero overhead. Consumers bring their own `opentelemetry-sdk` and exporters.
+
+**Instrumentation scope:** `io.ekbatan.core` version `1.0.0`, obtained from `GlobalOpenTelemetry.get().getTracer(...)`.
+
+**Span hierarchy:**
+```
+[ekbatan.action.execute]                    ActionExecutor.execute()
+├── [ekbatan.action.perform]                Action.perform()
+└── [ekbatan.action.persist]                ActionExecutor.persistChanges()
+    └── [ekbatan.transaction]               TransactionManager.inTransactionChecked() (per shard)
+        ├── [ekbatan.repository]            AbstractRepository addAllNoResult/updateAllNoResult
+        └── [ekbatan.event.persist]         EventPersister.persistActionEvents()
+```
+
+**Attributes:**
+
+| Attribute | Type | Span | Description |
+|---|---|---|---|
+| `ekbatan.action.name` | string | action.execute | Simple class name of the action |
+| `ekbatan.action.principal` | string | action.execute | Principal name |
+| `ekbatan.action.outcome` | string | action.execute | `"success"` or `"error"` |
+| `ekbatan.action.retry.count` | long | action.execute | Total retries (0 if none) |
+| `ekbatan.shard.cross_shard` | boolean | action.persist | Present when changes span multiple shards |
+| `ekbatan.shard.group` | long | transaction | Shard group identifier |
+| `ekbatan.shard.member` | long | transaction | Shard member identifier |
+| `db.operation.name` | string | repository | `"INSERT"` or `"UPDATE"` |
+| `ekbatan.entity.type` | string | repository | Simple class name of the domain object |
+| `ekbatan.batch.size` | long | repository | Number of records in the batch |
+| `ekbatan.event.count` | long | event.persist | Number of model events persisted |
+
+**Retry events:** Each retry attempt adds a span event named `"retry"` to the action span with attributes `retry.attempt` (int) and `retry.exception` (exception class name).
+
+**Error handling:** On failure, spans are marked with `StatusCode.ERROR` and the exception is recorded via `span.recordException()`.
+
+**Context propagation:** Since actions execute single-threaded (ScopedValue-based transactions), context flows naturally via `Span.makeCurrent()` / `Scope`. No async context passing is needed. Each `TransactionManager` instance knows its own `ShardIdentifier` (set at construction time, defaults to `ShardIdentifier.DEFAULT`), so `inTransactionChecked()` automatically sets shard attributes on the transaction span without requiring the shard to be passed per-call.
+
 ### Builder Pattern
 
 The project uses the Builder pattern extensively. There are two categories: **infrastructure builders** (for framework classes like `ActionExecutor`, `ExecutionConfiguration`, registries) and **domain builders** (for `Model` and `Entity` subclasses). Both follow the same core principles but differ in structure.

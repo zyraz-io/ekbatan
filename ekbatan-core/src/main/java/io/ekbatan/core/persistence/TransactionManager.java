@@ -1,5 +1,10 @@
 package io.ekbatan.core.persistence;
 
+import io.ekbatan.core.shard.ShardIdentifier;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.Tracer;
 import java.sql.Connection;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -10,7 +15,10 @@ import org.jooq.SQLDialect;
 
 public class TransactionManager {
 
+    private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
+
     public final SQLDialect dialect;
+    public final ShardIdentifier shardIdentifier;
 
     public final ConnectionProvider primaryConnectionProvider;
     public final ConnectionProvider secondaryConnectionProvider;
@@ -21,34 +29,32 @@ public class TransactionManager {
             ConnectionProvider primaryConnectionProvider,
             ConnectionProvider secondaryConnectionProvider,
             SQLDialect dialect) {
+        this(primaryConnectionProvider, secondaryConnectionProvider, dialect, ShardIdentifier.DEFAULT);
+    }
+
+    public TransactionManager(
+            ConnectionProvider primaryConnectionProvider,
+            ConnectionProvider secondaryConnectionProvider,
+            SQLDialect dialect,
+            ShardIdentifier shardIdentifier) {
         this.dialect = Validate.notNull(dialect, "dialect should not be null");
         this.primaryConnectionProvider =
                 Validate.notNull(primaryConnectionProvider, "primaryConnectionProvider should not be null");
         this.secondaryConnectionProvider =
                 Validate.notNull(secondaryConnectionProvider, "secondaryConnectionProvider should not be null");
+        this.shardIdentifier = Validate.notNull(shardIdentifier, "shardIdentifier should not be null");
         this.currentTransaction = ScopedValue.newInstance();
     }
 
     public <R> R inTransactionChecked(CheckedFunction<DSLContext, R> block) throws Exception {
-        Connection newConn = null;
-        try {
-            newConn = primaryConnectionProvider.acquire();
-            final var wrapper = new Transaction(newConn, dialect);
-            return ScopedValue.where(currentTransaction, wrapper).call(() -> {
-                try {
-                    wrapper.begin();
-                    final var result = block.apply(wrapper.dslContext());
-                    wrapper.commit();
-                    return result;
-                } catch (Exception e) {
-                    wrapper.rollback();
-                    throw e;
-                }
-            });
+        final var span = TRACER.spanBuilder("ekbatan.transaction")
+                .setAttribute("ekbatan.shard.group", shardIdentifier.group)
+                .setAttribute("ekbatan.shard.member", shardIdentifier.member)
+                .startSpan();
+        try (var _ = span.makeCurrent()) {
+            return executeInTransaction(block, span);
         } finally {
-            if (newConn != null) {
-                primaryConnectionProvider.release(newConn);
-            }
+            span.end();
         }
     }
 
@@ -72,6 +78,31 @@ public class TransactionManager {
             inTransactionChecked(block::accept);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private <R> R executeInTransaction(CheckedFunction<DSLContext, R> block, Span span) throws Exception {
+        Connection newConn = null;
+        try {
+            newConn = primaryConnectionProvider.acquire();
+            final var wrapper = new Transaction(newConn, dialect);
+            return ScopedValue.where(currentTransaction, wrapper).call(() -> {
+                try {
+                    wrapper.begin();
+                    final var result = block.apply(wrapper.dslContext());
+                    wrapper.commit();
+                    return result;
+                } catch (Exception e) {
+                    wrapper.rollback();
+                    span.setStatus(StatusCode.ERROR, e.getMessage());
+                    span.recordException(e);
+                    throw e;
+                }
+            });
+        } finally {
+            if (newConn != null) {
+                primaryConnectionProvider.release(newConn);
+            }
         }
     }
 

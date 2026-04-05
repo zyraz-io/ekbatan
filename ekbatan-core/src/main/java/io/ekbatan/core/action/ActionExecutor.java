@@ -12,6 +12,9 @@ import io.ekbatan.core.repository.RepositoryRegistry;
 import io.ekbatan.core.shard.CrossShardException;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.Tracer;
 import java.security.Principal;
 import java.time.Clock;
 import java.time.Instant;
@@ -23,6 +26,8 @@ import org.apache.commons.lang3.Validate;
 import tools.jackson.databind.ObjectMapper;
 
 public class ActionExecutor {
+
+    private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
 
     private final DatabaseRegistry databaseRegistry;
     private final ActionRegistry actionRegistry;
@@ -60,34 +65,83 @@ public class ActionExecutor {
         Validate.notNull(executionConfiguration, "executionConfiguration cannot be null");
 
         final var action = actionRegistry.get(actionClass);
+        final var actionName = actionClass.getSimpleName();
 
-        return Retry.<R>with(executionConfiguration.retryConfigs).execute(() -> {
-            final var actionStartDate = clock.instant();
-            final var result = action.perform(principal, params);
-            persistChanges(action, params, actionStartDate, executionConfiguration);
+        final var actionSpan = TRACER.spanBuilder("ekbatan.action.execute")
+                .setAttribute("ekbatan.action.name", actionName)
+                .setAttribute("ekbatan.action.principal", principal != null ? principal.getName() : "")
+                .startSpan();
+        try (var _ = actionSpan.makeCurrent()) {
+            final var result = Retry.<R>with(executionConfiguration.retryConfigs)
+                    .execute(() -> {
+                        final var actionStartDate = clock.instant();
+
+                        final var performSpan =
+                                TRACER.spanBuilder("ekbatan.action.perform").startSpan();
+                        final R performResult;
+                        try (var _ = performSpan.makeCurrent()) {
+                            performResult = action.perform(principal, params);
+                        } catch (Exception e) {
+                            performSpan.setStatus(StatusCode.ERROR, e.getMessage());
+                            performSpan.recordException(e);
+                            throw e;
+                        } finally {
+                            performSpan.end();
+                        }
+
+                        persistChanges(action, params, actionStartDate, executionConfiguration);
+                        return performResult;
+                    });
+
+            actionSpan.setAttribute("ekbatan.action.outcome", "success");
             return result;
-        });
+        } catch (Exception e) {
+            actionSpan.setAttribute("ekbatan.action.outcome", "error");
+            actionSpan.setStatus(StatusCode.ERROR, e.getMessage());
+            actionSpan.recordException(e);
+            throw e;
+        } finally {
+            actionSpan.end();
+        }
     }
 
     private void persistChanges(
             Action<?, ?> action, Object params, Instant actionStartDate, ExecutionConfiguration config)
             throws Exception {
-        var changesByShard = groupChangesByShard(action.plan);
-        enforceSingleShard(changesByShard.keySet(), config);
+        final var persistSpan = TRACER.spanBuilder("ekbatan.action.persist").startSpan();
+        try (var _ = persistSpan.makeCurrent()) {
+            var changesByShard = groupChangesByShard(action.plan);
+            enforceSingleShard(changesByShard.keySet(), config);
 
-        if (changesByShard.isEmpty()) {
-            changesByShard = Map.of(databaseRegistry.defaultShard, action.plan.changes());
-        }
+            if (changesByShard.size() > 1) {
+                persistSpan.setAttribute("ekbatan.shard.cross_shard", true);
+            }
 
-        var actionEventId = java.util.UUID.randomUUID();
+            if (changesByShard.isEmpty()) {
+                changesByShard = Map.of(databaseRegistry.defaultShard, action.plan.changes());
+            }
 
-        for (var entry : changesByShard.entrySet()) {
-            var shard = entry.getKey();
-            var shardChanges = entry.getValue();
-            databaseRegistry.transactionManager(shard).inTransactionChecked(_ -> {
-                changePersister.persist(
-                        action.getClass().getSimpleName(), params, actionStartDate, shardChanges, shard, actionEventId);
-            });
+            var actionEventId = java.util.UUID.randomUUID();
+
+            for (var entry : changesByShard.entrySet()) {
+                var shard = entry.getKey();
+                var shardChanges = entry.getValue();
+                databaseRegistry.transactionManager(shard).inTransactionChecked(_ -> {
+                    changePersister.persist(
+                            action.getClass().getSimpleName(),
+                            params,
+                            actionStartDate,
+                            shardChanges,
+                            shard,
+                            actionEventId);
+                });
+            }
+        } catch (Exception e) {
+            persistSpan.setStatus(StatusCode.ERROR, e.getMessage());
+            persistSpan.recordException(e);
+            throw e;
+        } finally {
+            persistSpan.end();
         }
     }
 

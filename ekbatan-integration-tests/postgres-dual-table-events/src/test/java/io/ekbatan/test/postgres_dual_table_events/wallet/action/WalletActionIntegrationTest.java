@@ -7,7 +7,6 @@ import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.ekbatan.core.action.persister.event.dual_table.DualTableEventPersister;
-import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.test.postgres_dual_table_events.test.PgRepositoryTest;
 import io.ekbatan.test.postgres_dual_table_events.wallet.models.Wallet;
 import io.ekbatan.test.postgres_dual_table_events.wallet.repository.WalletRepository;
@@ -23,8 +22,8 @@ public class WalletActionIntegrationTest extends PgRepositoryTest {
         final var objectMapper = new ObjectMapper();
 
         var databaseRegistry = databaseRegistry()
-                .withDatabase(ShardIdentifier.DEFAULT, transactionManager)
-                .defaultShard(ShardIdentifier.DEFAULT)
+                .withDatabase(transactionManager.shardIdentifier, transactionManager)
+                .defaultShard(transactionManager.shardIdentifier)
                 .build();
 
         final var walletRepository = new WalletRepository(databaseRegistry);

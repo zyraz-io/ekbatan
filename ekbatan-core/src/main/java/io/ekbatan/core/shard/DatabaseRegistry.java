@@ -6,6 +6,7 @@ import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.config.ShardingConfig;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -21,7 +22,7 @@ public final class DatabaseRegistry {
     public final ShardIdentifier defaultShard;
 
     private DatabaseRegistry(Builder builder) {
-        this.transactionManagers = Map.copyOf(builder.transactionManagers);
+        this.transactionManagers = Collections.unmodifiableMap(builder.transactionManagers);
         this.defaultShard = Validate.notNull(builder.defaultShard, "defaultShard is required");
         Validate.isTrue(!this.transactionManagers.isEmpty(), "at least one database is required");
         Validate.isTrue(
@@ -66,7 +67,7 @@ public final class DatabaseRegistry {
                 var id = ShardIdentifier.of(group.group, member.member);
                 var primaryProvider = ConnectionProvider.hikariConnectionProvider(member.primaryConfig);
                 var secondaryProvider = ConnectionProvider.hikariConnectionProvider(member.secondaryConfig);
-                var tm = new TransactionManager(primaryProvider, secondaryProvider, member.primaryConfig.dialect);
+                var tm = new TransactionManager(primaryProvider, secondaryProvider, member.primaryConfig.dialect, id);
                 builder.withDatabase(id, tm);
             }
         }

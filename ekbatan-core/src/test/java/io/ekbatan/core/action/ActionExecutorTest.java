@@ -21,7 +21,6 @@ import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.Repository;
 import io.ekbatan.core.shard.DatabaseRegistry;
-import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.core.time.VirtualClock;
 import java.security.Principal;
 import java.time.Duration;
@@ -219,8 +218,8 @@ class ActionExecutorTest {
         transactionManager = org.mockito.Mockito.spy(
                 new TransactionManager(mockPrimaryProvider, mockSecondaryProvider, SQLDialect.POSTGRES));
         databaseRegistry = databaseRegistry()
-                .withDatabase(ShardIdentifier.DEFAULT, transactionManager)
-                .defaultShard(ShardIdentifier.DEFAULT)
+                .withDatabase(transactionManager.shardIdentifier, transactionManager)
+                .defaultShard(transactionManager.shardIdentifier)
                 .build();
         clock = new VirtualClock();
 
