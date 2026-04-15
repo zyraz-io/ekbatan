@@ -55,8 +55,11 @@ subprojects {
     apply(plugin = "java-library")
     apply(plugin = "com.diffplug.spotless")
     
-    // Add annotation processor configuration for non-annotation-processor modules
-    if (project.name != "ekbatan-annotation-processor") {
+    // Add annotation processor for non-annotation-processor modules.
+    // SMT modules opt out — they're standalone Kafka Connect plugins and don't use AutoBuilder.
+    val skipAnnotationProcessor = project.name == "ekbatan-annotation-processor"
+            || project.path.startsWith(":ekbatan-event-streaming:debezium-smt")
+    if (!skipAnnotationProcessor) {
         dependencies {
             annotationProcessor(project(":ekbatan-annotation-processor"))
             implementation(project(":ekbatan-annotation-processor"))
@@ -93,10 +96,14 @@ subprojects {
         testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
     }
     
-    // Configure Java compilation to ensure compatibility
+    // Configure Java compilation. SMT modules target Java 21 (Kafka Connect runtime).
+    val javaTarget = if (project.path.startsWith(":ekbatan-event-streaming:debezium-smt")) "21" else "25"
     tasks.withType<JavaCompile> {
-        sourceCompatibility = "25"
-        targetCompatibility = "25"
+        sourceCompatibility = javaTarget
+        targetCompatibility = javaTarget
+        if (javaTarget == "21") {
+            options.release.set(21)
+        }
         // Enable incremental compilation for better build performance
         options.isIncremental = true
         // Enable all warnings

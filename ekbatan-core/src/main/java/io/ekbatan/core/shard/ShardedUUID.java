@@ -1,5 +1,6 @@
 package io.ekbatan.core.shard;
 
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -7,18 +8,18 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Value object wrapping a UUID v7 with shard info (group + member) encoded in rand_b.
  *
- * <p>Fixed layout: 4-bit group + 8-bit member = 12 shard bits, 50 random bits remaining in rand_b.
+ * <p>Fixed layout: 8-bit group + 6-bit member = 14 shard bits, 48 random bits remaining in rand_b.
  *
  * <p>UUID v7 bit layout:
  * <pre>
  * MSB: [48-bit timestamp][4-bit version=0111][12-bit rand_a]
- * LSB: [2-bit variant=10][4-bit group][8-bit member][50-bit random]
+ * LSB: [2-bit variant=10][8-bit group][6-bit member][48-bit random]
  * </pre>
  */
 public final class ShardedUUID implements ShardAwareId {
 
-    public static final int GROUP_BITS = 4;
-    public static final int MEMBER_BITS = 8;
+    public static final int GROUP_BITS = 8;
+    public static final int MEMBER_BITS = 6;
 
     private static final int SHARD_BITS = GROUP_BITS + MEMBER_BITS;
     private static final int RANDOM_BITS = 62 - SHARD_BITS;
@@ -45,7 +46,7 @@ public final class ShardedUUID implements ShardAwareId {
         msb |= 0x7000L;
         msb |= (ThreadLocalRandom.current().nextLong() & 0xFFF);
 
-        // LSB: [2-bit variant=10][4-bit group][8-bit member][50-bit random]
+        // LSB: [2-bit variant=10][8-bit group][6-bit member][48-bit random]
         long shardBits = ((long) shard.group << MEMBER_BITS) | shard.member;
         long randomPart = ThreadLocalRandom.current().nextLong() & ((1L << RANDOM_BITS) - 1);
 
@@ -65,6 +66,14 @@ public final class ShardedUUID implements ShardAwareId {
         int group = (int) ((shardBits >>> MEMBER_BITS) & ((1L << GROUP_BITS) - 1));
 
         return ShardIdentifier.of(group, member);
+    }
+
+    /**
+     * Extracts the millisecond Unix timestamp encoded in the UUID v7 MSB.
+     */
+    public Instant instant() {
+        long timestampMs = value.getMostSignificantBits() >>> 16;
+        return Instant.ofEpochMilli(timestampMs);
     }
 
     @Override

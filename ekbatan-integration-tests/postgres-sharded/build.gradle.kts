@@ -38,11 +38,6 @@ tasks {
                     .withIncludeTypes("TIMESTAMP")
                     .withIncludeExpression(".*"),
                 ForcedType()
-                    .withUserType("tools.jackson.databind.node.ArrayNode")
-                    .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONBArrayNodeConverter")
-                    .withIncludeTypes("JSONB")
-                    .withIncludeExpression(".*\\.model_events"),
-                ForcedType()
                     .withUserType("tools.jackson.databind.node.ObjectNode")
                     .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONBObjectNodeConverter")
                     .withIncludeTypes("JSONB")

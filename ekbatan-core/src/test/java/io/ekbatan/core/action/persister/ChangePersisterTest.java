@@ -167,6 +167,7 @@ class ChangePersisterTest {
     }
 
     static class RecordingEventPersister implements EventPersister {
+        String namespace;
         String actionName;
         Instant startedDate;
         Instant completionDate;
@@ -176,6 +177,7 @@ class ChangePersisterTest {
 
         @Override
         public void persistActionEvents(
+                String namespace,
                 String actionName,
                 Instant startedDate,
                 Instant completionDate,
@@ -183,6 +185,7 @@ class ChangePersisterTest {
                 Collection<ModelEvent<?>> modelEvents,
                 io.ekbatan.core.shard.ShardIdentifier shard,
                 java.util.UUID actionEventId) {
+            this.namespace = namespace;
             this.actionName = actionName;
             this.startedDate = startedDate;
             this.completionDate = completionDate;
@@ -209,6 +212,7 @@ class ChangePersisterTest {
 
         // WHEN
         persister.persist(
+                "test.namespace",
                 action.getClass().getSimpleName(),
                 new CreateItemAction.Params(),
                 Instant.now(),
@@ -243,6 +247,7 @@ class ChangePersisterTest {
 
         // WHEN
         persister.persist(
+                "test.namespace",
                 action.getClass().getSimpleName(),
                 new UpdateItemAction.Params(),
                 Instant.now(),
@@ -270,6 +275,7 @@ class ChangePersisterTest {
 
         // WHEN
         persister.persist(
+                "test.namespace",
                 action.getClass().getSimpleName(),
                 new CreateItemAction.Params(),
                 Instant.now(),
@@ -297,6 +303,7 @@ class ChangePersisterTest {
 
         // WHEN
         persister.persist(
+                "test.namespace",
                 action.getClass().getSimpleName(),
                 new CreateItemAction.Params(),
                 Instant.now(),
@@ -325,6 +332,7 @@ class ChangePersisterTest {
         // WHEN
         var startDate = Instant.parse("2025-06-01T11:59:59Z");
         persister.persist(
+                "test.namespace",
                 action.getClass().getSimpleName(),
                 new CreateItemAction.Params(),
                 startDate,
@@ -350,6 +358,7 @@ class ChangePersisterTest {
 
         // WHEN
         persister.persist(
+                "test.namespace",
                 action.getClass().getSimpleName(),
                 new NoOpAction.Params(),
                 Instant.now(),
@@ -376,6 +385,7 @@ class ChangePersisterTest {
 
         // WHEN / THEN
         assertThatThrownBy(() -> persister.persist(
+                        "test.namespace",
                         action.getClass().getSimpleName(),
                         new CreateItemAction.Params(),
                         Instant.now(),
@@ -402,6 +412,7 @@ class ChangePersisterTest {
 
         // WHEN
         persister.persist(
+                "test.namespace",
                 action.getClass().getSimpleName(),
                 params,
                 Instant.now(),

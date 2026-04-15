@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package io.ekbatan.test.event_pipeline.protobuf_smt.proto;
+
+option java_package = "io.ekbatan.test.event_pipeline.protobuf_smt.proto";
+option java_multiple_files = true;
+
+message WalletMoneyDepositedEvent {
+  string modelId = 1;
+  string modelName = 2;
+  string amount = 3;
+}

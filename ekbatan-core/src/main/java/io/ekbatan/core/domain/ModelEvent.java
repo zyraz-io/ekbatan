@@ -4,7 +4,7 @@ import java.io.Serializable;
 import org.apache.commons.lang3.Validate;
 
 public abstract class ModelEvent<MODEL> implements Serializable {
-    public final Object modelId;
+    public final String modelId;
     public final String modelName;
 
     protected ModelEvent(String modelId, Class<MODEL> modelClass) {

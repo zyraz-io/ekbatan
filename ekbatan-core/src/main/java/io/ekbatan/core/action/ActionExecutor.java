@@ -5,7 +5,7 @@ import static io.ekbatan.core.action.ExecutionConfiguration.Builder.executionCon
 import io.ekbatan.core.action.persister.ChangePersister;
 import io.ekbatan.core.action.persister.PersistableChanges;
 import io.ekbatan.core.action.persister.event.EventPersister;
-import io.ekbatan.core.action.persister.event.single_table.SingleTableEventPersister;
+import io.ekbatan.core.action.persister.event.single_table_json.SingleTableJsonEventPersister;
 import io.ekbatan.core.domain.Persistable;
 import io.ekbatan.core.repository.Repository;
 import io.ekbatan.core.repository.RepositoryRegistry;
@@ -33,6 +33,7 @@ public class ActionExecutor {
     private static final Logger LOG = LoggerFactory.getLogger(ActionExecutor.class);
     private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
 
+    private final String namespace;
     private final DatabaseRegistry databaseRegistry;
     private final ActionRegistry actionRegistry;
     private final RepositoryRegistry repositoryRegistry;
@@ -41,6 +42,7 @@ public class ActionExecutor {
     private final ExecutionConfiguration defaultExecutionConfiguration;
 
     private ActionExecutor(Builder builder) {
+        this.namespace = Validate.notBlank(builder.namespace, "namespace is required");
         this.databaseRegistry = Validate.notNull(builder.databaseRegistry, "databaseRegistry is required");
         final var objectMapper = Validate.notNull(builder.objectMapper, "objectMapper is required");
         this.actionRegistry = Validate.notNull(builder.actionRegistry, "actionRegistry is required");
@@ -50,7 +52,7 @@ public class ActionExecutor {
 
         final var eventPersister = builder.eventPersister != null
                 ? builder.eventPersister
-                : new SingleTableEventPersister(builder.databaseRegistry, objectMapper);
+                : new SingleTableJsonEventPersister(builder.databaseRegistry, objectMapper);
 
         this.changePersister = new ChangePersister(repositoryRegistry, eventPersister, clock);
         this.defaultExecutionConfiguration =
@@ -156,6 +158,7 @@ public class ActionExecutor {
                 var shardChanges = entry.getValue();
                 databaseRegistry.transactionManager(shard).inTransactionChecked(_ -> {
                     changePersister.persist(
+                            namespace,
                             action.getClass().getSimpleName(),
                             params,
                             actionStartDate,
@@ -238,6 +241,7 @@ public class ActionExecutor {
     }
 
     public static final class Builder {
+        private String namespace;
         private DatabaseRegistry databaseRegistry;
         private ObjectMapper objectMapper;
         private RepositoryRegistry repositoryRegistry;
@@ -248,6 +252,11 @@ public class ActionExecutor {
                 executionConfiguration().build();
 
         private Builder() {}
+
+        public Builder namespace(String namespace) {
+            this.namespace = namespace;
+            return this;
+        }
 
         public static Builder actionExecutor() {
             return new Builder();

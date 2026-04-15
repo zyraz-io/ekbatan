@@ -32,6 +32,7 @@ public class ChangePersister {
     }
 
     public void persist(
+            String namespace,
             String actionName,
             Object params,
             Instant actionStartDate,
@@ -64,7 +65,14 @@ public class ChangePersister {
         }
 
         eventPersister.persistActionEvents(
-                actionName, actionStartDate, actionCompletionDate, params, modelEvents, shard, actionEventId);
+                namespace,
+                actionName,
+                actionStartDate,
+                actionCompletionDate,
+                params,
+                modelEvents,
+                shard,
+                actionEventId);
         LOG.debug("Persisted events for action {} [actionEventId={}]", actionName, actionEventId);
     }
 

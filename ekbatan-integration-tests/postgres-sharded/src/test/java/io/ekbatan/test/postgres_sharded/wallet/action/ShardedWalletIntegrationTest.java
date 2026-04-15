@@ -78,9 +78,8 @@ public class ShardedWalletIntegrationTest {
                 MEXICO_SHARD);
 
         databaseRegistry = databaseRegistry()
-                .withDatabase(globalTm.shardIdentifier, globalTm)
-                .withDatabase(mexicoTm.shardIdentifier, mexicoTm)
-                .defaultShard(GLOBAL_SHARD)
+                .withDefaultDatabase(globalTm)
+                .withDatabase(mexicoTm)
                 .build();
 
         Flyway.configure()
@@ -109,6 +108,7 @@ public class ShardedWalletIntegrationTest {
                 .build();
 
         executor = actionExecutor()
+                .namespace("test.sharded")
                 .databaseRegistry(databaseRegistry)
                 .objectMapper(new ObjectMapper())
                 .repositoryRegistry(repositoryRegistry)
@@ -329,10 +329,7 @@ public class ShardedWalletIntegrationTest {
 
     private DatabaseRegistry singleShardRegistry(ShardIdentifier shard) {
         var tm = databaseRegistry.transactionManager(shard);
-        return databaseRegistry()
-                .withDatabase(tm.shardIdentifier, tm)
-                .defaultShard(shard)
-                .build();
+        return databaseRegistry().withDatabase(tm).build();
     }
 
     private long countWallets(ShardIdentifier shard) {
@@ -343,8 +340,8 @@ public class ShardedWalletIntegrationTest {
         return databaseRegistry
                 .primary
                 .get(shard)
-                .select(org.jooq.impl.DSL.field("id", java.util.UUID.class))
-                .from("eventlog.action_events")
+                .selectDistinct(org.jooq.impl.DSL.field("action_id", java.util.UUID.class))
+                .from("eventlog.events")
                 .fetch(0, java.util.UUID.class);
     }
 
@@ -352,8 +349,8 @@ public class ShardedWalletIntegrationTest {
         return databaseRegistry
                 .primary
                 .get(shard)
-                .selectCount()
-                .from("eventlog.action_events")
+                .select(org.jooq.impl.DSL.countDistinct(org.jooq.impl.DSL.field("action_id")))
+                .from("eventlog.events")
                 .fetchOne(0, long.class);
     }
 }

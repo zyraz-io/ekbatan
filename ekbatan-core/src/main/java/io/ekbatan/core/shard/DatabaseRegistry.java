@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import org.apache.commons.lang3.Validate;
 import org.jooq.DSLContext;
 import org.jooq.impl.DSL;
@@ -23,11 +24,13 @@ public final class DatabaseRegistry {
 
     private DatabaseRegistry(Builder builder) {
         this.transactionManagers = Collections.unmodifiableMap(builder.transactionManagers);
-        this.defaultShard = Validate.notNull(builder.defaultShard, "defaultShard is required");
         Validate.isTrue(!this.transactionManagers.isEmpty(), "at least one database is required");
-        Validate.isTrue(
-                this.transactionManagers.containsKey(this.defaultShard),
-                "defaultShard must reference a registered database");
+        this.defaultShard = builder.defaultShard.orElseGet(() -> {
+            Validate.isTrue(
+                    this.transactionManagers.size() == 1,
+                    "withDefaultDatabase must be called when more than one database is registered");
+            return this.transactionManagers.keySet().iterator().next();
+        });
 
         var p = new HashMap<ShardIdentifier, DSLContext>();
         var s = new HashMap<ShardIdentifier, DSLContext>();
@@ -60,25 +63,33 @@ public final class DatabaseRegistry {
     }
 
     public static DatabaseRegistry fromConfig(ShardingConfig config) {
-        var builder = databaseRegistry().defaultShard(config.defaultShard);
+        var builder = databaseRegistry();
+        var defaultRegistered = false;
 
         for (var group : config.groups) {
             for (var member : group.members) {
-                var id = ShardIdentifier.of(group.group, member.member);
+                var shardIdentifier = ShardIdentifier.of(group.group, member.member);
                 var primaryProvider = ConnectionProvider.hikariConnectionProvider(member.primaryConfig);
                 var secondaryProvider = ConnectionProvider.hikariConnectionProvider(member.secondaryConfig);
-                var tm = new TransactionManager(primaryProvider, secondaryProvider, member.primaryConfig.dialect, id);
-                builder.withDatabase(id, tm);
+                var tm = new TransactionManager(
+                        primaryProvider, secondaryProvider, member.primaryConfig.dialect, shardIdentifier);
+                if (shardIdentifier.equals(config.defaultShard)) {
+                    builder.withDefaultDatabase(tm);
+                    defaultRegistered = true;
+                } else {
+                    builder.withDatabase(tm);
+                }
             }
         }
 
+        Validate.isTrue(defaultRegistered, "defaultShard must reference a registered database");
         return builder.build();
     }
 
     public static final class Builder {
 
         private final Map<ShardIdentifier, TransactionManager> transactionManagers = new LinkedHashMap<>();
-        private ShardIdentifier defaultShard;
+        private Optional<ShardIdentifier> defaultShard = Optional.empty();
 
         private Builder() {}
 
@@ -86,13 +97,14 @@ public final class DatabaseRegistry {
             return new Builder();
         }
 
-        public Builder withDatabase(ShardIdentifier id, TransactionManager tm) {
-            this.transactionManagers.put(id, tm);
+        public Builder withDatabase(TransactionManager tm) {
+            this.transactionManagers.put(tm.shardIdentifier, tm);
             return this;
         }
 
-        public Builder defaultShard(ShardIdentifier defaultShard) {
-            this.defaultShard = defaultShard;
+        public Builder withDefaultDatabase(TransactionManager tm) {
+            this.transactionManagers.put(tm.shardIdentifier, tm);
+            this.defaultShard = Optional.of(tm.shardIdentifier);
             return this;
         }
 

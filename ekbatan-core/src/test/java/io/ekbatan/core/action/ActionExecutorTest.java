@@ -190,6 +190,7 @@ class ActionExecutorTest {
 
         @Override
         public void persistActionEvents(
+                String namespace,
                 String actionName,
                 Instant startedDate,
                 Instant completionDate,
@@ -217,10 +218,7 @@ class ActionExecutorTest {
         org.mockito.Mockito.when(mockSecondaryProvider.getDataSource()).thenReturn(mockDataSource);
         transactionManager = org.mockito.Mockito.spy(
                 new TransactionManager(mockPrimaryProvider, mockSecondaryProvider, SQLDialect.POSTGRES));
-        databaseRegistry = databaseRegistry()
-                .withDatabase(transactionManager.shardIdentifier, transactionManager)
-                .defaultShard(transactionManager.shardIdentifier)
-                .build();
+        databaseRegistry = databaseRegistry().withDatabase(transactionManager).build();
         clock = new VirtualClock();
 
         // Make inTransactionChecked execute the block directly (no real DB)
@@ -236,6 +234,7 @@ class ActionExecutorTest {
     private ActionExecutor buildExecutor(
             RecordingRepository repo, RecordingEventPersister eventPersister, ActionRegistry actionRegistry) {
         return actionExecutor()
+                .namespace("test.namespace")
                 .databaseRegistry(databaseRegistry)
                 .objectMapper(new ObjectMapper())
                 .repositoryRegistry(repositoryRegistry()
@@ -469,6 +468,7 @@ class ActionExecutorTest {
     void build_rejects_null_databaseRegistry() {
         // WHEN / THEN
         assertThatThrownBy(() -> actionExecutor()
+                        .namespace("test.namespace")
                         .objectMapper(new ObjectMapper())
                         .repositoryRegistry(repositoryRegistry().build())
                         .actionRegistry(actionRegistry().build())

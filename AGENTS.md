@@ -26,21 +26,20 @@ ekbatan/
 │   │   ├── repository/                    # Repository pattern (AbstractRepository, ModelRepository, EntityRepository)
 │   │   ├── action/                        # Action/Command pattern (Action, ActionExecutor, ActionPlan)
 │   │   │   └── persister/                 # Change & event persistence
-│   │   │       └── event/dual_table/      # Dual-table event store implementation
+│   │   │       └── event/single_table_json/  # Single-table JSON event store implementation
 │   │   ├── shard/                         # Sharding: ShardIdentifier, DatabaseRegistry, ShardingStrategy
 │   │   ├── persistence/                   # Transaction management, JOOQ converters
 │   │   └── config/                        # DataSourceConfig
-│   └── ekbatan-core-repo-test/            # Shared test infrastructure for repositories
-│       ├── src/main/java/.../test/model/  # Dummy test model & events
-│       ├── src/main/java/.../test/repository/  # BaseRepositoryTest (abstract)
-│       ├── ekbatan-core-repo-test-pg/     # PostgreSQL test runner
-│       ├── ekbatan-core-repo-test-mysql/  # MySQL test runner
-│       └── ekbatan-core-repo-test-mariadb/# MariaDB test runner
 ├── ekbatan-annotation-processor/          # @AutoBuilder annotation processor (JavaPoet)
 ├── ekbatan-integration-tests/              # End-to-end integration tests (package: io.ekbatan.test)
-│   ├── postgres-dual-table-events/        # Dual-table event persistence (PostgreSQL)
-│   ├── postgres-single-table-events/      # Single-table event persistence (PostgreSQL)
-│   └── postgres-sharded/                  # Sharded wallet with cross-shard tests (PostgreSQL)
+│   ├── core-repo/                         # Testcontainer-based repository tests across PG/MySQL/MariaDB
+│   │   ├── shared/                        # Shared BaseRepositoryTest, dummy models (test fixtures)
+│   │   ├── pg/                            # PostgreSQL runners (repository, denormalized-events)
+│   │   ├── mysql/                         # MySQL runners
+│   │   └── mariadb/                       # MariaDB runners
+│   ├── postgres-simple/                   # Simple end-to-end wallet flow (PostgreSQL)
+│   ├── postgres-sharded/                  # Sharded wallet with cross-shard tests (PostgreSQL)
+│   └── event-pipeline/                    # Debezium → Kafka JSON/Avro/Protobuf event streaming
 ├── buildSrc/                              # Gradle build conventions
 └── config/checkstyle/                     # Checkstyle rules
 ```
@@ -87,7 +86,7 @@ Command pattern for business operations:
 - **`ActionRegistry`** — Maps action classes to suppliers (factories).
 - **`ChangePersister`** — Iterates plan changes, extracts events from models, persists via repositories + event persister.
 - **`EventPersister`** — Interface for event storage strategy.
-- **`DualTableEventPersister`** — Default implementation using `action_events` + `model_events` tables.
+- **`SingleTableJsonEventPersister`** — Default implementation using a single `eventlog.events` table with JSONB payload.
 
 ### Persistence Layer (`ekbatan-core/...core/persistence/`)
 
@@ -125,18 +124,12 @@ Records are never physically deleted. The `state` field is set to `DELETED`. Que
 ### Idempotency
 Ekbatan does **not** provide a framework-level idempotency key abstraction (no dedicated column on `action_events`, no `idempotencyKey` field on action params). The framework's atomic transactions already guarantee that if a unique constraint fails, the entire transaction rolls back — no partial writes. Action designers who need idempotency choose their own domain-appropriate field name (e.g., `referenceId`, `transactionId`, `depositId`) and enforce uniqueness via a constraint on their domain table. This keeps the framework simple and avoids prescribing a single field/column name that may not fit every domain context.
 
-### Event Sourcing (Dual-Table)
-Models accumulate `ModelEvent` instances. When persisted via `ChangePersister`, events are extracted and stored in two tables:
-- `action_events` — One row per action execution (action name, params, timestamps)
-- `model_events` — One row per domain event (model ID, event type, JSON payload, linked to action)
+### Event Sourcing (Single-Table, JSON)
+Models accumulate `ModelEvent` instances. When persisted via `ChangePersister`, events are extracted and stored in a single denormalized table:
+- `eventlog.events` — One row per emitted event, carrying action metadata (action_id, action_name, action_params), model metadata (model_id, model_type, event_type), and a JSONB `payload`. One sentinel row per action (no event_type) captures actions that emit zero events.
 
 ### Event IDs and Sharding
-Only domain entity IDs (e.g., `wallets.id`) use `ShardedUUID` for shard routing. Event infrastructure tables use regular UUIDs:
-
-- **`action_events.id`** — Regular UUID. In single-shard actions, the record is written to that shard. In cross-shard actions (when `allowCrossShard=true`), the same action record (same UUID) is duplicated across all involved shards so that each shard has a self-contained picture of the action and its events.
-- **`model_events.id`** — Regular UUID. Always co-located with the model it describes — no independent shard routing needed.
-
-This design ensures each shard is self-contained: its `model_events` reference an `action_events` record on the same shard, with no cross-shard foreign keys.
+Only domain entity IDs (e.g., `wallets.id`) use `ShardedUUID` for shard routing. `eventlog.events.id` is a regular UUID, co-located with the action/model it describes — for cross-shard actions (when `allowCrossShard=true`), rows are written to each involved shard so that every shard has a self-contained picture. No cross-shard foreign keys.
 
 ### Sharding
 
@@ -144,7 +137,7 @@ Ekbatan supports horizontal sharding with a two-level hierarchy: **group** (busi
 
 #### Core Concepts
 
-- **`ShardIdentifier(int group, int member)`** — Numeric shard address. `DEFAULT = (0, 0)`. Fixed 4-bit group + 8-bit member, supporting up to 16 groups x 256 members.
+- **`ShardIdentifier(int group, int member)`** — Numeric shard address. `DEFAULT = (0, 0)`. Fixed 8-bit group + 6-bit member, supporting up to 256 groups x 64 members.
 - **`ShardedUUID`** — UUID v7 with shard bits (group + member) encoded in `rand_b`. Self-describing: the shard can be decoded from the UUID without any lookup.
 - **`ShardedId<T>`** — Type-safe ID wrapper around `ShardedUUID`, independent from `Id<T>`. Implements `ShardAwareId`.
 - **`DatabaseRegistry`** — Unified entry point for all database access. Maps `ShardIdentifier → TransactionManager`. Provides `primary`/`secondary` DSLContext maps and `effectiveShard()` for logical-to-physical shard mapping.
@@ -239,10 +232,10 @@ The project uses the Builder pattern extensively. There are two categories: **in
 3. **Private constructor on the target class** — only the Builder can instantiate it. The constructor takes the Builder as its sole argument.
 4. **Private constructor on the Builder** — instantiation goes through a static factory method.
 5. **Static factory method** — named after the thing being built, returns a new Builder instance.
-6. **Setter methods just assign** — no validation in setter methods. Setters return `this` (or `self()` for generic builders) for fluent chaining.
+6. **Setter methods just assign** — no validation, and no guards on prior state (e.g. "already called", "call order"). Builders are often returned partially-configured from factories, and a downstream caller may legitimately override an earlier value — restricting that breaks composability. Last call wins, same as repeated `Map.put`. Setters return `this` (or `self()` for generic builders) for fluent chaining.
 7. **All validation happens in the target class constructor** — the constructor reads builder fields and validates using `Validate.notNull()`, `Validate.isTrue()`, etc. This is the single place where invariants are enforced.
 8. **Default values are set on the builder field declaration** — not resolved with ternary logic in the constructor. If a field has a sensible default, assign it at the field level in the Builder. The constructor then just reads it directly.
-9. **Fields with dependent defaults** — when a default depends on another builder field (e.g., `eventPersister` depends on `transactionManager`), the default cannot be set at the field level. In this case, the builder field is left `null` and the constructor resolves it with a ternary.
+9. **Fields with dependent defaults** — when a default depends on other builder state (another field, or the final set of registered entries at build time), the default cannot be set at the field level. In this case, declare the builder field as `Optional<T>` initialized to `Optional.empty()`, and resolve it in the constructor with `orElseGet(...)`. Avoid raw `null` in builder fields — express absence explicitly with `Optional`.
 
 #### Infrastructure Builder Example
 
@@ -271,9 +264,7 @@ public final class Foo {
         this.tags = List.copyOf(builder.tags);
 
         // Dependent default — resolve here because it depends on another field
-        this.qux = builder.qux != null
-                ? builder.qux
-                : new DefaultQux(this.bar);
+        this.qux = builder.qux.orElseGet(() -> new DefaultQux(this.bar));
     }
 
     public static final class Builder {
@@ -290,8 +281,8 @@ public final class Foo {
         // Collection with default — initialize at field level
         private List<String> tags = new ArrayList<>();
 
-        // Dependent default — left null, resolved in constructor
-        private Qux qux;
+        // Dependent default — Optional.empty() until set, resolved in constructor
+        private Optional<Qux> qux = Optional.empty();
 
         private Builder() {}
 
@@ -340,9 +331,9 @@ public final class Foo {
             return this;
         }
 
-        // Setter for field with dependent default
+        // Setter for field with dependent default — wraps in Optional.of()
         public Builder qux(Qux qux) {
-            this.qux = qux;
+            this.qux = Optional.of(qux);
             return this;
         }
 
@@ -361,7 +352,7 @@ public final class Foo {
 | Required primitive | `int`, `long`, etc. | explicit default or `0` | `this.field = value` | Additional validation if needed |
 | Optional object | `Optional<T>` | `Optional.of(default)` or `Optional.empty()` | `this.field = Optional.of(value)` | `this.field = builder.field` |
 | Collection | `List<T>` | `new ArrayList<>()` | Replace: `new ArrayList<>(value)`, Add: `this.list.add(value)` | `List.copyOf(builder.field)` |
-| Field with dependent default | `T` | `null` | `this.field = value` | Ternary: `builder.field != null ? builder.field : computeDefault()` |
+| Field with dependent default | `Optional<T>` | `Optional.empty()` | `this.field = Optional.of(value)` | `builder.field.orElseGet(() -> computeDefault())` |
 
 #### Naming Conventions for Builder Methods
 
@@ -563,13 +554,14 @@ For domain classes (`Model` and `Entity` subclasses), writing the builder by han
 ### Naming Conventions
 - Java: `camelCase` fields, `PascalCase` classes
 - SQL: `snake_case` columns and tables
-- Packages: `lowercase` with underscores for multi-word directories (e.g., `dual_table`)
+- Packages: `lowercase` with underscores for multi-word directories (e.g., `denormalized`)
+- Actions: `Model[Verb]Action` — e.g., `WalletCreateAction`, `WalletDepositMoneyAction` (not `CreateWalletAction`)
 - Commit messages: `EKB-XXXX` ticket prefix
 
 ## Testing
 
 ### Test Infrastructure
-- **`BaseRepositoryTest`** — Large abstract test class in `ekbatan-core-repo-test` covering all CRUD operations, optimistic locking, soft deletion
+- **`BaseRepositoryTest`** — Large abstract test class in `ekbatan-integration-tests/core-repo/shared` covering all CRUD operations, optimistic locking, soft deletion
 - **`BaseShardedRepositoryTest`** — Abstract test class covering shard-aware operations: scatter-gather reads, ID-based routing, cross-shard batch rejection, shard isolation
 - **`Dummy` model** — Test-only model mirroring the Wallet structure
 - **Database-specific runners** — Separate subprojects for PostgreSQL, MySQL, MariaDB using TestContainers
@@ -577,7 +569,7 @@ For domain classes (`Model` and `Entity` subclasses), writing the builder by han
 
 ### Test Stack
 - JUnit 5 (Jupiter)
-- Mockito (mocking in ekbatan-core), MockK (mocking in ekbatan-core-repo-test)
+- Mockito (mocking in ekbatan-core), MockK (mocking in core-repo tests)
 - AssertJ (fluent assertions)
 - JsonUnit (JSON assertions)
 - TestContainers (database containers)
@@ -654,9 +646,9 @@ void retry_recovers_after_transient_failure() throws Exception {
 ### Running Tests
 ```bash
 ./gradlew test                                    # All tests
-./gradlew :ekbatan-core:ekbatan-core-repo-test:ekbatan-core-repo-test-pg:test    # PostgreSQL only
-./gradlew :ekbatan-core:ekbatan-core-repo-test:ekbatan-core-repo-test-mysql:test # MySQL only
-./gradlew :ekbatan-core:ekbatan-core-repo-test:ekbatan-core-repo-test-mariadb:test # MariaDB only
+./gradlew :ekbatan-integration-tests:core-repo:pg:repository:test    # PostgreSQL only
+./gradlew :ekbatan-integration-tests:core-repo:mysql:repository:test # MySQL only
+./gradlew :ekbatan-integration-tests:core-repo:mariadb:repository:test # MariaDB only
 ./gradlew :ekbatan-integration-tests:test          # Integration tests
 ```
 
@@ -701,7 +693,7 @@ void retry_recovers_after_transient_failure() throws Exception {
 3. Register in `ActionRegistry`
 
 ### New Database Support
-1. Add test subproject under `ekbatan-core-repo-test`
+1. Add test subproject under `ekbatan-integration-tests/core-repo`
 2. Create database-specific Flyway migrations
 3. Add `DummyRepository` implementation with dialect-specific converters
 4. Create test runner extending `BaseRepositoryTest`

@@ -9,6 +9,7 @@ import java.util.UUID;
 public interface EventPersister {
 
     void persistActionEvents(
+            String namespace,
             String actionName,
             Instant startedDate,
             Instant completionDate,

@@ -1,0 +1,10 @@
+{
+  "type": "record",
+  "name": "WalletCreatedEvent",
+  "namespace": "io.ekbatan.test.event_pipeline.avro_smt.avro",
+  "fields": [
+    {"name": "modelId", "type": "string"},
+    {"name": "modelName", "type": "string"},
+    {"name": "name", "type": "string"}
+  ]
+}

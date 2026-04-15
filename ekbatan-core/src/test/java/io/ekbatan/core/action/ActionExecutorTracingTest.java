@@ -64,10 +64,7 @@ class ActionExecutorTracingTest {
         when(mockSecondaryProvider.getDataSource()).thenReturn(mockDataSource);
         var transactionManager =
                 spy(new TransactionManager(mockPrimaryProvider, mockSecondaryProvider, SQLDialect.POSTGRES));
-        databaseRegistry = databaseRegistry()
-                .withDatabase(transactionManager.shardIdentifier, transactionManager)
-                .defaultShard(transactionManager.shardIdentifier)
-                .build();
+        databaseRegistry = databaseRegistry().withDatabase(transactionManager).build();
         clock = new VirtualClock();
 
         doAnswer(invocation -> {
@@ -81,6 +78,7 @@ class ActionExecutorTracingTest {
 
     private ActionExecutor buildExecutor(ActionRegistry actionRegistry) {
         return actionExecutor()
+                .namespace("test.namespace")
                 .databaseRegistry(databaseRegistry)
                 .objectMapper(new ObjectMapper())
                 .repositoryRegistry(repositoryRegistry()
@@ -442,6 +440,7 @@ class ActionExecutorTracingTest {
     static class RecordingEventPersister implements EventPersister {
         @Override
         public void persistActionEvents(
+                String namespace,
                 String actionName,
                 Instant startedDate,
                 Instant completionDate,

@@ -1,2 +1,0 @@
-CREATE SCHEMA IF NOT EXISTS eventlog;
-GRANT ALL PRIVILEGES ON eventlog.* TO 'test'@'%';

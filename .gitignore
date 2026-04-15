@@ -30,6 +30,9 @@ out/
 # Log files
 *.log
 
+# JVM heap dumps
+*.hprof
+
 # Local configuration files
 *.properties
 !gradle.properties
@@ -103,3 +106,8 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+
+
+
+.playwright-mcp
+.crush
