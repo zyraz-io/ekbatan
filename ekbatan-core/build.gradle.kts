@@ -50,6 +50,9 @@ dependencies {
     api("io.opentelemetry:opentelemetry-api:${project.property("opentelemetryVersion")}")
 
     testImplementation("io.opentelemetry:opentelemetry-sdk-testing:${project.property("opentelemetryVersion")}")
+
+    // YAML support for ShardingConfig deserialization sanity-check tests
+    testImplementation("tools.jackson.dataformat:jackson-dataformat-yaml:${project.property("jacksonDatabindVersion")}")
 }
 
 tasks.withType<Test> {

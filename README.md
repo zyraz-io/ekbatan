@@ -436,6 +436,129 @@ var databaseRegistry = databaseRegistry()
 
 Each shard owns its own pair of datasources. The default shard receives traffic for any logical shard that is not explicitly registered — for example, a wallet routed to an Australia shard that has not yet been deployed will fall through to the default. As before, if a shard has no read replica, point both providers at the same datasource.
 
+### Group vs Member: The Two Axes
+
+The two levels in a `ShardIdentifier` exist for different reasons:
+
+- **Group is the *policy axis*** — boundaries forced on you from the outside. Regulatory data residency (*"Mexico data stays in Mexico"*), tenant isolation contracts, business-domain separation, compliance scoping. Group cardinality is driven by external constraints; you don't choose how many.
+- **Member is the *performance axis*** — horizontal scaling within a single policy boundary. You add members when one database can't handle the write throughput. Member cardinality is driven by capacity planning.
+
+If you follow the design's intent — group for policy, member for performance — the natural shape is **members of a group sharing network locality and failure domain** (same region, same data center, same VPC). Cross-member queries within a group are scatter-gather across every member, so intra-group latency directly affects their performance. Naming conventions like `global-eu-1`, `global-eu-2`, `global-eu-3` reflect this — members of the EU group all live in EU infrastructure.
+
+That said, **these are conventions, not enforced rules.** The framework can't tell network topology from JDBC URLs, and plenty of applications legitimately need other patterns — multi-region active-active members for read locality, a tenant tier that doesn't map onto geography, a non-geographic policy axis entirely, or a single global lock service that spans every group. Use the axes however fits your application; the framework doesn't object.
+
+### Declarative Configuration
+
+Rather than wiring `TransactionManager`s by hand, you can describe the entire shard topology as a `ShardingConfig` and hand it to `DatabaseRegistry.fromConfig(config)`. The same structure maps directly to YAML, which makes it easy to load topology from a configuration file:
+
+```yaml
+sharding:
+  defaultShard:
+    group: 0
+    member: 0
+
+  groups:
+    - group: 0
+      name: global
+      members:
+        - member: 0
+          name: global-eu-1
+          configs:
+            primaryConfig:                # required
+              jdbcUrl: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
+              username: wallets_app
+              password: ${EU_1_PASSWORD}
+              maximumPoolSize: 20
+              leakDetectionThreshold: 30000
+            secondaryConfig:              # optional, but encouraged
+              jdbcUrl: jdbc:postgresql://global-eu-1-ro.example.com:5432/wallets
+              username: wallets_app_ro
+              password: ${EU_1_RO_PASSWORD}
+              maximumPoolSize: 20
+            lockConfig:                   # user-defined; consumed by your own code
+              jdbcUrl: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
+              username: wallets_lock
+              password: ${EU_1_LOCK_PASSWORD}
+              maximumPoolSize: 50
+              leakDetectionThreshold: 0   # locks may sit idle while held; disable
+
+        - member: 1
+          name: global-eu-2
+          configs:
+            primaryConfig:
+              jdbcUrl: jdbc:postgresql://global-eu-2-rw.example.com:5432/wallets
+              username: wallets_app
+              password: ${EU_2_PASSWORD}
+              maximumPoolSize: 20
+            secondaryConfig:
+              jdbcUrl: jdbc:postgresql://global-eu-2-ro.example.com:5432/wallets
+              username: wallets_app_ro
+              password: ${EU_2_RO_PASSWORD}
+              maximumPoolSize: 20
+
+        - member: 2
+          name: global-eu-3
+          configs:
+            primaryConfig:                # only primary — reads will use it as fallback for the secondary
+              jdbcUrl: jdbc:postgresql://global-eu-3.example.com:5432/wallets
+              username: wallets_app
+              password: ${EU_3_PASSWORD}
+              maximumPoolSize: 20
+
+    - group: 1
+      name: mexico
+      members:
+        - member: 0
+          name: mexico-cdmx-1
+          configs:
+            primaryConfig:
+              jdbcUrl: jdbc:postgresql://mexico-cdmx-1-rw.example.com:5432/wallets
+              username: wallets_app
+              password: ${MX_1_PASSWORD}
+              maximumPoolSize: 20
+            secondaryConfig:
+              jdbcUrl: jdbc:postgresql://mexico-cdmx-1-ro.example.com:5432/wallets
+              username: wallets_app_ro
+              password: ${MX_1_RO_PASSWORD}
+              maximumPoolSize: 20
+
+        - member: 1
+          name: mexico-cdmx-2
+          configs:
+            primaryConfig:
+              jdbcUrl: jdbc:postgresql://mexico-cdmx-2-rw.example.com:5432/wallets
+              username: wallets_app
+              password: ${MX_2_PASSWORD}
+              maximumPoolSize: 20
+            secondaryConfig:
+              jdbcUrl: jdbc:postgresql://mexico-cdmx-2-ro.example.com:5432/wallets
+              username: wallets_app_ro
+              password: ${MX_2_RO_PASSWORD}
+              maximumPoolSize: 20
+            analyticsConfig:              # user-defined; e.g. for reporting on a slow replica
+              jdbcUrl: jdbc:postgresql://mexico-analytics.example.com:5432/wallets
+              username: wallets_analytics
+              password: ${MX_ANALYTICS_PASSWORD}
+              maximumPoolSize: 5
+```
+
+**On the `configs:` map of each member:**
+
+- **`primaryConfig` is required.** Every member must have one. The framework validates this at startup and refuses to build a `ShardMemberConfig` without it.
+- **`secondaryConfig` is optional but encouraged.** Pointing it at a read replica lets `findAll`, `findAllWhere`, `count`, and other non-transactional reads scale independently from the write path. If absent, the framework transparently falls back to `primaryConfig` for those reads — the application code doesn't change.
+- **Any other named entry is user-defined.** `lockConfig`, `analyticsConfig`, `auditConfig`, anything else: the framework doesn't consume them. Your application code reaches for them via `member.configFor("lockConfig")`, typically to wire its own components — for example, supplying a `ConnectionProvider` to `PostgresAdvisoryKeyedLock`, or pointing a reporting tool at a slow replica.
+
+This keeps every database connection that *belongs to a member* in one place. A reader of the config sees the full database surface for `mexico-cdmx-2` at a glance; nothing is scattered across separate config trees.
+
+Accessing the configs from Java mirrors the YAML structure exactly:
+
+```java
+ShardMemberConfig member = ...;
+DataSourceConfig primary = member.primaryConfig();                          // required, non-null
+Optional<DataSourceConfig> secondary = member.secondaryConfig();            // empty if absent
+Optional<DataSourceConfig> lock = member.configFor("lockConfig");           // user-defined
+```
+
 ### Sharded Models
 
 A Model that participates in sharding declares its ID type as `ShardedId<T>` instead of `Id<T>`:

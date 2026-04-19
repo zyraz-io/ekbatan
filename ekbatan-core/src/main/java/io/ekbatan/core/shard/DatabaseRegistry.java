@@ -69,10 +69,12 @@ public final class DatabaseRegistry {
         for (var group : config.groups) {
             for (var member : group.members) {
                 var shardIdentifier = ShardIdentifier.of(group.group, member.member);
-                var primaryProvider = ConnectionProvider.hikariConnectionProvider(member.primaryConfig);
-                var secondaryProvider = ConnectionProvider.hikariConnectionProvider(member.secondaryConfig);
+                var primaryDataSourceConfig = member.primaryConfig();
+                var secondaryDataSourceConfig = member.secondaryConfig().orElse(primaryDataSourceConfig);
+                var primaryProvider = ConnectionProvider.hikariConnectionProvider(primaryDataSourceConfig);
+                var secondaryProvider = ConnectionProvider.hikariConnectionProvider(secondaryDataSourceConfig);
                 var tm = new TransactionManager(
-                        primaryProvider, secondaryProvider, member.primaryConfig.dialect, shardIdentifier);
+                        primaryProvider, secondaryProvider, primaryDataSourceConfig.dialect, shardIdentifier);
                 if (shardIdentifier.equals(config.defaultShard)) {
                     builder.withDefaultDatabase(tm);
                     defaultRegistered = true;

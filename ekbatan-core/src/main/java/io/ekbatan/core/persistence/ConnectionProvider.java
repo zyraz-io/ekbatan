@@ -31,6 +31,17 @@ public class ConnectionProvider {
         }
     }
 
+    /**
+     * Forcibly removes the connection from the pool instead of returning it. The underlying
+     * physical connection is closed, and the pool will create a replacement to maintain its
+     * configured size. Use this when a connection is suspected to be in a corrupted or unknown
+     * state (e.g., a SQL error left it with leftover session settings, or a release operation
+     * itself failed).
+     */
+    public void evict(Connection connection) {
+        pool.evictConnection(connection);
+    }
+
     public HikariDataSource getDataSource() {
         return pool;
     }
