@@ -220,7 +220,104 @@ ExecutionConfiguration.builder()
         .build();
 ```
 
-Ekbatan's own write path takes no pessimistic row locks — concurrent conflicts surface as `StaleRecordException` rather than blocked threads. When pessimistic locking is genuinely required for a specific operation, applications can issue `SELECT ... FOR UPDATE` (or any other JOOQ statement) directly against the `DSLContext`, either standalone or inside a transactional scope via `transactionManager.inTransaction(...)`.
+Ekbatan's own write path takes no pessimistic row locks — concurrent conflicts surface as `StaleRecordException` rather than blocked threads. When pessimistic locking is genuinely required, the next section introduces `KeyedLockProvider` — a session-scoped, key-based mutex that fits the Action lifecycle. For lower-level needs, applications can also issue `SELECT ... FOR UPDATE` directly against the `DSLContext`, either standalone or inside a transactional scope via `transactionManager.inTransaction(...)`.
+
+### Pessimistic Locking with `KeyedLockProvider`
+
+Some operations don't fit optimistic locking — **at-most-once idempotency** around external side effects (a webhook handler that calls a payment API), or **single-flight execution** across nodes (a daily reconciliation job). Others (a wallet deposit) can be done either way, but pessimistic locking avoids the retry thrash optimistic locking causes on hot accounts. For all of these, Ekbatan ships `KeyedLockProvider`. You call `provider.acquire(key, maxHold)` to get a `Lease`; closing the lease releases the lock. The key can be any `Object` — a `String`, a `UUID`, an `Id<Wallet>`. Two acquirers using the same key are mutually exclusive (the second waits until the first releases); acquirers using different keys don't block each other.
+
+Four implementations: `InProcessKeyedLockProvider` (single JVM, semaphore-backed) and `PostgresKeyedLockProvider` / `MariaDBKeyedLockProvider` / `MySQLKeyedLockProvider` (cross-JVM, session-scoped at the database — auto-released if the holder crashes).
+
+A wallet deposit, serialized per-wallet by acquiring the lease before reading and persisting:
+
+```java
+public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
+
+    private final WalletRepository walletRepo;
+    private final KeyedLockProvider lockProvider;
+
+    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
+
+    public WalletDepositAction(Clock clock, WalletRepository walletRepo, KeyedLockProvider lockProvider) {
+        super(clock);
+        this.walletRepo = walletRepo;
+        this.lockProvider = lockProvider;
+    }
+
+    @Override
+    protected Wallet perform(Principal principal, Params params) throws InterruptedException {
+        try (var lockLease = lockProvider.acquire(params.walletId, Duration.ofSeconds(10))) {
+            var wallet = walletRepo.getById(params.walletId.getValue());
+            return plan.update(wallet.copy()
+                    .balance(wallet.balance.add(params.amount))
+                    .build());
+        }
+    }
+}
+```
+
+The same deposit can be implemented with optimistic locking alone — but each concurrent conflict on the same wallet would surface as a `StaleRecordException` that triggers a retry. With pessimistic locking, callers wait briefly for the lease and then succeed on their first attempt; the retry loop disappears, trading retry-driven tail latency for a small, predictable wait. On hot wallets that's usually the better trade.
+
+Two things worth noting:
+
+- **`maxHold` (10s above) is a safety net, not a hint.** If the action overruns, the lock auto-releases — capping the blast radius of a hung holder regardless of what the calling thread is doing.
+- **Each `acquire` borrows its own JDBC connection** for the lifetime of the lease. For lock-heavy workloads, point the provider at a dedicated pool via `member.configFor("lockConfig")` so locks don't starve normal queries.
+
+A typical `ShardingConfig` member with a dedicated lock pool:
+
+```yaml
+sharding:
+  defaultShard: { group: 0, member: 0 }
+  groups:
+    - group: 0
+      name: global
+      members:
+        - member: 0
+          name: global-eu-1
+          configs:
+            primaryConfig:
+              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db
+              username: app
+              password: secret
+              maximumPoolSize: 20
+              minimumIdle: 5
+
+            secondaryConfig:
+              jdbcUrl: jdbc:postgresql://replica-eu-1:5432/db
+              username: app
+              password: secret
+              maximumPoolSize: 10
+
+            # Dedicated pool for KeyedLockProvider — keeps lock acquisitions
+            # from competing for connections with normal queries.
+            lockConfig:
+              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db   # same DB; locks must coordinate on the same instance
+              username: app
+              password: secret
+              maximumPoolSize: 40         # per-instance — sized for the concurrent leases this instance will hold
+              minimumIdle: 5
+              leakDetectionThreshold: 120000   # set comfortably above your largest expected maxHold; catches real leaks without warning on legitimate long-held leases
+```
+
+Wiring up a `PostgresKeyedLockProvider` from the parsed `ShardingConfig`:
+
+```java
+import static io.ekbatan.core.concurrent.PostgresKeyedLockProvider.Builder.postgresKeyedLockProvider;
+import static io.ekbatan.core.persistence.ConnectionProvider.hikariConnectionProvider;
+
+// Pull the lockConfig entry from whichever member you want to coordinate on
+var lockDataSourceConfig = shardingConfig.groups.get(0).members.get(0)
+        .configFor("lockConfig")
+        .orElseThrow();
+
+var lockProvider = postgresKeyedLockProvider()
+        .connectionProvider(hikariConnectionProvider(lockDataSourceConfig))
+        .build();
+```
+
+The same pattern works for `MariaDBKeyedLockProvider` and `MySQLKeyedLockProvider` — just swap the builder.
+
+> **Caveat: not the right primitive at very high concurrency.** `KeyedLockProvider` fits coarse-grained coordination (single-flight cron jobs, admin actions, per-shard locks) and low-to-medium contention on the write path. At higher concurrency, every held lease - and every thread blocked waiting for one - pins a JDBC connection for its entire lifetime, which can quickly demand more connections than your database is sized for.
 
 ### Soft Deletion
 
@@ -435,6 +532,129 @@ var databaseRegistry = databaseRegistry()
 ```
 
 Each shard owns its own pair of datasources. The default shard receives traffic for any logical shard that is not explicitly registered — for example, a wallet routed to an Australia shard that has not yet been deployed will fall through to the default. As before, if a shard has no read replica, point both providers at the same datasource.
+
+### Group vs Member: The Two Axes
+
+The two levels in a `ShardIdentifier` exist for different reasons:
+
+- **Group is the *policy axis*** — boundaries forced on you from the outside. Regulatory data residency (*"Mexico data stays in Mexico"*), tenant isolation contracts, business-domain separation, compliance scoping. Group cardinality is driven by external constraints; you don't choose how many.
+- **Member is the *performance axis*** — horizontal scaling within a single policy boundary. You add members when one database can't handle the write throughput. Member cardinality is driven by capacity planning.
+
+If you follow the design's intent — group for policy, member for performance — the natural shape is **members of a group sharing network locality and failure domain** (same region, same data center, same VPC). Cross-member queries within a group are scatter-gather across every member, so intra-group latency directly affects their performance. Naming conventions like `global-eu-1`, `global-eu-2`, `global-eu-3` reflect this — members of the EU group all live in EU infrastructure.
+
+That said, **these are conventions, not enforced rules.** The framework can't tell network topology from JDBC URLs, and plenty of applications legitimately need other patterns — multi-region active-active members for read locality, a tenant tier that doesn't map onto geography, a non-geographic policy axis entirely, or a single global lock service that spans every group. Use the axes however fits your application; the framework doesn't object.
+
+### Declarative Configuration
+
+Rather than wiring `TransactionManager`s by hand, you can describe the entire shard topology as a `ShardingConfig` and hand it to `DatabaseRegistry.fromConfig(config)`. The same structure maps directly to YAML, which makes it easy to load topology from a configuration file:
+
+```yaml
+sharding:
+  defaultShard:
+    group: 0
+    member: 0
+
+  groups:
+    - group: 0
+      name: global
+      members:
+        - member: 0
+          name: global-eu-1
+          configs:
+            primaryConfig:                # required
+              jdbcUrl: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
+              username: wallets_app
+              password: ${EU_1_PASSWORD}
+              maximumPoolSize: 20
+              leakDetectionThreshold: 30000
+            secondaryConfig:              # optional, but encouraged
+              jdbcUrl: jdbc:postgresql://global-eu-1-ro.example.com:5432/wallets
+              username: wallets_app_ro
+              password: ${EU_1_RO_PASSWORD}
+              maximumPoolSize: 20
+            lockConfig:                   # user-defined; consumed by your own code
+              jdbcUrl: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
+              username: wallets_lock
+              password: ${EU_1_LOCK_PASSWORD}
+              maximumPoolSize: 50
+              leakDetectionThreshold: 0   # locks may sit idle while held; disable
+
+        - member: 1
+          name: global-eu-2
+          configs:
+            primaryConfig:
+              jdbcUrl: jdbc:postgresql://global-eu-2-rw.example.com:5432/wallets
+              username: wallets_app
+              password: ${EU_2_PASSWORD}
+              maximumPoolSize: 20
+            secondaryConfig:
+              jdbcUrl: jdbc:postgresql://global-eu-2-ro.example.com:5432/wallets
+              username: wallets_app_ro
+              password: ${EU_2_RO_PASSWORD}
+              maximumPoolSize: 20
+
+        - member: 2
+          name: global-eu-3
+          configs:
+            primaryConfig:                # only primary — reads will use it as fallback for the secondary
+              jdbcUrl: jdbc:postgresql://global-eu-3.example.com:5432/wallets
+              username: wallets_app
+              password: ${EU_3_PASSWORD}
+              maximumPoolSize: 20
+
+    - group: 1
+      name: mexico
+      members:
+        - member: 0
+          name: mexico-cdmx-1
+          configs:
+            primaryConfig:
+              jdbcUrl: jdbc:postgresql://mexico-cdmx-1-rw.example.com:5432/wallets
+              username: wallets_app
+              password: ${MX_1_PASSWORD}
+              maximumPoolSize: 20
+            secondaryConfig:
+              jdbcUrl: jdbc:postgresql://mexico-cdmx-1-ro.example.com:5432/wallets
+              username: wallets_app_ro
+              password: ${MX_1_RO_PASSWORD}
+              maximumPoolSize: 20
+
+        - member: 1
+          name: mexico-cdmx-2
+          configs:
+            primaryConfig:
+              jdbcUrl: jdbc:postgresql://mexico-cdmx-2-rw.example.com:5432/wallets
+              username: wallets_app
+              password: ${MX_2_PASSWORD}
+              maximumPoolSize: 20
+            secondaryConfig:
+              jdbcUrl: jdbc:postgresql://mexico-cdmx-2-ro.example.com:5432/wallets
+              username: wallets_app_ro
+              password: ${MX_2_RO_PASSWORD}
+              maximumPoolSize: 20
+            analyticsConfig:              # user-defined; e.g. for reporting on a slow replica
+              jdbcUrl: jdbc:postgresql://mexico-analytics.example.com:5432/wallets
+              username: wallets_analytics
+              password: ${MX_ANALYTICS_PASSWORD}
+              maximumPoolSize: 5
+```
+
+**On the `configs:` map of each member:**
+
+- **`primaryConfig` is required.** Every member must have one. The framework validates this at startup and refuses to build a `ShardMemberConfig` without it.
+- **`secondaryConfig` is optional but encouraged.** Pointing it at a read replica lets `findAll`, `findAllWhere`, `count`, and other non-transactional reads scale independently from the write path. If absent, the framework transparently falls back to `primaryConfig` for those reads — the application code doesn't change.
+- **Any other named entry is user-defined.** `lockConfig`, `analyticsConfig`, `auditConfig`, anything else: the framework doesn't consume them. Your application code reaches for them via `member.configFor("lockConfig")`, typically to wire its own components — for example, supplying a `ConnectionProvider` to `PostgresKeyedLockProvider`, or pointing a reporting tool at a slow replica.
+
+This keeps every database connection that *belongs to a member* in one place. A reader of the config sees the full database surface for `mexico-cdmx-2` at a glance; nothing is scattered across separate config trees.
+
+Accessing the configs from Java mirrors the YAML structure exactly:
+
+```java
+ShardMemberConfig member = ...;
+DataSourceConfig primary = member.primaryConfig();                          // required, non-null
+Optional<DataSourceConfig> secondary = member.secondaryConfig();            // empty if absent
+Optional<DataSourceConfig> lock = member.configFor("lockConfig");           // user-defined
+```
 
 ### Sharded Models
 
