@@ -8,7 +8,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,16 +19,22 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
     private static final String LOCK_NOT_AVAILABLE_SQLSTATE = "55P03";
 
     private final ConnectionProvider connectionProvider;
+    private final KeyedReentrantHolder<PgPayload> holder = new KeyedReentrantHolder<>("ekbatan-pgkeyedlock-timeout");
 
     private PostgresKeyedLockProvider(Builder builder) {
         this.connectionProvider = Validate.notNull(builder.connectionProvider, "connectionProvider is required");
     }
 
     @Override
-    public Lease acquire(Object key, Duration maxHold) {
-        Validate.notNull(key, "key cannot be null");
+    public Lease acquire(String key, Duration maxHold) {
+        Validate.notBlank(key, "key cannot be blank");
         Validate.notNull(maxHold, "maxHold cannot be null");
         Validate.isTrue(!maxHold.isNegative() && !maxHold.isZero(), "maxHold must be positive");
+
+        var reentered = holder.tryReenter(key);
+        if (reentered.isPresent()) {
+            return reentered.get();
+        }
 
         final var hashedKey = hash(key);
         final var connection = connectionProvider.acquire();
@@ -39,16 +44,21 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
             connectionProvider.release(connection);
             throw new RuntimeException("Failed to acquire advisory lock for key " + key, e);
         }
-        return startTimeout(new PgLease(this, key, hashedKey, connection, false), maxHold);
+        return holder.register(key, new PgPayload(key, hashedKey, connection, false), maxHold, this::lockRelease);
     }
 
     @Override
-    public Optional<Lease> tryAcquire(Object key, Duration maxWait, Duration maxHold) {
-        Validate.notNull(key, "key cannot be null");
+    public Optional<Lease> tryAcquire(String key, Duration maxWait, Duration maxHold) {
+        Validate.notBlank(key, "key cannot be blank");
         Validate.notNull(maxWait, "maxWait cannot be null");
         Validate.notNull(maxHold, "maxHold cannot be null");
         Validate.isTrue(!maxWait.isNegative(), "maxWait cannot be negative");
         Validate.isTrue(!maxHold.isNegative() && !maxHold.isZero(), "maxHold must be positive");
+
+        var reentered = holder.tryReenter(key);
+        if (reentered.isPresent()) {
+            return reentered;
+        }
 
         final var hashedKey = hash(key);
         final var connection = connectionProvider.acquire();
@@ -64,24 +74,12 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
             releaseOrEvict(connection, result.connectionDirty());
             return Optional.empty();
         }
-        return Optional.of(
-                startTimeout(new PgLease(this, key, hashedKey, connection, result.connectionDirty()), maxHold));
+        return Optional.of(holder.register(
+                key, new PgPayload(key, hashedKey, connection, result.connectionDirty()), maxHold, this::lockRelease));
     }
 
-    private PgLease startTimeout(PgLease lease, Duration maxHold) {
-        lease.setTimeoutThread(
-                Thread.ofVirtual().name("ekbatan-pgkeyedlock-timeout").start(() -> {
-                    try {
-                        Thread.sleep(maxHold);
-                        lease.expire();
-                    } catch (InterruptedException ignored) {
-                    }
-                }));
-        return lease;
-    }
-
-    private static long hash(Object key) {
-        return sipHash24().hashString(key.toString(), StandardCharsets.UTF_8).asLong();
+    private static long hash(String key) {
+        return sipHash24().hashString(key, StandardCharsets.UTF_8).asLong();
     }
 
     private static void advisoryLock(Connection conn, long hashedKey) throws SQLException {
@@ -143,15 +141,15 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
         }
     }
 
-    void doRelease(Object key, long hashedKey, Connection connection, boolean connectionDirty) {
+    private void lockRelease(PgPayload payload) {
         try {
-            advisoryUnlock(connection, hashedKey);
+            advisoryUnlock(payload.connection, payload.hashedKey);
         } catch (SQLException e) {
-            LOG.error("Failed to release advisory lock for key {}; evicting connection", key, e);
-            connectionProvider.evict(connection);
+            LOG.error("Failed to release advisory lock for key {}; evicting connection", payload.userKey, e);
+            connectionProvider.evict(payload.connection);
             return;
         }
-        releaseOrEvict(connection, connectionDirty);
+        releaseOrEvict(payload.connection, payload.dirty);
     }
 
     private void releaseOrEvict(Connection connection, boolean dirty) {
@@ -162,60 +160,7 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
         }
     }
 
-    private static final class PgLease implements Lease {
-
-        private final PostgresKeyedLockProvider owner;
-        private final Object key;
-        private final long hashedKey;
-        private final Connection connection;
-        private final boolean connectionDirty;
-        private final AtomicBoolean released = new AtomicBoolean(false);
-        private volatile Thread timeoutThread;
-
-        PgLease(
-                PostgresKeyedLockProvider owner,
-                Object key,
-                long hashedKey,
-                Connection connection,
-                boolean connectionDirty) {
-            this.owner = owner;
-            this.key = key;
-            this.hashedKey = hashedKey;
-            this.connection = connection;
-            this.connectionDirty = connectionDirty;
-        }
-
-        void setTimeoutThread(Thread thread) {
-            this.timeoutThread = thread;
-        }
-
-        @Override
-        public boolean isHeld() {
-            return !released.get();
-        }
-
-        @Override
-        public void close() {
-            if (released.compareAndSet(false, true)) {
-                interruptTimeout();
-                owner.doRelease(key, hashedKey, connection, connectionDirty);
-            }
-        }
-
-        void expire() {
-            if (released.compareAndSet(false, true)) {
-                LOG.warn("PostgresKeyedLockProvider auto-released held lock for key {} (hold limit exceeded)", key);
-                owner.doRelease(key, hashedKey, connection, connectionDirty);
-            }
-        }
-
-        private void interruptTimeout() {
-            var t = timeoutThread;
-            if (t != null) {
-                t.interrupt();
-            }
-        }
-    }
+    private record PgPayload(String userKey, long hashedKey, Connection connection, boolean dirty) {}
 
     public static final class Builder {
 

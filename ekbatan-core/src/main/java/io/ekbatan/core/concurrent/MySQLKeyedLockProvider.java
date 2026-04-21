@@ -8,7 +8,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,16 +54,23 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
     private static final double WAIT_FOREVER_SECONDS = -1.0;
 
     private final ConnectionProvider connectionProvider;
+    private final KeyedReentrantHolder<MySQLPayload> holder =
+            new KeyedReentrantHolder<>("ekbatan-mysqlkeyedlock-timeout");
 
     private MySQLKeyedLockProvider(Builder builder) {
         this.connectionProvider = Validate.notNull(builder.connectionProvider, "connectionProvider is required");
     }
 
     @Override
-    public Lease acquire(Object key, Duration maxHold) {
-        Validate.notNull(key, "key cannot be null");
+    public Lease acquire(String key, Duration maxHold) {
+        Validate.notBlank(key, "key cannot be blank");
         Validate.notNull(maxHold, "maxHold cannot be null");
         Validate.isTrue(!maxHold.isNegative() && !maxHold.isZero(), "maxHold must be positive");
+
+        var reentered = holder.tryReenter(key);
+        if (reentered.isPresent()) {
+            return reentered.get();
+        }
 
         final var hashedKey = hash(key);
         final var connection = connectionProvider.acquire();
@@ -83,16 +89,21 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
             throw new RuntimeException(
                     "Failed to acquire user lock for key " + key + " (server-side disruption during wait)");
         }
-        return startTimeout(new MySQLLease(this, key, hashedKey, connection), maxHold);
+        return holder.register(key, new MySQLPayload(key, hashedKey, connection), maxHold, this::backendRelease);
     }
 
     @Override
-    public Optional<Lease> tryAcquire(Object key, Duration maxWait, Duration maxHold) {
-        Validate.notNull(key, "key cannot be null");
+    public Optional<Lease> tryAcquire(String key, Duration maxWait, Duration maxHold) {
+        Validate.notBlank(key, "key cannot be blank");
         Validate.notNull(maxWait, "maxWait cannot be null");
         Validate.notNull(maxHold, "maxHold cannot be null");
         Validate.isTrue(!maxWait.isNegative(), "maxWait cannot be negative");
         Validate.isTrue(!maxHold.isNegative() && !maxHold.isZero(), "maxHold must be positive");
+
+        var reentered = holder.tryReenter(key);
+        if (reentered.isPresent()) {
+            return reentered;
+        }
 
         final var hashedKey = hash(key);
         final var connection = connectionProvider.acquire();
@@ -107,24 +118,13 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
             connectionProvider.release(connection);
             return Optional.empty();
         }
-        return Optional.of(startTimeout(new MySQLLease(this, key, hashedKey, connection), maxHold));
+        return Optional.of(
+                holder.register(key, new MySQLPayload(key, hashedKey, connection), maxHold, this::backendRelease));
     }
 
-    private MySQLLease startTimeout(MySQLLease lease, Duration maxHold) {
-        lease.setTimeoutThread(
-                Thread.ofVirtual().name("ekbatan-mysqlkeyedlock-timeout").start(() -> {
-                    try {
-                        Thread.sleep(maxHold);
-                        lease.expire();
-                    } catch (InterruptedException ignored) {
-                    }
-                }));
-        return lease;
-    }
-
-    private static String hash(Object key) {
+    private static String hash(String key) {
         return Long.toHexString(
-                sipHash24().hashString(key.toString(), StandardCharsets.UTF_8).asLong());
+                sipHash24().hashString(key, StandardCharsets.UTF_8).asLong());
     }
 
     /**
@@ -164,10 +164,10 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
         }
     }
 
-    void doRelease(Object key, String hashedKey, Connection connection) {
+    private void backendRelease(MySQLPayload payload) {
         Integer result = null;
-        try (var stmt = connection.prepareStatement("SELECT RELEASE_LOCK(?)")) {
-            stmt.setString(1, hashedKey);
+        try (var stmt = payload.connection.prepareStatement("SELECT RELEASE_LOCK(?)")) {
+            stmt.setString(1, payload.hashedKey);
             try (var rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     var value = rs.getObject(1);
@@ -175,68 +175,22 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
                 }
             }
         } catch (SQLException e) {
-            LOG.error("Failed to RELEASE_LOCK for key {}; evicting connection", key, e);
-            connectionProvider.evict(connection);
+            LOG.error("Failed to RELEASE_LOCK for key {}; evicting connection", payload.userKey, e);
+            connectionProvider.evict(payload.connection);
             return;
         }
 
         if (result == null) {
-            LOG.warn("RELEASE_LOCK for key {} returned NULL (no such lock)", key);
+            LOG.warn("RELEASE_LOCK for key {} returned NULL (no such lock)", payload.userKey);
         } else if (result != 1) {
-            LOG.warn("RELEASE_LOCK for key {} returned {} (lock not held by this session)", key, result);
+            LOG.warn("RELEASE_LOCK for key {} returned {} (lock not held by this session)", payload.userKey, result);
         }
         // RELEASE_LOCK ran cleanly at the JDBC layer regardless of result value, so the
         // connection's session state is untouched and safe to return to the pool.
-        connectionProvider.release(connection);
+        connectionProvider.release(payload.connection);
     }
 
-    private static final class MySQLLease implements Lease {
-
-        private final MySQLKeyedLockProvider owner;
-        private final Object key;
-        private final String hashedKey;
-        private final Connection connection;
-        private final AtomicBoolean released = new AtomicBoolean(false);
-        private volatile Thread timeoutThread;
-
-        MySQLLease(MySQLKeyedLockProvider owner, Object key, String hashedKey, Connection connection) {
-            this.owner = owner;
-            this.key = key;
-            this.hashedKey = hashedKey;
-            this.connection = connection;
-        }
-
-        void setTimeoutThread(Thread thread) {
-            this.timeoutThread = thread;
-        }
-
-        @Override
-        public boolean isHeld() {
-            return !released.get();
-        }
-
-        @Override
-        public void close() {
-            if (released.compareAndSet(false, true)) {
-                interruptTimeout();
-                owner.doRelease(key, hashedKey, connection);
-            }
-        }
-
-        void expire() {
-            if (released.compareAndSet(false, true)) {
-                LOG.warn("MySQLKeyedLockProvider auto-released held lock for key {} (hold limit exceeded)", key);
-                owner.doRelease(key, hashedKey, connection);
-            }
-        }
-
-        private void interruptTimeout() {
-            var t = timeoutThread;
-            if (t != null) {
-                t.interrupt();
-            }
-        }
-    }
+    private record MySQLPayload(String userKey, String hashedKey, Connection connection) {}
 
     public static final class Builder {
 

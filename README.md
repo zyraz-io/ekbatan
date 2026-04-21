@@ -220,104 +220,7 @@ ExecutionConfiguration.builder()
         .build();
 ```
 
-Ekbatan's own write path takes no pessimistic row locks — concurrent conflicts surface as `StaleRecordException` rather than blocked threads. When pessimistic locking is genuinely required, the next section introduces `KeyedLockProvider` — a session-scoped, key-based mutex that fits the Action lifecycle. For lower-level needs, applications can also issue `SELECT ... FOR UPDATE` directly against the `DSLContext`, either standalone or inside a transactional scope via `transactionManager.inTransaction(...)`.
-
-### Pessimistic Locking with `KeyedLockProvider`
-
-Some operations don't fit optimistic locking — **at-most-once idempotency** around external side effects (a webhook handler that calls a payment API), or **single-flight execution** across nodes (a daily reconciliation job). Others (a wallet deposit) can be done either way, but pessimistic locking avoids the retry thrash optimistic locking causes on hot accounts. For all of these, Ekbatan ships `KeyedLockProvider`. You call `provider.acquire(key, maxHold)` to get a `Lease`; closing the lease releases the lock. The key can be any `Object` — a `String`, a `UUID`, an `Id<Wallet>`. Two acquirers using the same key are mutually exclusive (the second waits until the first releases); acquirers using different keys don't block each other.
-
-Four implementations: `InProcessKeyedLockProvider` (single JVM, semaphore-backed) and `PostgresKeyedLockProvider` / `MariaDBKeyedLockProvider` / `MySQLKeyedLockProvider` (cross-JVM, session-scoped at the database — auto-released if the holder crashes).
-
-A wallet deposit, serialized per-wallet by acquiring the lease before reading and persisting:
-
-```java
-public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
-
-    private final WalletRepository walletRepo;
-    private final KeyedLockProvider lockProvider;
-
-    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
-
-    public WalletDepositAction(Clock clock, WalletRepository walletRepo, KeyedLockProvider lockProvider) {
-        super(clock);
-        this.walletRepo = walletRepo;
-        this.lockProvider = lockProvider;
-    }
-
-    @Override
-    protected Wallet perform(Principal principal, Params params) throws InterruptedException {
-        try (var lockLease = lockProvider.acquire(params.walletId, Duration.ofSeconds(10))) {
-            var wallet = walletRepo.getById(params.walletId.getValue());
-            return plan.update(wallet.copy()
-                    .balance(wallet.balance.add(params.amount))
-                    .build());
-        }
-    }
-}
-```
-
-The same deposit can be implemented with optimistic locking alone — but each concurrent conflict on the same wallet would surface as a `StaleRecordException` that triggers a retry. With pessimistic locking, callers wait briefly for the lease and then succeed on their first attempt; the retry loop disappears, trading retry-driven tail latency for a small, predictable wait. On hot wallets that's usually the better trade.
-
-Two things worth noting:
-
-- **`maxHold` (10s above) is a safety net, not a hint.** If the action overruns, the lock auto-releases — capping the blast radius of a hung holder regardless of what the calling thread is doing.
-- **Each `acquire` borrows its own JDBC connection** for the lifetime of the lease. For lock-heavy workloads, point the provider at a dedicated pool via `member.configFor("lockConfig")` so locks don't starve normal queries.
-
-A typical `ShardingConfig` member with a dedicated lock pool:
-
-```yaml
-sharding:
-  defaultShard: { group: 0, member: 0 }
-  groups:
-    - group: 0
-      name: global
-      members:
-        - member: 0
-          name: global-eu-1
-          configs:
-            primaryConfig:
-              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db
-              username: app
-              password: secret
-              maximumPoolSize: 20
-              minimumIdle: 5
-
-            secondaryConfig:
-              jdbcUrl: jdbc:postgresql://replica-eu-1:5432/db
-              username: app
-              password: secret
-              maximumPoolSize: 10
-
-            # Dedicated pool for KeyedLockProvider — keeps lock acquisitions
-            # from competing for connections with normal queries.
-            lockConfig:
-              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db   # same DB; locks must coordinate on the same instance
-              username: app
-              password: secret
-              maximumPoolSize: 40         # per-instance — sized for the concurrent leases this instance will hold
-              minimumIdle: 5
-              leakDetectionThreshold: 120000   # set comfortably above your largest expected maxHold; catches real leaks without warning on legitimate long-held leases
-```
-
-Wiring up a `PostgresKeyedLockProvider` from the parsed `ShardingConfig`:
-
-```java
-import static io.ekbatan.core.concurrent.PostgresKeyedLockProvider.Builder.postgresKeyedLockProvider;
-import static io.ekbatan.core.persistence.ConnectionProvider.hikariConnectionProvider;
-
-// Pull the lockConfig entry from whichever member you want to coordinate on
-var lockDataSourceConfig = shardingConfig.groups.get(0).members.get(0)
-        .configFor("lockConfig")
-        .orElseThrow();
-
-var lockProvider = postgresKeyedLockProvider()
-        .connectionProvider(hikariConnectionProvider(lockDataSourceConfig))
-        .build();
-```
-
-The same pattern works for `MariaDBKeyedLockProvider` and `MySQLKeyedLockProvider` — just swap the builder.
-
-> **Caveat: not the right primitive at very high concurrency.** `KeyedLockProvider` fits coarse-grained coordination (single-flight cron jobs, admin actions, per-shard locks) and low-to-medium contention on the write path. At higher concurrency, every held lease - and every thread blocked waiting for one - pins a JDBC connection for its entire lifetime, which can quickly demand more connections than your database is sized for.
+Ekbatan's own write path takes no pessimistic row locks — concurrent conflicts surface as `StaleRecordException` rather than blocked threads. When pessimistic locking is genuinely required, the [Pessimistic Locking with `KeyedLockProvider`](#pessimistic-locking-with-keyedlockprovider) section introduces a session-scoped, key-based mutex that fits the Action lifecycle. For lower-level needs, applications can also issue `SELECT ... FOR UPDATE` directly against the `DSLContext`, either standalone or inside a transactional scope via `transactionManager.inTransaction(...)`.
 
 ### Soft Deletion
 
@@ -861,6 +764,195 @@ When enabled, each involved shard gets its own transaction, and the action-event
 - Cross-shard foreign keys.
 - Offset/limit pagination, which cannot return correct results across shards. Concrete repositories should use cursor-based pagination instead.
 - Distributed transactions; each shard commits independently.
+
+---
+
+## Pessimistic Locking with `KeyedLockProvider`
+
+Some operations don't fit optimistic locking — **at-most-once idempotency** around external side effects (a webhook handler that calls a payment API), or **single-flight execution** across nodes (a daily reconciliation job). Others (a wallet deposit) can be done either way, but pessimistic locking avoids the retry thrash optimistic locking causes on hot accounts. For all of these, Ekbatan ships `KeyedLockProvider`. You call `provider.tryAcquire(key, maxWait, maxHold)` to get an `Optional<Lease>` — empty if you couldn't acquire within `maxWait`, populated otherwise; closing the lease releases the lock. The key is a `String` — namespace per type when locking on entity IDs (e.g. `"wallet:" + walletId`) so two unrelated ID spaces never collide. Two acquirers using the same key are mutually exclusive (the second waits up to `maxWait` for the first to release); acquirers using different keys don't block each other.
+
+Five implementations: `InProcessKeyedLockProvider` (single JVM, semaphore-backed); `PostgresKeyedLockProvider` / `MariaDBKeyedLockProvider` / `MySQLKeyedLockProvider` (cross-JVM, session-scoped at the database — auto-released if the holder crashes); and `RedisKeyedLockProvider` (cross-JVM, Redisson-backed, sub-millisecond hand-off — opt in via the `ekbatan-keyed-lock-redis` module).
+
+**Reentrancy.** All five providers are reentrant per `(thread, key)` — the same thread can re-acquire a key it already holds without blocking. The underlying lock is released only when the *outermost* lease is closed (or the `maxHold` watchdog fires). The first acquire's `maxHold` governs the watchdog; inner re-entries' `maxHold` arguments are ignored, so an inner timer can never shorten the outer holder's commitment. This is stricter than Redisson/Hazelcast's last-call-wins convention. Reentrancy is per-thread, not per-call-stack — a child thread spawned inside a held region is a different identity and will block.
+
+A wallet deposit, serialized per-wallet by acquiring the lease before reading and persisting:
+
+```java
+public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
+
+    private final WalletRepository walletRepo;
+    private final KeyedLockProvider lockProvider;
+
+    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
+
+    public WalletDepositAction(Clock clock, WalletRepository walletRepo, KeyedLockProvider lockProvider) {
+        super(clock);
+        this.walletRepo = walletRepo;
+        this.lockProvider = lockProvider;
+    }
+
+    @Override
+    protected Wallet perform(Principal principal, Params params) throws InterruptedException {
+        try (var lockLease = lockProvider.tryAcquire("wallet:" + params.walletId, Duration.ofSeconds(2), Duration.ofSeconds(10))
+                .orElseThrow(() -> new IllegalStateException(
+                        "Wallet " + params.walletId + " is busy; try again later"))) {
+            var wallet = walletRepo.getById(params.walletId.getValue());
+            return plan.update(wallet.copy()
+                    .balance(wallet.balance.add(params.amount))
+                    .build());
+        }
+    }
+}
+```
+
+The same deposit can be implemented with optimistic locking alone — but each concurrent conflict on the same wallet would surface as a `StaleRecordException` that triggers a retry. With pessimistic locking, callers wait briefly for the lease and then succeed on their first attempt; the retry loop disappears, trading retry-driven tail latency for a small, predictable wait. On hot wallets that's usually the better trade.
+
+Three things worth noting:
+
+- **`maxWait` (2s above) bounds how long the caller will block** before giving up and surfacing a domain error. Without it (e.g., the no-wait `acquire(key, maxHold)` variant), a caller would queue indefinitely behind any prior holders — bounded eventually by their `maxHold`, but with worst-case latency proportional to the queue depth.
+- **`maxHold` (10s above) is a safety net, not a hint.** If the action overruns, the lock auto-releases — capping the blast radius of a hung holder regardless of what the calling thread is doing.
+- **Each acquire borrows its own JDBC connection** for the lifetime of the lease (and for the wait, if any). For lock-heavy workloads, point the provider at a dedicated pool via `member.configFor("lockConfig")` so locks don't starve normal queries.
+
+A typical `ShardingConfig` member with a dedicated lock pool:
+
+```yaml
+sharding:
+  defaultShard: { group: 0, member: 0 }
+  groups:
+    - group: 0
+      name: global
+      members:
+        - member: 0
+          name: global-eu-1
+          configs:
+            primaryConfig:
+              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db
+              username: app
+              password: secret
+              maximumPoolSize: 20
+              minimumIdle: 5
+
+            secondaryConfig:
+              jdbcUrl: jdbc:postgresql://replica-eu-1:5432/db
+              username: app
+              password: secret
+              maximumPoolSize: 10
+
+            # Dedicated pool for KeyedLockProvider — keeps lock acquisitions
+            # from competing for connections with normal queries.
+            lockConfig:
+              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db   # same DB; locks must coordinate on the same instance
+              username: app
+              password: secret
+              maximumPoolSize: 40         # per-instance — sized for the concurrent leases this instance will hold
+              minimumIdle: 5
+              leakDetectionThreshold: 120000   # set comfortably above your largest expected maxHold; catches real leaks without warning on legitimate long-held leases
+```
+
+Wiring up a `PostgresKeyedLockProvider` from the parsed `ShardingConfig`:
+
+```java
+import static io.ekbatan.core.concurrent.PostgresKeyedLockProvider.Builder.postgresKeyedLockProvider;
+import static io.ekbatan.core.persistence.ConnectionProvider.hikariConnectionProvider;
+
+// Pull the lockConfig entry from whichever member you want to coordinate on
+var lockDataSourceConfig = shardingConfig.groups.get(0).members.get(0)
+        .configFor("lockConfig")
+        .orElseThrow();
+
+var lockProvider = postgresKeyedLockProvider()
+        .connectionProvider(hikariConnectionProvider(lockDataSourceConfig))
+        .build();
+```
+
+The same pattern works for `MariaDBKeyedLockProvider`, `MySQLKeyedLockProvider`, and `RedisKeyedLockProvider` (the Redis variant lives in `ekbatan-keyed-lock-redis` and takes a `RedissonClient` instead of a `ConnectionProvider`).
+
+> **Caveat: not the right primitive at very high concurrency.** `KeyedLockProvider` fits coarse-grained coordination (single-flight cron jobs, admin actions, per-shard locks) and low-to-medium contention on the write path. At higher concurrency, every held lease - and every thread blocked waiting for one - pins a JDBC connection for its entire lifetime, which can quickly demand more connections than your database is sized for.
+
+---
+
+## Distributed Background Jobs
+
+For periodic background work that should run on **at most one** instance across a cluster — daily reports, hourly cleanups, periodic reconciliation — Ekbatan ships `JobRegistry` in the `ekbatan-distributed-jobs` module. It's a thin, opinionated facade over [db-scheduler](https://github.com/kagkarlsson/db-scheduler) that handles the tricky parts (atomic claim across instances, heartbeat-based crash recovery, graceful shutdown, per-task virtual-thread workers) while keeping the user-facing API tiny.
+
+Define a job by extending `DistributedJob`:
+
+```java
+public class DailyReportJob extends DistributedJob {
+
+    private final ReportService reportService;
+
+    public DailyReportJob(ReportService reportService) {
+        this.reportService = reportService;
+    }
+
+    @Override
+    public String name() {
+        return "daily-report"; // cluster-wide unique
+    }
+
+    @Override
+    public Schedule schedule() {
+        return Schedules.daily(LocalTime.of(2, 0)); // every day at 02:00
+    }
+
+    @Override
+    public void execute(ExecutionContext ctx) {
+        reportService.generateAndSend();
+    }
+}
+```
+
+`Schedule` is db-scheduler's interface, so any of its implementations work directly: `FixedDelay`, `FixedRate`, `Cron`, `Daily`, and so on.
+
+Wire it into a `JobRegistry` at application startup, pointing at a dedicated connection pool:
+
+```java
+import static io.ekbatan.distributedjobs.JobRegistry.jobRegistry;
+import static io.ekbatan.core.persistence.ConnectionProvider.hikariConnectionProvider;
+
+var jobsPool = hikariConnectionProvider(jobsDataSourceConfig);
+
+var registry = jobRegistry()
+        .connectionProvider(jobsPool)
+        .withJob(new DailyReportJob(reportService))
+        .withJob(new HourlyCleanupJob(cleanupService))
+        .pollInterval(Duration.ofSeconds(10))
+        .heartbeatInterval(Duration.ofSeconds(30))
+        .build(); // a JVM shutdown hook is installed by default
+
+registry.start();
+```
+
+For advanced db-scheduler settings not exposed by the builder (`missedHeartbeatsLimit`, `deleteUnresolvedAfter`, custom polling strategy, etc.), `customizeScheduler(...)` runs last in `build()` and can override any of Ekbatan's defaults:
+
+```java
+var registry = jobRegistry()
+        .connectionProvider(jobsPool)
+        .withJob(new DailyReportJob(reportService))
+        .customizeScheduler(b -> b
+                .missedHeartbeatsLimit(3)
+                .deleteUnresolvedAfter(Duration.ofDays(30)))
+        .build();
+```
+
+**Use a dedicated connection pool for the `JobRegistry`** — separate from your primary application pool. db-scheduler polls continuously, so you don't want it competing with normal queries for connections. A small pool is enough (polling + heartbeats are low-volume); add a `jobSchedulerConfig` slot to the relevant `ShardingConfig` member:
+
+```yaml
+sharding:
+  groups:
+    - members:
+        - configs:
+            primaryConfig:    { ... }
+            secondaryConfig:  { ... }
+            lockConfig:       { ... }
+            jobSchedulerConfig:
+              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db
+              username: app
+              password: secret
+              maximumPoolSize: 5
+              minimumIdle: 1
+```
 
 ---
 

@@ -28,9 +28,17 @@ ekbatan/
 │   │   │   └── persister/                 # Change & event persistence
 │   │   │       └── event/single_table_json/  # Single-table JSON event store implementation
 │   │   ├── shard/                         # Sharding: ShardIdentifier, DatabaseRegistry, ShardingStrategy
+│   │   ├── concurrent/                    # KeyedLockProvider family (Postgres, MariaDB, MySQL, InProcess) + KeyedReentrantHolder
 │   │   ├── persistence/                   # Transaction management, JOOQ converters
 │   │   └── config/                        # DataSourceConfig
 ├── ekbatan-annotation-processor/          # @AutoBuilder annotation processor (JavaPoet)
+├── ekbatan-distributed-jobs/              # Distributed background jobs (db-scheduler facade)
+│   └── src/main/java/io/ekbatan/distributedjobs/
+│       ├── DistributedJob.java            # Abstract class — name, schedule, execute
+│       └── JobRegistry.java               # Builder-driven facade over db-scheduler Scheduler
+├── ekbatan-keyed-lock-redis/              # Distributed KeyedLockProvider backed by Redisson
+│   └── src/main/java/io/ekbatan/keyedlock/redis/
+│       └── RedisKeyedLockProvider.java    # Redisson RLock wrapper preserving Ekbatan reentry contract
 ├── ekbatan-integration-tests/              # End-to-end integration tests (package: io.ekbatan.test)
 │   ├── core-repo/                         # Testcontainer-based repository tests across PG/MySQL/MariaDB
 │   │   ├── shared/                        # Shared BaseRepositoryTest, dummy models (test fixtures)
@@ -39,6 +47,12 @@ ekbatan/
 │   │   └── mariadb/                       # MariaDB runners
 │   ├── postgres-simple/                   # Simple end-to-end wallet flow (PostgreSQL)
 │   ├── postgres-sharded/                  # Sharded wallet with cross-shard tests (PostgreSQL)
+│   ├── keyed-lock-provider/               # KeyedLockProvider integration tests
+│   │   ├── pg/                            # PostgresKeyedLockProvider
+│   │   ├── mariadb/                       # MariaDBKeyedLockProvider
+│   │   ├── mysql/                         # MySQLKeyedLockProvider
+│   │   └── redis/                         # RedisKeyedLockProvider (Redisson + Redis testcontainer)
+│   ├── distributed-jobs-pg/               # JobRegistry integration tests (PostgreSQL)
 │   └── event-pipeline/                    # Debezium → Kafka JSON/Avro/Protobuf event streaming
 ├── buildSrc/                              # Gradle build conventions
 └── config/checkstyle/                     # Checkstyle rules
@@ -94,6 +108,30 @@ Command pattern for business operations:
 - **`ConnectionProvider`** — HikariCP wrapper. Supports primary (master) and secondary (read-replica) connections.
 - **`Transaction`** — Wraps a JDBC Connection with begin/commit/rollback lifecycle.
 - **JOOQ Converters** — `InstantConverter`, `JSONObjectNodeConverter`, `JSONBObjectNodeConverter`, `UuidBinaryConverter`, `UuidStringConverter`.
+
+### Concurrency Layer (`ekbatan-core/...core/concurrent/`)
+
+Keyed mutual-exclusion primitives for cross-thread (and cross-JVM) coordination:
+
+- **`KeyedLockProvider`** — interface. `acquire(key, maxHold)` returns a `Lease`; `tryAcquire(key, maxWait, maxHold)` is the bounded-wait variant. Closing the lease releases the lock.
+- **`InProcessKeyedLockProvider`** — single-JVM, semaphore-backed, FIFO-fair.
+- **`PostgresKeyedLockProvider` / `MariaDBKeyedLockProvider` / `MySQLKeyedLockProvider`** — cross-JVM via session-scoped advisory locks (`pg_advisory_lock` / `GET_LOCK`). Each acquire borrows its own JDBC connection; per-DB quirks (timeout precision, Galera caveat, wait-forever sentinel) are documented in each class's Javadoc.
+- **`KeyedReentrantHolder`** — shared internal helper. Owns the per-`(thread, key)` counter, watchdog thread, and release-arbitration CAS so each provider only has to define backend acquire/release.
+
+**Reentrancy contract (uniform across all providers).** Same thread + same key acquires re-enter without blocking; the underlying backend lock is released only when the *outermost* lease is closed (or `maxHold` watchdog fires). The first acquire's `maxHold` governs the watchdog — re-entries' `maxHold` arguments are ignored. This is stricter than Redisson/Hazelcast's "last-call-wins" convention and prevents an inner re-entry from shortening the outer holder's commitment. Reentrancy is per-thread, not per-call-stack: a child thread spawned inside a held region is a different identity and will block.
+
+### Distributed Lock Layer (`ekbatan-keyed-lock-redis/`)
+
+- **`RedisKeyedLockProvider`** — `KeyedLockProvider` backed by Redisson's `RLock`. Reuses `KeyedReentrantHolder` to enforce Ekbatan's first-call-wins reentrancy on top of Redisson's last-call-wins default. Always passes `maxHold` as Redisson's `leaseTime` (disables Redisson's watchdog), uses the local virtual-thread watchdog instead. Builder takes a `RedissonClient` plus an optional `namespace` prefix (default `"ekbatan-lock"`). Single-master Redis only — not Redlock-based.
+
+### Distributed Jobs Layer (`ekbatan-distributed-jobs/`)
+
+Recurring background jobs that run on at-most-one instance across a cluster — thin opinionated facade over [db-scheduler](https://github.com/kagkarlsson/db-scheduler):
+
+- **`DistributedJob`** — abstract class. Implementers provide `name()` (cluster-wide unique), `schedule()` (any db-scheduler `Schedule` — `FixedDelay`, `FixedRate`, `Cron`, `Daily`, etc.), and `execute(ExecutionContext)`.
+- **`JobRegistry`** — builder over db-scheduler's `Scheduler`. Auto-sizes `threads(jobs.size())` for the polling batch, swaps in `Executors.newVirtualThreadPerTaskExecutor()` for workers, registers a JVM shutdown hook by default. Curated knobs: `pollInterval`, `heartbeatInterval`, `shutdownMaxWait`, `registerShutdownHook`. Escape hatch: `customizeScheduler(Consumer<SchedulerBuilder>)` runs last in `build()` for any advanced db-scheduler setting not exposed (e.g. `missedHeartbeatsLimit`, `deleteUnresolvedAfter`, custom polling strategy).
+
+Coordination semantics are inherited from db-scheduler: every instance polls the shared `scheduled_tasks` table, only one wins the atomic claim per scheduled slot, dead executions are reclaimed via heartbeat staleness. The module needs a separate `scheduled_tasks` table provisioned in the application's database (db-scheduler's verbatim PG schema is in `ekbatan-integration-tests/distributed-jobs-pg/src/test/resources/db/migration/V0001__create_scheduled_tasks.sql`).
 
 ### Annotation Processor (`ekbatan-annotation-processor/`)
 
