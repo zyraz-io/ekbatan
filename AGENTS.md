@@ -209,17 +209,261 @@ AbstractRepository resolves shards via `effectiveShard()` overloads, which combi
 ### Timezone Convention — Always UTC
 All timestamps in Ekbatan should be stored and processed in **UTC**. This applies to:
 
-- **Database server timezone** — set the database machine or container to `TZ=UTC`. Ekbatan uses `java.time.Instant` (always UTC) for `created_date` and `updated_date` fields. If the database server runs in a non-UTC timezone, `TIMESTAMP` columns (without time zone) will silently shift values on read, causing mismatches between what Java wrote and what the database returns.
+- **SQL column type — use `TIMESTAMP`, never `TIMESTAMPTZ`.** Every timestamp column in every Ekbatan migration is `TIMESTAMP` (without time zone). This is enforced project-wide and is not negotiable per-table. The DB server is pinned to UTC (see below), so plain `TIMESTAMP` round-trips correctly with Java `Instant`. Do not introduce `TIMESTAMPTZ` even if it seems like a "best practice" elsewhere — mixing the two within Ekbatan creates subtle JOOQ codegen and converter inconsistencies.
+- **Database server timezone** — set the database machine or container to `TZ=UTC`. Ekbatan uses `java.time.Instant` (always UTC) for `created_date` and `updated_date` fields. If the database server runs in a non-UTC timezone, `TIMESTAMP` columns will silently shift values on read, causing mismatches between what Java wrote and what the database returns.
 - **Table column values** — all timestamps persisted by the framework represent UTC instants. Do not store local times. If a business requirement needs a local time representation, store it as a separate field alongside the UTC instant.
 - **TestContainers** — always configure with `.withEnv("TZ", "UTC")` to avoid timezone-dependent test failures (e.g., daylight saving time shifts).
 - **JDBC connections** — when connecting to PostgreSQL, MySQL, or MariaDB, ensure the session timezone is UTC. For PostgreSQL this is typically the default; for MySQL/MariaDB, consider adding `serverTimezone=UTC` to the JDBC URL if needed.
+
+> **For agents writing new migrations:** before writing schema, open one existing Flyway migration in `ekbatan-integration-tests/.../db/migration/` and copy its column-type conventions verbatim. The existing migrations are the source of truth — not memory of "what's typical" elsewhere, and not example fragments scattered through other docs.
+
+### Repository connection helpers (`db` / `readonlyDb` / `txDb` / `txDbElseDb`)
+
+`AbstractRepository` exposes four families of `protected` helpers for pulling a JOOQ `DSLContext` for the right shard. Custom queries in repository subclasses (or any standalone repository like `EventEntityRepository` and `EventNotificationRepository` in `local-event-handler`) should use these instead of poking at `databaseRegistry.primary` / `secondary` directly.
+
+| Family | Returns | When to use |
+|---|---|---|
+| `db()` / `db(id)` / `db(persistable)` / `db(shard)` / `dbs()` | Primary `DSLContext` (writes go here, strongly-consistent reads go here). | Direct primary access — when you know there is **no** outer transaction and you want primary, e.g. ad-hoc admin scripts, fallback path of `txDbElseDb`. |
+| `readonlyDb()` / `readonlyDb(id)` / `readonlyDb(shard)` / `readonlyDbs()` | Secondary/replica `DSLContext`. | **All read-only queries** that don't need read-after-write consistency with the current transaction — e.g. dispatch's `findDue`, fan-out's `findUndelivered`, list/search endpoints. Reading from the replica offloads primary and lets the framework remain at-least-once even when replication lags. |
+| `txDb()` / `txDb(id)` / `txDb(persistable)` / `txDb(shard)` | `Optional<DSLContext>` — the active transaction's context if one is open on this shard, else empty. | When you must explicitly assert "there must be an open transaction" and fail loudly otherwise. Rarely needed directly; usually paired via `txDbElseDb`. |
+| `txDbElseDb()` / `txDbElseDb(id)` / `txDbElseDb(persistable)` / `txDbElseDb(shard)` | Active transaction's context if open, else `db()` (primary). | **All writes** in custom queries. Inside an action's transaction, this hooks into the action's atomic write path; outside, it falls back to primary so ad-hoc writes still work. |
+
+**Rules of thumb:**
+- Reads → `readonlyDb(...)`. Don't use `txDbElseDb` for pure reads — that pulls from primary unnecessarily, and inside a transaction it ties read consistency to the transaction's connection (rarely what you want).
+- Writes → `txDbElseDb(...)`. This automatically reuses the action's transactional connection when called from inside `ActionExecutor.persistChanges()` or `tm.inTransaction(...)`, so the write is atomic with the rest of the action. Outside any transaction, it falls back to primary.
+- Iterating all shards (scatter-gather) → use `dbs()` (primary writes) or `readonlyDbs()` (replica reads). Both are sharding-strategy-aware: with `NoShardingStrategy` they collapse to a single-element collection.
+- `id`-based and `persistable`-based overloads internally call `effectiveShard(id)` / `effectiveShard(persistable)` — they're shorthand for "give me the connection for the shard this entity belongs to." Available only on `AbstractRepository` subclasses (which know their `ShardingStrategy`); standalone repositories like `EventEntityRepository` use the `(ShardIdentifier shard)` overloads explicitly.
+
+**Idempotency-on-INSERT note:** when the same logical row could be inserted twice (e.g. a fanout job re-reading rows from a lagging replica), prefer making the INSERT itself idempotent via JOOQ's `.onConflictDoNothing()` rather than catching the constraint exception in the application loop. `onConflictDoNothing()` translates to `ON CONFLICT DO NOTHING` on Postgres and `INSERT IGNORE` on MySQL/MariaDB, so it works cross-dialect without dispatching on `dialect.family()`.
 
 ### Multi-Database Support
 The framework supports PostgreSQL, MySQL, and MariaDB. Dialect differences are handled in:
 - `AbstractRepository` — Different SQL strategies for upsert/update
 - JOOQ converters — `JSONB` (PostgreSQL) vs `JSON` (MySQL/MariaDB)
-- UUID handling — Native UUID (PostgreSQL) vs binary/string (MySQL)
+- UUID handling — Native UUID (PostgreSQL/MariaDB) vs `CHAR(36)` + converter (MySQL)
 - Test infrastructure — Separate test subprojects per database
+
+#### Column-type cheatsheet
+
+The reference for what DDL type, what `SQLDataType`, and what JOOQ converter to use for each Java type, per dialect. **Always consult this table before writing migrations or repository field definitions.**
+
+| Java type | PostgreSQL DDL | PG `SQLDataType` | MariaDB DDL | MariaDB `SQLDataType` | MySQL DDL | MySQL `SQLDataType` | Converter |
+|---|---|---|---|---|---|---|---|
+| `UUID` | `UUID` | `UUID.class` | `UUID` | `UUID.class` | `CHAR(36) CHARACTER SET ascii` | `SQLDataType.CHAR(36).asConvertedDataType(new UuidStringConverter())` | `UuidStringConverter` (MySQL only) |
+| `ObjectNode` | `JSONB` | `SQLDataType.JSONB.asConvertedDataType(new JSONBObjectNodeConverter())` | `JSON` | `SQLDataType.JSON.asConvertedDataType(new JSONObjectNodeConverter())` | `JSON` | `SQLDataType.JSON.asConvertedDataType(new JSONObjectNodeConverter())` | `JSONBObjectNodeConverter` (PG) / `JSONObjectNodeConverter` (MariaDB+MySQL) |
+| `Instant` | `TIMESTAMP` | `SQLDataType.LOCALDATETIME.asConvertedDataType(new InstantConverter())` | `DATETIME(6)` | same | `DATETIME(6)` | same | `InstantConverter` (all dialects) |
+| `String` | `VARCHAR(N)` / `TEXT` | `String.class` | same | same | same | same | none |
+| `Boolean` | `BOOLEAN` | `Boolean.class` | `BOOLEAN` (alias for `TINYINT(1)`) | `Boolean.class` | `BOOLEAN` (alias for `TINYINT(1)`) | `Boolean.class` | none |
+| `Long` | `BIGINT` | `Long.class` | `BIGINT` | `Long.class` | `BIGINT` | `Long.class` | none |
+| `Integer` | `INT` | `Integer.class` | `INT` | `Integer.class` | `INT` | `Integer.class` | none |
+| `BigDecimal` | `DECIMAL(p, s)` | `BigDecimal.class` | `DECIMAL(p, s)` | `BigDecimal.class` | `DECIMAL(p, s)` | `BigDecimal.class` | none |
+
+**Why MySQL needs `CHARACTER SET ascii` on UUID columns:** UUID strings are pure 7-bit ASCII (8-4-4-4-12 hex with hyphens). Pinning the charset to ASCII keeps each char at one byte (vs. 3–4 under `utf8mb4`), tightens index locality, and avoids accidental collation rules being applied. PostgreSQL's native `UUID` and MariaDB's `UUID` (≥ 10.7) bypass charset entirely.
+
+**Why MariaDB JSON columns need a converter despite JSON being a "real" type:** MariaDB stores JSON as `LONGTEXT` with a CHECK constraint internally, and the JDBC driver reports the type accordingly. The forced-type entry in `build.gradle.kts`'s `generateJooqClasses` block must use `(?i:JSON)` (or `(?i:JSON|LONGTEXT)` if you also have legitimate LONGTEXT columns) and bind `JSONObjectNodeConverter`.
+
+**Why MySQL UUID converter is `CHAR(36)`-shaped, not `BINARY(16)`:** Ekbatan picks the human-readable form to keep query logs, raw JDBC dumps, and cross-dialect IDs grep-able. The `BINARY(16)` form would be more compact but isn't currently used anywhere in the project.
+
+#### Schema vs database
+
+In PostgreSQL, `eventlog` is a *schema* inside the connected database — created via `CREATE SCHEMA IF NOT EXISTS eventlog;` in a Flyway migration. No init script needed.
+
+In MariaDB and MySQL, "schema" and "database" are synonyms; there is no second-level grouping inside a database. The `eventlog` namespace becomes a separate database (e.g. `eventlog.events` is read as `<database>.<table>`). Two consequences:
+
+1. The container's named database (e.g. `testdb`) is created by `MARIADB_DATABASE` / `MYSQL_DATABASE` env var. The `eventlog` database must be created separately. Ekbatan does this via a Flyway migration:
+   ```sql
+   -- V0000__create_eventlog_schema.sql
+   CREATE DATABASE IF NOT EXISTS eventlog;
+   ```
+2. The named test user (e.g. `test`) only has rights on the named database by default. Use a docker-entrypoint init script mounted at `/docker-entrypoint-initdb.d/` to grant cross-database privileges, e.g.:
+   ```sql
+   -- mariadb_init.sql / mysql_init.sql
+   GRANT ALL PRIVILEGES ON *.* TO 'test'@'%';
+   FLUSH PRIVILEGES;
+   ```
+   Mount via `MariaDBContainer.withCopyFileToContainer(MountableFile.forClasspathResource("mariadb_init.sql"), "/docker-entrypoint-initdb.d/mariadb_init.sql")`. The script runs as root before the container becomes ready, so subsequent migrations run as `test` with cross-database access.
+
+#### Partial indexes
+
+PostgreSQL only. The framework's PG migrations use them to keep "due / pending" sweep queries cheap:
+```sql
+CREATE INDEX events_pending_fanout
+    ON eventlog.events (event_date)
+    WHERE delivered = FALSE;
+CREATE INDEX event_notifications_due
+    ON eventlog.event_notifications (next_retry_at)
+    WHERE state IN ('PENDING', 'FAILED');
+```
+For the MariaDB/MySQL equivalents, **drop the `WHERE` clause** and accept a full index. The selectivity loss is small in practice (the polling query already filters on `next_retry_at <= now()` plus state, and the index covers the leading column).
+
+#### Repository field-definition pattern (cross-dialect repos)
+
+When a repository targets multiple dialects, define field constants in three parallel sets — `PG_*`, `MARIADB_*`, `MYSQL_*` — but only for fields whose `SQLDataType` actually differs (UUID and JSON columns). Keep dialect-neutral fields (`String`, `Instant`, `Boolean`, `Integer`, `Long`) as a single shared constant.
+
+In the constructor, switch on `dialect.family()`:
+```java
+if (defaultTm.dialect.family() == SQLDialect.MYSQL) {
+    this.idField = MYSQL_ID;
+    this.payloadField = MYSQL_PAYLOAD;
+    // …
+} else if (defaultTm.dialect.family() == SQLDialect.MARIADB) {
+    this.idField = MARIADB_ID;
+    this.payloadField = MARIADB_PAYLOAD;
+    // …
+} else {
+    this.idField = PG_ID;
+    this.payloadField = PG_PAYLOAD;
+    // …
+}
+```
+Reference implementations: `ekbatan-core/.../single_table_json/EventEntityRepository` and `ekbatan-events/local-event-handler/.../EventEntityRepository`.
+
+#### jOOQ codegen `build.gradle.kts` per dialect
+
+The framework uses the [`dev.monosoul.jooq-docker`](https://github.com/monosoul/jooq-gradle-plugin) plugin to spin up a throwaway DB container at build time, run the Flyway migrations against it, then introspect the live schema and generate JOOQ classes. Each dialect module needs three blocks: the plugin declaration, the container config, and the codegen task. **The container config differs per dialect; the rest is largely uniform.** Reference patterns:
+
+**PostgreSQL** — no `jooq { withContainer { … } }` block needed; the plugin's default container is Postgres.
+```kotlin
+plugins {
+    id("java")
+    id("dev.monosoul.jooq-docker") version "8.0.9"
+}
+
+tasks {
+    generateJooqClasses {
+        schemas.set(listOf("public", "eventlog"))
+        basePackageName.set("io.ekbatan.test.<your_module>.generated.jooq")
+        migrationLocations.setFromFilesystem("src/test/resources/db/migration")
+        outputDirectory.set(project.layout.buildDirectory.dir("generated-jooq"))
+        flywayProperties.put("flyway.placeholderReplacement", "false")
+        includeFlywayTable.set(false)
+        outputSchemaToDefault.add("public")
+        schemaToPackageMapping.put("public", "public_schema")
+        schemaToPackageMapping.put("eventlog", "eventlog_schema")
+        usingJavaConfig {
+            database.withForcedTypes(
+                ForcedType()
+                    .withUserType("java.time.Instant")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.InstantConverter")
+                    .withIncludeTypes("TIMESTAMP")
+                    .withIncludeExpression(".*"),
+                ForcedType()
+                    .withUserType("tools.jackson.databind.node.ObjectNode")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONBObjectNodeConverter")
+                    .withIncludeTypes("JSONB")
+                    .withIncludeExpression(".*"),
+            )
+        }
+    }
+}
+
+dependencies {
+    jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
+    // …
+}
+```
+
+**MariaDB** — explicit `jooq { withContainer { … } }`; converter regex tightens to `(?i:JSON)` (not `LONGTEXT`, since MariaDB JDBC reports JSON columns as JSON when the dialect is MariaDB).
+```kotlin
+jooq {
+    withContainer {
+        image {
+            name = "mariadb:11.8"
+            envVars = mapOf(
+                "MARIADB_ROOT_PASSWORD" to "root",
+                "MARIADB_DATABASE" to "testdb",
+            )
+        }
+        db {
+            username = "root"; password = "root"; name = "testdb"; port = 3306
+            jdbc { schema = "jdbc:mariadb"; driverClassName = "org.mariadb.jdbc.Driver" }
+        }
+    }
+}
+
+tasks {
+    generateJooqClasses {
+        schemas.set(listOf("testdb"))                                  // only generate for tables you'll use
+        basePackageName.set("io.ekbatan.test.<your_module>_mariadb.generated.jooq")
+        migrationLocations.setFromFilesystem("src/test/resources/db/migration")
+        outputDirectory.set(project.layout.buildDirectory.dir("generated-jooq"))
+        flywayProperties.put("flyway.placeholderReplacement", "false")
+        includeFlywayTable.set(false)
+        outputSchemaToDefault.add("testdb")          // generate at root; no `<schema>/` subpackage on MariaDB/MySQL
+        usingJavaConfig {
+            database.withForcedTypes(
+                ForcedType()
+                    .withUserType("java.time.Instant")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.InstantConverter")
+                    .withIncludeTypes("(?i:DATETIME|TIMESTAMP)")
+                    .withIncludeExpression(".*"),
+                ForcedType()
+                    .withUserType("tools.jackson.databind.node.ObjectNode")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter")
+                    .withIncludeTypes("(?i:JSON)")
+                    .withIncludeExpression(".*"),
+            )
+        }
+    }
+}
+
+dependencies {
+    implementation("org.mariadb.jdbc:mariadb-java-client:${project.property("mariadbJavaClientVersion")}")
+    jooqCodegen("org.mariadb.jdbc:mariadb-java-client:${project.property("mariadbJavaClientVersion")}")
+    jooqCodegen("org.flywaydb:flyway-mysql:${project.property("flywayVersion")}")
+    implementation("org.flywaydb:flyway-mysql:${project.property("flywayVersion")}")
+    // …
+}
+```
+
+**MySQL** — same shape as MariaDB but adds the UUID forced-type entry (CHAR(36) → UUID via `UuidStringConverter`).
+```kotlin
+jooq {
+    withContainer {
+        image {
+            name = "mysql:9.4.0"
+            envVars = mapOf("MYSQL_ROOT_PASSWORD" to "root", "MYSQL_DATABASE" to "testdb")
+        }
+        db {
+            username = "root"; password = "root"; name = "testdb"; port = 3306
+            jdbc { schema = "jdbc:mysql"; driverClassName = "com.mysql.cj.jdbc.Driver" }
+        }
+    }
+}
+
+tasks {
+    generateJooqClasses {
+        schemas.set(listOf("testdb"))
+        // … same Instant + JSON forced types as MariaDB, plus:
+        usingJavaConfig {
+            database.withForcedTypes(
+                // … Instant, JSON entries …
+                ForcedType()
+                    .withUserType("java.util.UUID")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.mysql.UuidStringConverter")
+                    .withIncludeTypes("CHAR\\(36\\)")
+                    .withIncludeExpression(".*\\.id|.*_id"),       // narrow scope: UUID columns only
+            )
+        }
+    }
+}
+
+dependencies {
+    implementation("com.mysql:mysql-connector-j:${project.property("mysqlConnectorVersion")}")
+    jooqCodegen("com.mysql:mysql-connector-j:${project.property("mysqlConnectorVersion")}")
+    jooqCodegen("org.flywaydb:flyway-mysql:${project.property("flywayVersion")}")
+    implementation("org.flywaydb:flyway-mysql:${project.property("flywayVersion")}")
+    // …
+}
+```
+
+**Why `schemas.set(listOf("testdb"))` excludes `eventlog` for MariaDB/MySQL but PG includes both:** generated classes are only useful where the repository will actually reference them. Modules that manually define `Field<UUID>`/`Field<ObjectNode>` constants for some tables (e.g. the `event_notifications` table in `local-event-handler`) don't need those tables generated — and including them tends to surface dialect-specific JDBC type quirks that aren't worth fighting (e.g. MariaDB JSON↔LONGTEXT confusion, MySQL UUID↔CHAR(36) needing a column-name-narrowed UUID converter). Generate only what your repos consume; let the manual field definitions handle the rest.
+
+**Why the MySQL UUID forced type uses `withIncludeExpression(".*\\.id|.*_id")`:** unlike Postgres/MariaDB, MySQL has no native UUID type — every UUID column is just `CHAR(36)`. Without an expression filter, the converter would also bind to unrelated `CHAR(36)` columns (handler names, status enums, etc.). Restrict to columns whose name ends in `id` or is named `id`.
+
+#### Test container init scripts
+
+For MariaDB/MySQL TestContainers, place init SQL in `src/test/resources/<dialect>_init.sql` and mount it via `withCopyFileToContainer(MountableFile.forClasspathResource("mariadb_init.sql"), "/docker-entrypoint-initdb.d/mariadb_init.sql")`. The container's entrypoint runs every `.sql` in that directory as root before the DB becomes ready, which is the right place to issue cross-database `GRANT`s and any one-time setup the test user lacks privilege for. Don't put privilege grants in Flyway migrations — they require root, and Flyway connects as the test user.
 
 ### OpenTelemetry Tracing
 
@@ -263,6 +507,8 @@ Ekbatan instruments its action execution pipeline using the **OpenTelemetry API*
 
 The project uses the Builder pattern extensively. There are two categories: **infrastructure builders** (for framework classes like `ActionExecutor`, `ExecutionConfiguration`, registries) and **domain builders** (for `Model` and `Entity` subclasses). Both follow the same core principles but differ in structure.
 
+> **Strongly recommended: builder-POJOs everywhere, not Java records.** Every immutable in-memory representation in this codebase — domain `Model`/`Entity` subclasses, infrastructure config classes, *and DB-row-representing types like* `EventEntity` *and* `EventNotification` — uses the same builder-POJO style: `public final` fields, private constructor taking a Builder, fluent Builder with a static factory, validation in the constructor. Do **not** introduce Java `record` types for these. Records can't carry the validation conventions, can't extend the `Model`/`Entity` base classes, can't be incrementally constructed via fluent setters, and produce noticeably different call sites — mixing the two styles makes the codebase inconsistent and harder to read. Use records only for genuinely transient internal carriers if absolutely necessary, never for anything that represents a row, an event, or a domain concept.
+
 #### Core Principles
 
 1. **Target class fields are `public final`** — the target class is immutable, so fields are exposed directly. No getters needed. Builder fields are `private` — they are internal to the builder.
@@ -271,8 +517,8 @@ The project uses the Builder pattern extensively. There are two categories: **in
 4. **Private constructor on the Builder** — instantiation goes through a static factory method.
 5. **Static factory method** — named after the thing being built, returns a new Builder instance.
 6. **Setter methods just assign** — no validation, and no guards on prior state (e.g. "already called", "call order"). Builders are often returned partially-configured from factories, and a downstream caller may legitimately override an earlier value — restricting that breaks composability. Last call wins, same as repeated `Map.put`. Setters return `this` (or `self()` for generic builders) for fluent chaining.
-7. **All validation happens in the target class constructor** — the constructor reads builder fields and validates using `Validate.notNull()`, `Validate.isTrue()`, etc. This is the single place where invariants are enforced.
-8. **Default values are set on the builder field declaration** — not resolved with ternary logic in the constructor. If a field has a sensible default, assign it at the field level in the Builder. The constructor then just reads it directly.
+7. **All validation happens in the target class constructor** — the constructor reads builder fields and validates using `Validate.notNull()`, `Validate.isTrue()`, etc. This is the single place where invariants are enforced. **The constructor makes no assumption about builder fields, even when the Builder declares a field-level default** — a caller can pass `null` (or a nonsensical value like `-1`, `Duration.ZERO`) to a setter and overwrite the default. Apply `Validate.notNull` to every required non-primitive field, and `Validate.isTrue` for any semantic constraint (e.g. `batchSize > 0`, `pollDelay` is positive), regardless of whether the Builder has a default for it. The only exception is fields whose default is resolved in the constructor itself (see point 9) — the resolution is its own null-handling.
+8. **Default values are set on the builder field declaration** — not resolved with ternary logic in the constructor. If a field has a sensible default, assign it at the field level in the Builder. The constructor still validates per point 7; the default just means callers don't *have* to set the field for validation to pass.
 9. **Fields with dependent defaults** — when a default depends on other builder state (another field, or the final set of registered entries at build time), the default cannot be set at the field level. In this case, declare the builder field as `Optional<T>` initialized to `Optional.empty()`, and resolve it in the constructor with `orElseGet(...)`. Avoid raw `null` in builder fields — express absence explicitly with `Optional`.
 
 #### Infrastructure Builder Example
@@ -386,10 +632,11 @@ public final class Foo {
 
 | Field type | Builder field type | Builder default | Setter pattern | Constructor handling |
 |---|---|---|---|---|
-| Required object | `T` | `null` (no default) | `this.field = value` | `Validate.notNull(builder.field, "...")` |
-| Required primitive | `int`, `long`, etc. | explicit default or `0` | `this.field = value` | Additional validation if needed |
-| Optional object | `Optional<T>` | `Optional.of(default)` or `Optional.empty()` | `this.field = Optional.of(value)` | `this.field = builder.field` |
-| Collection | `List<T>` | `new ArrayList<>()` | Replace: `new ArrayList<>(value)`, Add: `this.list.add(value)` | `List.copyOf(builder.field)` |
+| Required object (no default) | `T` | `null` (no default) | `this.field = value` | `Validate.notNull(builder.field, "...")` |
+| Required object (with default) | `T` | `DEFAULT_X` | `this.field = value` | `Validate.notNull(builder.field, "...")` — default doesn't excuse the check; caller can `.field(null)` |
+| Required primitive | `int`, `long`, etc. | explicit default or `0` | `this.field = value` | `Validate.isTrue(...)` for any semantic bound (e.g. `> 0`); the default doesn't excuse the check |
+| Optional object | `Optional<T>` | `Optional.of(default)` or `Optional.empty()` | `this.field = Optional.of(value)` | `this.field = builder.field` (setter's `Optional.of` already rejects null) |
+| Collection | `List<T>` | `new ArrayList<>()` | Replace: `new ArrayList<>(value)`, Add: `this.list.add(value)` | `List.copyOf(builder.field)` (rejects null) |
 | Field with dependent default | `Optional<T>` | `Optional.empty()` | `this.field = Optional.of(value)` | `builder.field.orElseGet(() -> computeDefault())` |
 
 #### Naming Conventions for Builder Methods

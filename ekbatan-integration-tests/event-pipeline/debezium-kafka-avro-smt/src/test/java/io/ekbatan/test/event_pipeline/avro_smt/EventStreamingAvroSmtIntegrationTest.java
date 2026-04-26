@@ -141,7 +141,9 @@ class EventStreamingAvroSmtIntegrationTest {
                 .with("plugin.name", "pgoutput")
                 .with("value.converter", "org.apache.kafka.connect.converters.ByteArrayConverter")
                 .with("transforms", "encodeAvro")
-                .with("transforms.encodeAvro.type", "io.ekbatan.debezium.smt.avro.OutboxToAvroTransform")
+                .with(
+                        "transforms.encodeAvro.type",
+                        "io.ekbatan.events.streaming.debeziumsmt.avro.OutboxToAvroTransform")
                 .with("transforms.encodeAvro.payloadSchemas", schemaMapping)
                 .with("transforms.encodeAvro.actionEventSchema", CONTAINER_SCHEMAS_DIR + "/ActionEvent.avsc")
                 .with("transforms.encodeAvro.payload.field", "payload")

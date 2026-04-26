@@ -1,6 +1,6 @@
 package io.ekbatan.test.event_pipeline.protobuf_smt.streaming;
 
-import io.ekbatan.streaming.actionevent.protobuf.ActionEvent;
+import io.ekbatan.events.streaming.actionevent.protobuf.ActionEvent;
 import java.time.Duration;
 import java.util.List;
 import java.util.Properties;

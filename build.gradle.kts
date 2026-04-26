@@ -58,7 +58,7 @@ subprojects {
     // Add annotation processor for non-annotation-processor modules.
     // SMT modules opt out — they're standalone Kafka Connect plugins and don't use AutoBuilder.
     val skipAnnotationProcessor = project.name == "ekbatan-annotation-processor"
-            || project.path.startsWith(":ekbatan-event-streaming:debezium-smt")
+            || project.path.startsWith(":ekbatan-events:streaming:debezium-smt")
     if (!skipAnnotationProcessor) {
         dependencies {
             annotationProcessor(project(":ekbatan-annotation-processor"))
@@ -97,7 +97,7 @@ subprojects {
     }
     
     // Configure Java compilation. SMT modules target Java 21 (Kafka Connect runtime).
-    val javaTarget = if (project.path.startsWith(":ekbatan-event-streaming:debezium-smt")) "21" else "25"
+    val javaTarget = if (project.path.startsWith(":ekbatan-events:streaming:debezium-smt")) "21" else "25"
     tasks.withType<JavaCompile> {
         sourceCompatibility = javaTarget
         targetCompatibility = javaTarget

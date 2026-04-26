@@ -28,16 +28,16 @@ val actionEventSchemaFile: Configuration by configurations.creating {
 }
 
 dependencies {
-    smtPluginJar(project(":ekbatan-event-streaming:debezium-smt:avro")) {
+    smtPluginJar(project(":ekbatan-events:streaming:debezium-smt:avro")) {
         isTransitive = false
     }
     actionEventSchemaFile(
         project(
-            mapOf("path" to ":ekbatan-event-streaming:action-event:avro", "configuration" to "actionEventSchema"),
+            mapOf("path" to ":ekbatan-events:streaming:action-event:avro", "configuration" to "actionEventSchema"),
         ),
     )
 
-    testImplementation(project(":ekbatan-event-streaming:action-event:avro"))
+    testImplementation(project(":ekbatan-events:streaming:action-event:avro"))
     testImplementation(project(":ekbatan-integration-tests:event-pipeline:common"))
 
     // Avro for consumer-side deserialization

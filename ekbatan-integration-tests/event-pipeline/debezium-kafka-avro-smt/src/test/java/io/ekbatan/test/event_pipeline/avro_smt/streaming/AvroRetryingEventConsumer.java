@@ -1,6 +1,6 @@
 package io.ekbatan.test.event_pipeline.avro_smt.streaming;
 
-import io.ekbatan.streaming.actionevent.avro.ActionEvent;
+import io.ekbatan.events.streaming.actionevent.avro.ActionEvent;
 import java.time.Duration;
 import java.util.List;
 import java.util.Properties;
