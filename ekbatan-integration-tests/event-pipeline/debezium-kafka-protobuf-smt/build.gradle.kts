@@ -28,19 +28,19 @@ val actionEventDescriptorFile: Configuration by configurations.creating {
 }
 
 dependencies {
-    smtPluginJar(project(":ekbatan-event-streaming:debezium-smt:protobuf")) {
+    smtPluginJar(project(":ekbatan-events:streaming:debezium-smt:protobuf")) {
         isTransitive = false
     }
     actionEventDescriptorFile(
         project(
             mapOf(
-                "path" to ":ekbatan-event-streaming:action-event:protobuf",
+                "path" to ":ekbatan-events:streaming:action-event:protobuf",
                 "configuration" to "actionEventDescriptor",
             ),
         ),
     )
 
-    testImplementation(project(":ekbatan-event-streaming:action-event:protobuf"))
+    testImplementation(project(":ekbatan-events:streaming:action-event:protobuf"))
     testImplementation(project(":ekbatan-integration-tests:event-pipeline:common"))
 
     testImplementation("com.google.protobuf:protobuf-java:${project.property("protobufVersion")}")

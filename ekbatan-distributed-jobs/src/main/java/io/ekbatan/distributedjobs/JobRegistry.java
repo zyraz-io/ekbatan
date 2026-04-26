@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import org.apache.commons.lang3.Validate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Builder-driven facade for a single db-scheduler {@link Scheduler} instance, configured with
@@ -29,14 +31,19 @@ import org.apache.commons.lang3.Validate;
  */
 public final class JobRegistry {
 
-    private final Scheduler scheduler;
+    private static final Logger LOG = LoggerFactory.getLogger(JobRegistry.class);
 
-    private JobRegistry(Scheduler scheduler) {
+    private final Scheduler scheduler;
+    private final List<String> jobNames;
+
+    private JobRegistry(Scheduler scheduler, List<String> jobNames) {
         this.scheduler = scheduler;
+        this.jobNames = jobNames;
     }
 
     /** Begins polling and executing registered jobs. */
     public void start() {
+        LOG.info("Starting JobRegistry with {} job(s): {}", jobNames.size(), jobNames);
         scheduler.start();
     }
 
@@ -46,7 +53,9 @@ public final class JobRegistry {
      * executions to finish before forcing termination.
      */
     public void stop() {
+        LOG.info("Stopping JobRegistry");
         scheduler.stop();
+        LOG.info("JobRegistry stopped");
     }
 
     public static Builder jobRegistry() {
@@ -123,7 +132,21 @@ public final class JobRegistry {
 
             List<RecurringTask<Void>> tasks = new ArrayList<>();
             for (var job : jobs) {
-                tasks.add(Tasks.recurring(job.name(), job.schedule()).execute((_, ctx) -> job.execute(ctx)));
+                tasks.add(Tasks.recurring(job.name(), job.schedule()).execute((_, ctx) -> {
+                    LOG.info("Job '{}' execution started", job.name());
+                    try {
+                        job.execute(ctx);
+                        LOG.info("Job '{}' execution finished", job.name());
+                    } catch (RuntimeException re) {
+                        LOG.error(
+                                "Job '{}' execution failed: {}: {}",
+                                job.name(),
+                                re.getClass().getSimpleName(),
+                                re.getMessage(),
+                                re);
+                        throw re;
+                    }
+                }));
             }
 
             var schedulerBuilder = Scheduler.create(connectionProvider.getDataSource())
@@ -143,7 +166,7 @@ public final class JobRegistry {
                 schedulerCustomizer.accept(schedulerBuilder);
             }
 
-            return new JobRegistry(schedulerBuilder.build());
+            return new JobRegistry(schedulerBuilder.build(), List.copyOf(names));
         }
     }
 }

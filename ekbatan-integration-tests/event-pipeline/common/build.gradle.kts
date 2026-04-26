@@ -48,7 +48,7 @@ tasks {
 
 dependencies {
     api(project(":ekbatan-core"))
-    api(project(":ekbatan-event-streaming:action-event:json"))
+    api(project(":ekbatan-events:streaming:action-event:json"))
     api("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
     implementation("org.jooq:jooq-meta")
     implementation("org.jooq:jooq-codegen")

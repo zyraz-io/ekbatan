@@ -312,6 +312,92 @@ public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wal
 
 Subclasses are free to add domain-specific query methods. The `findAllByOwnerId` example above uses `readonlyDb()` to construct a JOOQ query directly — note that when bypassing the inherited helpers, soft-delete filtering becomes the subclass's responsibility. For simpler predicate-based queries, the inherited helpers (`findAllWhere`, `findOneWhere`, `existsWhere`, `countWhere`) preserve soft-delete filtering and shard routing automatically. Either path stays within the same shard- and transaction-aware context as the rest of the framework.
 
+### Writing Custom Queries
+
+When the inherited CRUD methods aren't enough, a repository drops down to JOOQ. To pull a `DSLContext` for the right shard, use one of the four helper families on `AbstractRepository`. Each family has overloads for *no argument* (default shard), *id*, *persistable*, *shard identifier* — and `db()` / `readonlyDb()` also expose `dbs()` / `readonlyDbs()` for scatter-gather across all shards.
+
+```java
+// --- db() — primary writes / strongly-consistent reads ---
+protected DSLContext db();                          // default shard
+protected DSLContext db(DB_ID id);                  // shard derived from id
+protected DSLContext db(PERSISTABLE p);             // shard derived from entity
+protected DSLContext db(ShardIdentifier shard);     // explicit shard
+protected Collection<DSLContext> dbs();             // every shard (scatter-gather)
+
+// --- readonlyDb() — replica reads, less load on primary ---
+protected DSLContext readonlyDb();
+protected DSLContext readonlyDb(DB_ID id);
+protected DSLContext readonlyDb(ShardIdentifier shard);
+protected Collection<DSLContext> readonlyDbs();
+
+// --- txDb() — the active transaction's connection, if one is open ---
+protected Optional<DSLContext> txDb();
+protected Optional<DSLContext> txDb(DB_ID id);
+protected Optional<DSLContext> txDb(PERSISTABLE p);
+protected Optional<DSLContext> txDb(ShardIdentifier shard);
+
+// --- txDbElseDb() — transaction connection if open, primary otherwise ---
+protected DSLContext txDbElseDb();
+protected DSLContext txDbElseDb(DB_ID id);
+protected DSLContext txDbElseDb(PERSISTABLE p);
+protected DSLContext txDbElseDb(ShardIdentifier shard);
+```
+
+**Picking the right one:**
+
+| You want to… | Use |
+|---|---|
+| Read rows, doesn't have to see writes from the *current* transaction | `readonlyDb(...)` — pulls from the replica |
+| Read rows that *must* reflect uncommitted writes from the current action | `txDbElseDb(...)` — reuses the action's transaction connection if one is open |
+| Insert / update / delete | `txDbElseDb(...)` — atomically joins the action's transaction when called from within `Action.perform()` or any `tm.inTransaction(...)` block; falls back to primary outside of one |
+| Scatter-gather a query across every shard | `readonlyDbs()` (or `dbs()` for primary), then `.flatMap` over the resulting `Collection<DSLContext>` |
+| Assert "we must already be in a transaction" and fail loudly otherwise | `txDb(...).orElseThrow(...)` |
+
+**Examples:**
+
+A list query that doesn't need read-after-write consistency — pulls from the replica:
+```java
+public List<Wallet> findAllByOwnerId(UUID ownerId) {
+    return readonlyDb()
+            .selectFrom(WALLETS)
+            .where(WALLETS.OWNER_ID.eq(ownerId))
+            .fetch(this::fromRecord);
+}
+```
+
+A custom batch update — uses `txDbElseDb` so it joins the action's transaction when called from within one, and goes to primary otherwise:
+```java
+public void markAllSettled(Collection<UUID> walletIds) {
+    if (walletIds.isEmpty()) return;
+    txDbElseDb()
+            .update(WALLETS)
+            .set(WALLETS.STATE, "SETTLED")
+            .where(WALLETS.ID.in(walletIds))
+            .execute();
+}
+```
+
+A scatter-gather across every shard — useful for admin counts:
+```java
+public long totalActiveWallets() {
+    return readonlyDbs().stream()
+            .mapToLong(db -> db.selectCount()
+                    .from(WALLETS)
+                    .where(WALLETS.STATE.eq("ACTIVE"))
+                    .fetchOne(0, long.class))
+            .sum();
+}
+```
+
+An idempotent INSERT — when the same logical row could be inserted twice (e.g. a worker re-reading from a lagging replica), prefer letting the database handle the conflict over catching the exception in code:
+```java
+txDbElseDb(shard)
+        .insertInto(NOTIFICATIONS, NOTIF_ID, EVENT_ID, HANDLER_NAME, /* ... */)
+        .values(/* ... */)
+        .onConflictDoNothing()         // PG: ON CONFLICT DO NOTHING ; MySQL/MariaDB: INSERT IGNORE
+        .execute();
+```
+
 ### `@AutoBuilder`
 
 Domain classes use the builder pattern. To avoid writing builders by hand, annotate the class:
@@ -335,13 +421,13 @@ namespace       text
 action_id       UUID
 action_name     text
 action_params   JSONB
-started_date    timestamptz
-completion_date timestamptz
+started_date    timestamp
+completion_date timestamp
 model_id        UUID
 model_type      text
 event_type      text
 payload         JSONB
-event_date      timestamptz
+event_date      timestamp
 ```
 
 One row per event. Each row carries everything a downstream consumer needs — the action that caused it, when it ran, the params it received, and the event payload itself. Actions that produce zero events still get a sentinel row (no `event_type`), so the action's existence is always recorded.
@@ -1000,9 +1086,9 @@ Three consumer-side envelope contracts are published; pick the one matching your
 
 | Module | Format |
 |---|---|
-| `ekbatan-event-streaming:action-event:json` | POJO + Jackson |
-| `ekbatan-event-streaming:action-event:avro` | generated from `.avsc` |
-| `ekbatan-event-streaming:action-event:protobuf` | generated from `.proto` |
+| `ekbatan-events:streaming:action-event:json` | POJO + Jackson |
+| `ekbatan-events:streaming:action-event:avro` | generated from `.avsc` |
+| `ekbatan-events:streaming:action-event:protobuf` | generated from `.proto` |
 
 Topic naming is conventional:
 
@@ -1010,6 +1096,125 @@ Topic naming is conventional:
 ekbatan.{namespace}.model.{ModelType}
 ekbatan.{namespace}.event.{EventType}
 ```
+
+### In-Process Consumption — Listen-to-Yourself Without Kafka
+
+For applications that don't need to fan events out to separate services — small monoliths, internal tools, or anywhere a Kafka cluster would be overkill — the `ekbatan-events:local-event-handler` module consumes the same `eventlog.events` outbox **inside the same JVM** via two background jobs. Same outbox row, same atomic-with-the-action guarantee, no broker.
+
+```
+Your App
+   │  one transaction per action
+   ▼
+┌─────────────────────────────────────────────────┐
+│  widgets, orders, …  +  eventlog.events         │  ← committed atomically
+│                                                  │    (delivered = FALSE)
+└─────────────────────────────────────────────────┘
+   │
+   ▼
+┌─────────────────────────────────────────────────┐
+│  EventFanoutJob                                 │  ← polls undelivered events,
+│                                                  │    materializes one
+│                                                  │    event_notifications row
+│                                                  │    per (event × subscribed
+│                                                  │    handler), flips delivered
+└─────────────────────────────────────────────────┘
+   │
+   ▼
+┌─────────────────────────────────────────────────┐
+│  EventHandlingJob                               │  ← polls due notifications,
+│                                                  │    invokes the typed
+│                                                  │    EventHandler, transitions
+│                                                  │    to SUCCEEDED / FAILED /
+│                                                  │    EXPIRED with backoff
+└─────────────────────────────────────────────────┘
+   │
+   ▼
+Your handlers (in-process, virtual threads)
+```
+
+Both jobs are `DistributedJob`s registered with the existing `JobRegistry`, so cluster exclusivity, heartbeating, and crash recovery are inherited — only one instance per cluster runs the fan-out job, only one runs the event-handling job.
+
+#### Wiring
+
+```java
+var handlerRegistry = eventHandlerRegistry()
+        .withHandler(new WidgetCreatedEmailHandler())
+        .withHandler(new WidgetCreatedIndexerHandler())
+        .build();
+
+var jobs = jobRegistry()
+        .connectionProvider(jobsConnectionProvider)
+        .withJob(eventFanoutJob()
+                .databaseRegistry(databaseRegistry)
+                .eventHandlerRegistry(handlerRegistry)
+                .clock(clock)
+                .build())
+        .withJob(eventHandlingJob()
+                .databaseRegistry(databaseRegistry)
+                .eventHandlerRegistry(handlerRegistry)
+                .objectMapper(objectMapper)
+                .clock(clock)
+                .build())
+        .build();
+jobs.start();
+```
+
+Configure the action executor with `LocalEventHandlerPersister` so committed events default to `delivered = FALSE` and become visible to the fan-out job:
+
+```java
+var executor = actionExecutor()
+        .namespace("my-app")
+        .databaseRegistry(databaseRegistry)
+        .repositoryRegistry(repositoryRegistry)
+        .actionRegistry(actionRegistry)
+        .objectMapper(objectMapper)
+        .eventPersister(new LocalEventHandlerPersister(databaseRegistry, objectMapper))
+        .build();
+```
+
+The in-process and Debezium/Kafka paths can coexist on the same `eventlog.events` table. The outbox SMTs (`OutboxToAvroTransform`, `OutboxToProtobufTransform`) drop non-INSERT operations, so the `UPDATE delivered = TRUE` flips written by the fan-out job never become Kafka messages. Run one path or both as needed.
+
+#### Defining a handler
+
+A handler is a class implementing `EventHandler<E>`:
+
+```java
+public final class WidgetCreatedEmailHandler implements EventHandler<WidgetCreatedEvent> {
+
+    @Override public String name() { return "widget-created-email"; }
+
+    @Override public Class<WidgetCreatedEvent> eventType() { return WidgetCreatedEvent.class; }
+
+    @Override public void handle(WidgetCreatedEvent event) throws Exception {
+        emailService.sendWelcome(event.modelId, event.name);
+    }
+}
+```
+
+Multiple handlers may subscribe to the same event type; each gets its own `event_notifications` row and its own retry/expiry lifecycle. `name()` is the cluster-stable identifier persisted on every notification row, so **treat handler names as part of your schema**: renaming a handler in code orphans the rows queued under the old name.
+
+#### Handlers must be idempotent
+
+The event-handling pipeline guarantees **at-least-once** delivery — never less, occasionally more. Handlers can run twice for the same event in realistic scenarios:
+
+- The handler succeeds but the event-handling JVM crashes before the notification is marked SUCCEEDED. The next round picks the row up again and re-invokes the handler.
+- The handler partially succeeds (sends an email, then fails to write a follow-up row). The event-handling job marks the notification FAILED. On retry, the email goes out a second time.
+- A handler invocation takes longer than `pollDelay`, the event-handling round times out, db-scheduler reschedules, and the row is re-claimed.
+
+A handler must therefore make replays produce the same final state. Practical patterns:
+
+- **`INSERT ... ON CONFLICT DO NOTHING`** for any rows the handler creates, keyed by something derived from the source event id (often the `event.modelId`, the notification's row id, or a UUID computed from both). On replay the second insert no-ops.
+- **`UPDATE ... WHERE state = '<expected source state>'`** for state transitions. The first call moves the row out of the source state; replays no-op because the predicate no longer matches.
+- **External-effect dedup keys.** Most third-party APIs accept an `Idempotency-Key` header; pass `event.modelId` (or the notification row id) and the API enforces single-execution. For internal services, use a `sent_messages` table guarded by a unique key.
+- **Chained actions.** When the handler triggers another `Action` via `ActionExecutor.execute(...)`, that action's own `eventlog.events` row carries the source event id in its action params; the consuming side dedups on that.
+
+What you must **not** rely on:
+
+- Ordering between handlers subscribed to the same event — they run on virtual threads concurrently.
+- Ordering between events — each shard processes its own backlog independently of the others.
+- The handler being called *exactly* once. Plan for two.
+
+If your handler can't be made idempotent in any of those ways, you probably want the Kafka path with consumer-group offset commits, not the in-process event-handling job.
 
 ---
 
@@ -1038,7 +1243,7 @@ Ekbatan **is** a replacement for the persistence layer typically built with **Sp
 
 - writes to a relational database with strong transactional guarantees,
 - a reliable audit trail of business changes,
-- propagation of changes to downstream systems via Kafka or a similar broker without dual-write coordination.
+- propagation of changes to downstream consumers — via Kafka (Debezium SMT pipeline) or in-process (fan-out + event-handling jobs) — without dual-write coordination.
 
 Integrations with Spring, Quarkus, and Micronaut are planned. The general approach is to register `ActionExecutor`, `DatabaseRegistry`, and the repositories as beans and inject them where required.
 
@@ -1051,6 +1256,7 @@ The following are intentionally outside the scope of the framework:
 - **Nested or composable actions.** Operations that must happen together belong in a single Action; independent operations are invoked separately. The action boundary is the transaction boundary.
 - **Saga orchestration.** Cross-service workflows are the responsibility of the layer above the framework.
 - **Reactive runtime.** Concurrency is handled by Java 25 virtual threads.
+- **Integration with Spring's `PlatformTransactionManager` / `@Transactional`.** Ekbatan owns its own `TransactionManager` (ScopedValue-backed), and the action boundary *is* the transaction boundary. The Spring Boot starter (and any future Quarkus / Micronaut module) will not bridge to the host framework's transaction manager. Code outside an Action that needs database transactions should use the host framework's facilities directly on its own datasource — Ekbatan stays out of that path.
 
 ---
 
@@ -1073,8 +1279,11 @@ The `ekbatan-integration-tests/` directory contains complete, runnable examples 
 
 - **`postgres-simple/`** — single-database wallet with create / deposit / close actions. The closest match to the *Example: A Wallet* code above.
 - **`postgres-sharded/`** — same wallet model sharded across multiple Postgres instances, including cross-shard tests and shard-aware repositories.
+- **`core-repo/{pg,mysql,mariadb}/`** — repository CRUD and `SingleTableJsonEventPersister` coverage across all three supported databases.
+- **`keyed-lock-provider/{pg,mariadb,mysql,redis}/`** — `KeyedLockProvider` implementations and reentrancy/timeout coverage.
+- **`distributed-jobs-pg/`** — `JobRegistry` + `DistributedJob` cluster-exclusive scheduling.
 - **`event-pipeline/`** — end-to-end Debezium → Kafka pipeline with JSON, Avro (SMT), and Protobuf (SMT) variants.
-- **`core-repo/{pg,mysql,mariadb}/`** — repository CRUD coverage across all three supported databases.
+- **`local-event-handler/{shared,pg,mariadb,mysql}/`** — in-process consumer (fan-out + event-handling jobs), single-shard MariaDB/MySQL and multi-shard Postgres (two databases in one container).
 
 Each subproject ships its own Flyway migrations, JOOQ codegen, and `@Testcontainers` setup, so they double as templates for new applications.
 
@@ -1089,12 +1298,27 @@ Each subproject ships its own Flyway migrations, JOOQ codegen, and `@Testcontain
 ./gradlew checkFormat      # verify formatting only
 ```
 
-Per-database integration tests:
+Per-module integration tests:
 
 ```bash
+# Repository CRUD across dialects
 ./gradlew :ekbatan-integration-tests:core-repo:pg:repository:test
 ./gradlew :ekbatan-integration-tests:core-repo:mysql:repository:test
 ./gradlew :ekbatan-integration-tests:core-repo:mariadb:repository:test
+
+# In-process consumer (fan-out + event-handling jobs) across dialects
+./gradlew :ekbatan-integration-tests:local-event-handler:pg:test
+./gradlew :ekbatan-integration-tests:local-event-handler:mariadb:test
+./gradlew :ekbatan-integration-tests:local-event-handler:mysql:test
+
+# Distributed background jobs (db-scheduler-backed)
+./gradlew :ekbatan-integration-tests:distributed-jobs-pg:test
+
+# KeyedLockProvider implementations
+./gradlew :ekbatan-integration-tests:keyed-lock-provider:pg:test
+./gradlew :ekbatan-integration-tests:keyed-lock-provider:mariadb:test
+./gradlew :ekbatan-integration-tests:keyed-lock-provider:mysql:test
+./gradlew :ekbatan-integration-tests:keyed-lock-provider:redis:test
 ```
 
 Tests use TestContainers and require Docker to be running.
@@ -1105,16 +1329,35 @@ Tests use TestContainers and require Docker to be running.
 
 ```
 ekbatan/
-├── ekbatan-core/                       — the framework
-├── ekbatan-annotation-processor/       — @AutoBuilder code generation
-├── ekbatan-event-streaming/            — outbox-to-Kafka pipeline
-│   ├── action-event/{json,avro,protobuf}      — consumer envelopes
-│   └── debezium-smt/{avro,protobuf}           — Kafka Connect SMTs
-└── ekbatan-integration-tests/          — end-to-end tests
-    ├── core-repo/{pg,mysql,mariadb}
-    ├── postgres-simple/
-    ├── postgres-sharded/
-    └── event-pipeline/
+├── ekbatan-core/                                    — the framework: actions, models, repositories, sharding, locking
+├── ekbatan-annotation-processor/                    — @AutoBuilder compile-time builder generation
+├── ekbatan-distributed-jobs/                        — db-scheduler-backed cluster-exclusive background jobs
+├── ekbatan-keyed-lock-redis/                        — Redis-backed KeyedLockProvider
+├── ekbatan-events/
+│   ├── streaming/                                   — outbox-to-Kafka pipeline
+│   │   ├── action-event/{json,avro,protobuf}        — consumer-side envelope contracts
+│   │   └── debezium-smt/{avro,protobuf}             — Kafka Connect SMTs that bind the outbox to typed Kafka messages
+│   └── local-event-handler/                         — in-process consumer (fan-out + event-handling jobs)
+└── ekbatan-integration-tests/                       — end-to-end tests with Testcontainers
+    ├── core-repo/                                   — repository tests
+    │   ├── shared/                                  — base test fixtures
+    │   ├── pg/{repository,events}
+    │   ├── mariadb/{repository,events}
+    │   └── mysql/{repository,events}
+    ├── postgres-simple/                             — single-shard end-to-end PG test
+    ├── postgres-sharded/                            — multi-shard end-to-end PG test
+    ├── keyed-lock-provider/{pg,mariadb,mysql,redis} — KeyedLockProvider implementations
+    ├── distributed-jobs-pg/                         — DistributedJob + JobRegistry
+    ├── event-pipeline/                              — Debezium → Kafka end-to-end
+    │   ├── common/                                  — shared wallet model + router
+    │   ├── debezium-kafka-json/
+    │   ├── debezium-kafka-avro-smt/
+    │   └── debezium-kafka-protobuf-smt/
+    └── local-event-handler/                         — in-process consumer end-to-end
+        ├── shared/                                  — Base test, models, handlers, action wiring
+        ├── pg/                                      — multi-shard PG (2 databases in one container)
+        ├── mariadb/
+        └── mysql/
 ```
 
 For detailed architecture, conventions, and contribution guidelines, see [AGENTS.md](./AGENTS.md).

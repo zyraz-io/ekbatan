@@ -136,7 +136,9 @@ class EventStreamingProtobufSmtIntegrationTest {
                 .with("plugin.name", "pgoutput")
                 .with("value.converter", "org.apache.kafka.connect.converters.ByteArrayConverter")
                 .with("transforms", "encodeProto")
-                .with("transforms.encodeProto.type", "io.ekbatan.debezium.smt.protobuf.OutboxToProtobufTransform")
+                .with(
+                        "transforms.encodeProto.type",
+                        "io.ekbatan.events.streaming.debeziumsmt.protobuf.OutboxToProtobufTransform")
                 .with("transforms.encodeProto.payloadDescriptors", payloadDescriptors)
                 .with("transforms.encodeProto.actionEventDescriptor", CONTAINER_DESCRIPTORS_DIR + "/ActionEvent.desc")
                 .with("transforms.encodeProto.payload.field", "payload")

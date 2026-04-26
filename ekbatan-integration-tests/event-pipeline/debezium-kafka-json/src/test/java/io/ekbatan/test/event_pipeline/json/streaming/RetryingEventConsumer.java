@@ -1,6 +1,6 @@
 package io.ekbatan.test.event_pipeline.json.streaming;
 
-import io.ekbatan.streaming.actionevent.json.ActionEvent;
+import io.ekbatan.events.streaming.actionevent.json.ActionEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
