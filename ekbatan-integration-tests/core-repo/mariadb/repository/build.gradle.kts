@@ -82,6 +82,7 @@ dependencies {
     implementation("org.flywaydb:flyway-mysql:${project.property("flywayVersion")}")
 
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
+    testImplementation(testFixtures(project(":ekbatan-core")))
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")

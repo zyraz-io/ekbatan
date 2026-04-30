@@ -15,7 +15,9 @@ import org.apache.commons.lang3.Validate;
 import org.jooq.DSLContext;
 import org.jooq.impl.DSL;
 
-public final class DatabaseRegistry {
+public final class DatabaseRegistry implements AutoCloseable {
+
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(DatabaseRegistry.class);
 
     private final Map<ShardIdentifier, TransactionManager> transactionManagers;
     public final Map<ShardIdentifier, DSLContext> primary;
@@ -60,6 +62,35 @@ public final class DatabaseRegistry {
 
     public Collection<TransactionManager> allTransactionManagers() {
         return transactionManagers.values();
+    }
+
+    /**
+     * Closes every shard's {@link TransactionManager} (and thus its underlying Hikari pools).
+     * Failures on individual shards are collected and reported together so a single
+     * misbehaving shard doesn't strand the rest.
+     *
+     * <p>This is invoked automatically when the registry is exposed as a Spring/Quarkus/Micronaut
+     * managed bean — Spring's {@code (inferred)} destroy-method detection finds this {@code close}
+     * on context shutdown.
+     */
+    @Override
+    public void close() {
+        RuntimeException firstError = null;
+        for (var entry : transactionManagers.entrySet()) {
+            try {
+                entry.getValue().close();
+            } catch (RuntimeException e) {
+                LOG.warn("Failed to close TransactionManager for shard {}: {}", entry.getKey(), e.toString());
+                if (firstError == null) {
+                    firstError = e;
+                } else {
+                    firstError.addSuppressed(e);
+                }
+            }
+        }
+        if (firstError != null) {
+            throw firstError;
+        }
     }
 
     public static DatabaseRegistry fromConfig(ShardingConfig config) {

@@ -8,8 +8,8 @@ import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.test.model.Dummy;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import java.util.UUID;
-import org.flywaydb.core.Flyway;
 import org.jooq.SQLDialect;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -75,10 +75,6 @@ public class PgShardedRepositoryTest extends BaseShardedRepositoryTest {
     }
 
     private static void runMigrations(PostgreSQLContainer container) {
-        Flyway.configure()
-                .dataSource(container.getJdbcUrl(), container.getUsername(), container.getPassword())
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(container.getJdbcUrl(), container.getUsername(), container.getPassword());
     }
 }

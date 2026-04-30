@@ -12,6 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.concurrent.KeyedLockProvider;
 import io.ekbatan.core.persistence.TransactionManager;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import io.ekbatan.test.keyed_lock_provider.wallet.action.WalletCreateAction;
 import io.ekbatan.test.keyed_lock_provider.wallet.action.WalletDepositAction;
 import io.ekbatan.test.keyed_lock_provider.wallet.models.Wallet;
@@ -22,7 +23,6 @@ import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import org.flywaydb.core.Flyway;
 import org.jooq.SQLDialect;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -67,11 +67,7 @@ public class WalletDepositLockingIntegrationTest {
 
         var tm = new TransactionManager(primary, secondary, SQLDialect.POSTGRES);
 
-        Flyway.configure()
-                .dataSource(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword())
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
 
         var databases = databaseRegistry().withDatabase(tm).build();
 
@@ -81,8 +77,8 @@ public class WalletDepositLockingIntegrationTest {
         var clock = Clock.systemUTC();
 
         var actionRegistry = actionRegistry()
-                .withAction(WalletCreateAction.class, () -> new WalletCreateAction(clock))
-                .withAction(WalletDepositAction.class, () -> new WalletDepositAction(clock, walletRepo, lockProvider))
+                .withAction(WalletCreateAction.class, new WalletCreateAction(clock))
+                .withAction(WalletDepositAction.class, new WalletDepositAction(clock, walletRepo, lockProvider))
                 .build();
 
         executor = actionExecutor()

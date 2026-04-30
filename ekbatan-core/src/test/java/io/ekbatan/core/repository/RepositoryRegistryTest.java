@@ -10,7 +10,14 @@ import io.ekbatan.core.domain.GenericState;
 import io.ekbatan.core.domain.Id;
 import io.ekbatan.core.domain.Model;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledInNativeImage;
 
+// See ActionExecutorTest for the full rationale: Mockito's default `InlineByteBuddyMockMaker`
+// can't initialise on GraalVM native image, and switching this module's tests to a global
+// `mock-maker-proxy` default would break the 4 sibling tests that mock concrete classes.
+// JVM coverage stays full. Remove once GraalVM ships ASM 9.8 in the standard CE/Oracle
+// binaries (the fix is already in the vm-25.0.3 community source tree).
+@DisabledInNativeImage
 class RepositoryRegistryTest {
 
     // Minimal types to satisfy generics

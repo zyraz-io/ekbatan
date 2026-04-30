@@ -11,7 +11,8 @@ class CreateBothAction extends Action<CreateBothAction.Params, TestModel> {
 
     @Override
     protected TestModel perform(Principal principal, Params params) {
-        plan.add(TestProduct.createTestProduct(params.sku, clock.instant()).build());
-        return plan.add(TestModel.createTestModel(params.name, clock.instant()).build());
+        plan().add(TestProduct.createTestProduct(params.sku, clock.instant()).build());
+        return plan().add(
+                        TestModel.createTestModel(params.name, clock.instant()).build());
     }
 }

@@ -21,7 +21,7 @@ public class WalletDepositMoneyAction extends Action<WalletDepositMoneyAction.Pa
     public Wallet perform(Principal principal, Params params) throws Exception {
         var wallet = walletRepository.getById(params.walletId.getValue());
         var updated = wallet.deposit(params.amount);
-        plan.update(updated);
+        plan().update(updated);
         return updated;
     }
 

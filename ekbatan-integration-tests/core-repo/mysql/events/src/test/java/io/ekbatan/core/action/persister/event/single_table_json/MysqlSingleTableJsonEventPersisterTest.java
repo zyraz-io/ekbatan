@@ -3,12 +3,12 @@ package io.ekbatan.core.action.persister.event.single_table_json;
 import io.ekbatan.core.config.DataSourceConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
-import org.flywaydb.core.Flyway;
+import io.ekbatan.core.test.testcontainers.ClasspathTransferable;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import org.jooq.SQLDialect;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
-import org.testcontainers.utility.MountableFile;
 
 @Testcontainers
 class MysqlSingleTableJsonEventPersisterTest extends BaseSingleTableJsonEventPersisterTest {
@@ -18,8 +18,8 @@ class MysqlSingleTableJsonEventPersisterTest extends BaseSingleTableJsonEventPer
             .withDatabaseName("testdb")
             .withUsername("test")
             .withPassword("test")
-            .withCopyFileToContainer(
-                    MountableFile.forClasspathResource("mysql_init.sql"), "/docker-entrypoint-initdb.d/mysql_init.sql")
+            .withCopyToContainer(
+                    ClasspathTransferable.of("mysql_init.sql"), "/docker-entrypoint-initdb.d/mysql_init.sql")
             .withEnv("TZ", "UTC");
 
     private static final TransactionManager TRANSACTION_MANAGER;
@@ -42,11 +42,7 @@ class MysqlSingleTableJsonEventPersisterTest extends BaseSingleTableJsonEventPer
         TRANSACTION_MANAGER =
                 new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider, SQLDialect.MYSQL);
 
-        Flyway.configure()
-                .dataSource(jdbcUrl, username, password)
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(jdbcUrl, username, password);
     }
 
     MysqlSingleTableJsonEventPersisterTest() {

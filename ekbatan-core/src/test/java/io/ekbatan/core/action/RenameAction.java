@@ -14,6 +14,6 @@ class RenameAction extends Action<RenameAction.Params, TestModel> {
 
     @Override
     protected TestModel perform(Principal principal, Params params) {
-        return plan.update(existing.copy().name(params.newName).build());
+        return plan().update(existing.copy().name(params.newName).build());
     }
 }

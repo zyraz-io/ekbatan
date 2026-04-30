@@ -8,17 +8,17 @@ import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
+import io.ekbatan.core.test.testcontainers.ClasspathTransferable;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import io.ekbatan.test.local_event_handler.BaseLocalEventHandlerIntegrationTest;
 import io.ekbatan.test.local_event_handler_mariadb.audit.repository.AuditEntryRepository;
 import io.ekbatan.test.local_event_handler_mariadb.note.repository.NoteRepository;
 import io.ekbatan.test.local_event_handler_mariadb.widget.repository.WidgetRepository;
 import java.util.List;
-import org.flywaydb.core.Flyway;
 import org.jooq.SQLDialect;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mariadb.MariaDBContainer;
-import org.testcontainers.utility.MountableFile;
 
 @Testcontainers
 class MariadbLocalEventHandlerIntegrationTest extends BaseLocalEventHandlerIntegrationTest {
@@ -28,9 +28,8 @@ class MariadbLocalEventHandlerIntegrationTest extends BaseLocalEventHandlerInteg
             .withDatabaseName("testdb")
             .withUsername("test")
             .withPassword("test")
-            .withCopyFileToContainer(
-                    MountableFile.forClasspathResource("mariadb_init.sql"),
-                    "/docker-entrypoint-initdb.d/mariadb_init.sql")
+            .withCopyToContainer(
+                    ClasspathTransferable.of("mariadb_init.sql"), "/docker-entrypoint-initdb.d/mariadb_init.sql")
             .withEnv("TZ", "UTC");
 
     private static final ConnectionProvider CONNECTION_PROVIDER;
@@ -47,11 +46,7 @@ class MariadbLocalEventHandlerIntegrationTest extends BaseLocalEventHandlerInteg
                 .build();
         CONNECTION_PROVIDER = hikariConnectionProvider(config);
 
-        Flyway.configure()
-                .dataSource(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword())
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
 
         var tm = new TransactionManager(CONNECTION_PROVIDER, CONNECTION_PROVIDER, SQLDialect.MARIADB);
         DB_REGISTRY = databaseRegistry().withDatabase(tm).build();

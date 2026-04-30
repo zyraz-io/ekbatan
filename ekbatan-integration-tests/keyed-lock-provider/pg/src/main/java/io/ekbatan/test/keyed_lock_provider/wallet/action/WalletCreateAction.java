@@ -26,6 +26,6 @@ public class WalletCreateAction extends Action<WalletCreateAction.Params, Wallet
                         params.initialBalance(),
                         clock.instant())
                 .build();
-        return plan.add(wallet);
+        return plan().add(wallet);
     }
 }

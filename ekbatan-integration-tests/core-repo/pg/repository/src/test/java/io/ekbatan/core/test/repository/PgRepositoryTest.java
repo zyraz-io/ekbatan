@@ -5,7 +5,7 @@ import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import io.ekbatan.core.config.DataSourceConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
-import org.flywaydb.core.Flyway;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import org.jooq.SQLDialect;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -42,11 +42,7 @@ public class PgRepositoryTest extends BaseRepositoryTest {
         TRANSACTION_MANAGER =
                 new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider, SQLDialect.POSTGRES);
 
-        final var flyway = Flyway.configure()
-                .dataSource(jdbcUrl, username, password)
-                .locations("classpath:db/migration")
-                .load();
-        flyway.migrate();
+        FlywayHelper.migrate(jdbcUrl, username, password);
 
         var databaseRegistry =
                 databaseRegistry().withDatabase(TRANSACTION_MANAGER).build();

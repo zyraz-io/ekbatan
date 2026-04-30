@@ -57,7 +57,7 @@ public abstract class AbstractRepository<
     public final TableField<RECORD, DB_ID> idField;
     protected final TableField<RECORD, Long> versionField;
     protected final TableField<RECORD, String> stateField;
-    protected final Class<PERSISTABLE> domainClass;
+    public final Class<PERSISTABLE> domainClass;
 
     private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
 

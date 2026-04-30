@@ -15,10 +15,10 @@ import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.CrossShardException;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import io.ekbatan.test.postgres_sharded.wallet.models.Wallet;
 import io.ekbatan.test.postgres_sharded.wallet.repository.WalletRepository;
 import java.time.Clock;
-import org.flywaydb.core.Flyway;
 import org.jooq.SQLDialect;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -82,17 +82,9 @@ public class ShardedWalletIntegrationTest {
                 .withDatabase(mexicoTm)
                 .build();
 
-        Flyway.configure()
-                .dataSource(globalDb.getJdbcUrl(), globalDb.getUsername(), globalDb.getPassword())
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(globalDb.getJdbcUrl(), globalDb.getUsername(), globalDb.getPassword());
 
-        Flyway.configure()
-                .dataSource(mexicoDb.getJdbcUrl(), mexicoDb.getUsername(), mexicoDb.getPassword())
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(mexicoDb.getJdbcUrl(), mexicoDb.getUsername(), mexicoDb.getPassword());
 
         walletRepo = new WalletRepository(databaseRegistry);
 
@@ -103,8 +95,8 @@ public class ShardedWalletIntegrationTest {
         var clock = Clock.systemUTC();
 
         var actionRegistry = actionRegistry()
-                .withAction(WalletCreateAction.class, () -> new WalletCreateAction(clock))
-                .withAction(WalletCreateMultiShardAction.class, () -> new WalletCreateMultiShardAction(clock))
+                .withAction(WalletCreateAction.class, new WalletCreateAction(clock))
+                .withAction(WalletCreateMultiShardAction.class, new WalletCreateMultiShardAction(clock))
                 .build();
 
         executor = actionExecutor()

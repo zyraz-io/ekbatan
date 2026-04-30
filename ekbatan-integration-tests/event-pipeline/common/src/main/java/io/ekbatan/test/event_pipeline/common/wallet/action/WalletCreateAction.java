@@ -14,7 +14,7 @@ public class WalletCreateAction extends Action<WalletCreateAction.Params, Wallet
     @Override
     public Wallet perform(Principal principal, Params params) {
         var wallet = Wallet.createWallet(params.name, clock.instant()).build();
-        plan.add(wallet);
+        plan().add(wallet);
         return wallet;
     }
 

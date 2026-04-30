@@ -20,6 +20,6 @@ public class NoteCreateAction extends Action<NoteCreateAction.Params, Note> {
     protected Note perform(Principal principal, Params params) {
         final var note = createNote(params.shard(), params.widgetId(), params.text(), clock.instant())
                 .build();
-        return plan.add(note);
+        return plan().add(note);
     }
 }

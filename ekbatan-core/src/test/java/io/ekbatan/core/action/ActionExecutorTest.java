@@ -33,9 +33,23 @@ import org.jooq.DSLContext;
 import org.jooq.SQLDialect;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledInNativeImage;
 import org.mockito.ArgumentMatchers;
 import tools.jackson.databind.ObjectMapper;
 
+// Mockito + GraalVM native image is currently blocked upstream on JDK 25:
+//   - GraalVM CE/Oracle 25.0.x bundle ASM 9.7.1 which can't read JDK 25 class files,
+//     surfacing as "Unsupported class file major version 69" in
+//     ClassPredefinitionFeature when the agent's predefined-class blobs are loaded
+//     (oracle/graal#12723, GR-72123 — backport not high priority).
+//   - GraalVM 26 EA fixes that via the new ClassFileAPI but trips a different
+//     ClassFileAPI bug ("Could not resolve class ChannelMessage") on agent-recorded
+//     bytecode.
+// JVM coverage stays full; the JDBC contract for the framework's keyed-lock providers
+// is exercised end-to-end by Testcontainers in
+// ekbatan-integration-tests:keyed-lock-provider:{pg,mysql,mariadb}. Remove this
+// annotation once GraalVM ships ASM 9.8 or a stable ClassFileAPI predefinition path.
+@DisabledInNativeImage
 class ActionExecutorTest {
 
     // --- Test model ---
@@ -100,7 +114,7 @@ class ActionExecutorTest {
 
         @Override
         protected Item perform(Principal principal, Params params) {
-            return plan.add(Item.createItem(params.name, clock.instant()).build());
+            return plan().add(Item.createItem(params.name, clock.instant()).build());
         }
     }
 
@@ -119,7 +133,7 @@ class ActionExecutorTest {
             if (attempts.incrementAndGet() <= params.failUntilAttempt) {
                 throw new io.ekbatan.core.repository.exception.StaleRecordException("stale", null);
             }
-            return plan.add(Item.createItem("recovered", clock.instant()).build());
+            return plan().add(Item.createItem("recovered", clock.instant()).build());
         }
     }
 
@@ -257,7 +271,7 @@ class ActionExecutorTest {
                 repo,
                 eventPersister,
                 actionRegistry()
-                        .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                        .withAction(CreateItemAction.class, new CreateItemAction(clock))
                         .build());
 
         // WHEN
@@ -277,7 +291,7 @@ class ActionExecutorTest {
                 repo,
                 eventPersister,
                 actionRegistry()
-                        .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                        .withAction(CreateItemAction.class, new CreateItemAction(clock))
                         .build());
 
         // WHEN
@@ -297,7 +311,7 @@ class ActionExecutorTest {
                 repo,
                 eventPersister,
                 actionRegistry()
-                        .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                        .withAction(CreateItemAction.class, new CreateItemAction(clock))
                         .build());
 
         // WHEN
@@ -319,7 +333,7 @@ class ActionExecutorTest {
                 repo,
                 eventPersister,
                 actionRegistry()
-                        .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                        .withAction(CreateItemAction.class, new CreateItemAction(clock))
                         .build());
 
         // WHEN
@@ -340,7 +354,7 @@ class ActionExecutorTest {
                 repo,
                 eventPersister,
                 actionRegistry()
-                        .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                        .withAction(CreateItemAction.class, new CreateItemAction(clock))
                         .build());
 
         // WHEN
@@ -360,7 +374,7 @@ class ActionExecutorTest {
                 repo,
                 eventPersister,
                 actionRegistry()
-                        .withAction(FailingItemAction.class, () -> new FailingItemAction(clock, attempts))
+                        .withAction(FailingItemAction.class, new FailingItemAction(clock, attempts))
                         .build());
 
         // WHEN
@@ -382,7 +396,7 @@ class ActionExecutorTest {
                 repo,
                 eventPersister,
                 actionRegistry()
-                        .withAction(FailingItemAction.class, () -> new FailingItemAction(clock, attempts))
+                        .withAction(FailingItemAction.class, new FailingItemAction(clock, attempts))
                         .build());
 
         // WHEN / THEN — default config retries StaleRecordException 1 time, so failing 2 times exhausts retries
@@ -401,7 +415,7 @@ class ActionExecutorTest {
                 repo,
                 eventPersister,
                 actionRegistry()
-                        .withAction(FailingItemAction.class, () -> new FailingItemAction(clock, attempts))
+                        .withAction(FailingItemAction.class, new FailingItemAction(clock, attempts))
                         .build());
 
         var config = ExecutionConfiguration.Builder.executionConfiguration()
@@ -428,7 +442,7 @@ class ActionExecutorTest {
                 repo,
                 eventPersister,
                 actionRegistry()
-                        .withAction(FailingItemAction.class, () -> new FailingItemAction(clock, attempts))
+                        .withAction(FailingItemAction.class, new FailingItemAction(clock, attempts))
                         .build());
 
         var config = ExecutionConfiguration.Builder.executionConfiguration()
@@ -453,7 +467,7 @@ class ActionExecutorTest {
                 repo,
                 eventPersister,
                 actionRegistry()
-                        .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                        .withAction(CreateItemAction.class, new CreateItemAction(clock))
                         .build());
 
         // WHEN / THEN

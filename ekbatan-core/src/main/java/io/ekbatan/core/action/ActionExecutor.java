@@ -86,11 +86,15 @@ public class ActionExecutor {
                     .execute(() -> {
                         final var actionStartDate = clock.instant();
 
+                        // Per-call plan — fresh on each execute() (and on each retry attempt).
+                        // Action is a singleton; the plan is never stored on it.
+                        final var plan = new ActionPlan();
+
                         final var performSpan =
                                 TRACER.spanBuilder("ekbatan.action.perform").startSpan();
                         final R performResult;
                         try (var _ = performSpan.makeCurrent()) {
-                            performResult = action.perform(principal, params);
+                            performResult = action.runIn(plan, principal, params);
                         } catch (Exception e) {
                             performSpan.setStatus(StatusCode.ERROR, e.getMessage());
                             performSpan.recordException(e);
@@ -99,7 +103,7 @@ public class ActionExecutor {
                             performSpan.end();
                         }
 
-                        persistChanges(action, params, actionStartDate, executionConfiguration);
+                        persistChanges(action, plan, params, actionStartDate, executionConfiguration);
                         return performResult;
                     });
 
@@ -122,16 +126,16 @@ public class ActionExecutor {
     }
 
     private void persistChanges(
-            Action<?, ?> action, Object params, Instant actionStartDate, ExecutionConfiguration config)
+            Action<?, ?> action, ActionPlan plan, Object params, Instant actionStartDate, ExecutionConfiguration config)
             throws Exception {
         final var persistSpan = TRACER.spanBuilder("ekbatan.action.persist").startSpan();
         try (var _ = persistSpan.makeCurrent()) {
-            var changesByShard = groupChangesByShard(action.plan);
+            var changesByShard = groupChangesByShard(plan);
 
             if (!changesByShard.isEmpty()) {
                 LOG.debug(
                         "Resolved {} entity types across {} shards [shards={}]",
-                        action.plan.changes().size(),
+                        plan.changes().size(),
                         changesByShard.size(),
                         changesByShard.keySet());
             }
@@ -148,7 +152,7 @@ public class ActionExecutor {
             }
 
             if (changesByShard.isEmpty()) {
-                changesByShard = Map.of(databaseRegistry.defaultShard, action.plan.changes());
+                changesByShard = Map.of(databaseRegistry.defaultShard, plan.changes());
             }
 
             var actionEventId = java.util.UUID.randomUUID();

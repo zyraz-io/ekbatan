@@ -35,7 +35,7 @@ public class WalletDepositAction extends Action<WalletDepositAction.Params, Wall
         try (var lockLease = lockProvider.acquire("wallet:" + params.walletId(), Duration.ofSeconds(10))) {
             final var wallet = walletRepository.getById(params.walletId().getValue());
             final var updated = wallet.deposit(params.amount());
-            return plan.update(updated);
+            return plan().update(updated);
         }
     }
 }

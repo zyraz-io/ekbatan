@@ -11,6 +11,7 @@ class CreateAction extends Action<CreateAction.Params, TestModel> {
 
     @Override
     protected TestModel perform(Principal principal, Params params) {
-        return plan.add(TestModel.createTestModel(params.name, clock.instant()).build());
+        return plan().add(
+                        TestModel.createTestModel(params.name, clock.instant()).build());
     }
 }

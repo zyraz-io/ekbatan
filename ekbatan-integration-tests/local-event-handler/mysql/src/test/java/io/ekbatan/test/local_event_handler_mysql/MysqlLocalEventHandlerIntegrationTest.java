@@ -8,17 +8,17 @@ import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
+import io.ekbatan.core.test.testcontainers.ClasspathTransferable;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import io.ekbatan.test.local_event_handler.BaseLocalEventHandlerIntegrationTest;
 import io.ekbatan.test.local_event_handler_mysql.audit.repository.AuditEntryRepository;
 import io.ekbatan.test.local_event_handler_mysql.note.repository.NoteRepository;
 import io.ekbatan.test.local_event_handler_mysql.widget.repository.WidgetRepository;
 import java.util.List;
-import org.flywaydb.core.Flyway;
 import org.jooq.SQLDialect;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
-import org.testcontainers.utility.MountableFile;
 
 @Testcontainers
 class MysqlLocalEventHandlerIntegrationTest extends BaseLocalEventHandlerIntegrationTest {
@@ -28,8 +28,8 @@ class MysqlLocalEventHandlerIntegrationTest extends BaseLocalEventHandlerIntegra
             .withDatabaseName("testdb")
             .withUsername("test")
             .withPassword("test")
-            .withCopyFileToContainer(
-                    MountableFile.forClasspathResource("mysql_init.sql"), "/docker-entrypoint-initdb.d/mysql_init.sql")
+            .withCopyToContainer(
+                    ClasspathTransferable.of("mysql_init.sql"), "/docker-entrypoint-initdb.d/mysql_init.sql")
             .withEnv("TZ", "UTC");
 
     private static final ConnectionProvider CONNECTION_PROVIDER;
@@ -46,11 +46,7 @@ class MysqlLocalEventHandlerIntegrationTest extends BaseLocalEventHandlerIntegra
                 .build();
         CONNECTION_PROVIDER = hikariConnectionProvider(config);
 
-        Flyway.configure()
-                .dataSource(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword())
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
 
         var tm = new TransactionManager(CONNECTION_PROVIDER, CONNECTION_PROVIDER, SQLDialect.MYSQL);
         DB_REGISTRY = databaseRegistry().withDatabase(tm).build();
