@@ -71,8 +71,8 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
                         .withModelRepository(Note.class, noteRepo)
                         .build())
                 .actionRegistry(actionRegistry()
-                        .withAction(WidgetCreateAction.class, () -> new WidgetCreateAction(clock))
-                        .withAction(NoteCreateAction.class, () -> new NoteCreateAction(clock))
+                        .withAction(WidgetCreateAction.class, new WidgetCreateAction(clock))
+                        .withAction(NoteCreateAction.class, new NoteCreateAction(clock))
                         .build())
                 .eventPersister(new LocalEventHandlerPersister(databaseRegistry, objectMapper))
                 .build();

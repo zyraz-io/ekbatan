@@ -19,7 +19,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledInNativeImage;
 
+// See ActionExecutorTest for the full rationale: Mockito + GraalVM native is blocked
+// upstream on JDK 25 (oracle/graal#12723) and on JDK 26 EA. The real provider contract
+// is exercised against a live MySQL in
+// ekbatan-integration-tests:keyed-lock-provider:mysql (Testcontainers), so native
+// validation of the locking semantics is preserved.
+@DisabledInNativeImage
 class MySQLKeyedLockProviderTest {
 
     private static final Duration ONE_HOUR = Duration.ofHours(1);

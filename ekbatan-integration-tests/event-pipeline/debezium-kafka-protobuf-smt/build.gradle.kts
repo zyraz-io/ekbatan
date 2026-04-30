@@ -57,7 +57,14 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-postgresql:${project.property("testcontainersVersion")}")
     testImplementation("org.testcontainers:testcontainers-kafka:${project.property("testcontainersVersion")}")
 
-    testImplementation("io.debezium:debezium-testing-testcontainers:${project.property("debeziumVersion")}")
+    // See debezium-kafka-json/build.gradle.kts for the exclusion rationale: Debezium's
+    // test wrapper transitively pulls Quarkus + jboss-logmanager which break the native
+    // test image. The two classes our tests use don't need them at runtime.
+    testImplementation("io.debezium:debezium-testing-testcontainers:${project.property("debeziumVersion")}") {
+        exclude(group = "io.quarkus")
+        exclude(group = "io.quarkus.gizmo")
+        exclude(group = "org.jboss.logmanager")
+    }
     testImplementation("org.slf4j:slf4j-simple:${project.property("slf4jVersion")}")
 }
 
@@ -88,3 +95,23 @@ tasks.withType<Test> {
         systemProperty("smt.action.event.descriptor", actionEventDescriptorFile.singleFile.absolutePath)
     }
 }
+
+// `nativeTest` is a NativeRunTask, not a Test task. Mirror the -D system properties
+// via runtimeArgs so the test class's static initialiser can resolve them when running
+// as a native binary.
+extensions.configure<org.graalvm.buildtools.gradle.dsl.GraalVMExtension> {
+    binaries.named("test") {
+        runtimeArgs.addAll(
+            provider {
+                listOf(
+                    "-Dsmt.plugin.jar=${smtPluginJar.singleFile.absolutePath}",
+                    "-Dsmt.payload.descriptors=${project.layout.buildDirectory.file(
+                        "generated/source/proto/test/descriptor_set.desc",
+                    ).get().asFile.absolutePath}",
+                    "-Dsmt.action.event.descriptor=${actionEventDescriptorFile.singleFile.absolutePath}",
+                )
+            },
+        )
+    }
+}
+tasks.named("nativeTest") { dependsOn(smtPluginJar, actionEventDescriptorFile, "generateTestProto") }

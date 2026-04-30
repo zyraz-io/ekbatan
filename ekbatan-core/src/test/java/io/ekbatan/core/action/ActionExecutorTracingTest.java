@@ -40,10 +40,16 @@ import org.jooq.SQLDialect;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledInNativeImage;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.ArgumentMatchers;
 import tools.jackson.databind.ObjectMapper;
 
+// Mockito spy/mock isn't supported on GraalVM native image (closed-world model rejects
+// runtime ByteBuddy subclass proxies). See ActionExecutorTest for the full upstream
+// blocker chain (ASM 9.7.1 / JDK 25 / ClassFileAPI). OpenTelemetry itself is fine on
+// native via the Reachability Metadata Repo — Mockito is the disqualifier here.
+@DisabledInNativeImage
 @Tag("tracing")
 class ActionExecutorTracingTest {
 
@@ -111,7 +117,7 @@ class ActionExecutorTracingTest {
     void successful_action_creates_execute_span_with_attributes() throws Exception {
         // GIVEN
         var executor = buildExecutor(actionRegistry()
-                .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                .withAction(CreateItemAction.class, new CreateItemAction(clock))
                 .build());
 
         // WHEN
@@ -132,7 +138,7 @@ class ActionExecutorTracingTest {
     void failed_action_records_error_on_execute_span() {
         // GIVEN
         var executor = buildExecutor(actionRegistry()
-                .withAction(AlwaysFailingAction.class, () -> new AlwaysFailingAction(clock))
+                .withAction(AlwaysFailingAction.class, new AlwaysFailingAction(clock))
                 .build());
 
         // WHEN
@@ -151,7 +157,7 @@ class ActionExecutorTracingTest {
     void perform_span_is_child_of_execute_span() throws Exception {
         // GIVEN
         var executor = buildExecutor(actionRegistry()
-                .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                .withAction(CreateItemAction.class, new CreateItemAction(clock))
                 .build());
 
         // WHEN
@@ -167,7 +173,7 @@ class ActionExecutorTracingTest {
     void persist_span_is_child_of_execute_span() throws Exception {
         // GIVEN
         var executor = buildExecutor(actionRegistry()
-                .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                .withAction(CreateItemAction.class, new CreateItemAction(clock))
                 .build());
 
         // WHEN
@@ -183,7 +189,7 @@ class ActionExecutorTracingTest {
     void all_spans_share_same_trace_id() throws Exception {
         // GIVEN
         var executor = buildExecutor(actionRegistry()
-                .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                .withAction(CreateItemAction.class, new CreateItemAction(clock))
                 .build());
 
         // WHEN
@@ -200,7 +206,7 @@ class ActionExecutorTracingTest {
         // GIVEN
         var attempts = new AtomicInteger(0);
         var executor = buildExecutor(actionRegistry()
-                .withAction(FailingItemAction.class, () -> new FailingItemAction(clock, attempts))
+                .withAction(FailingItemAction.class, new FailingItemAction(clock, attempts))
                 .build());
 
         // WHEN
@@ -228,7 +234,7 @@ class ActionExecutorTracingTest {
     void no_retry_records_zero_count() throws Exception {
         // GIVEN
         var executor = buildExecutor(actionRegistry()
-                .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                .withAction(CreateItemAction.class, new CreateItemAction(clock))
                 .build());
 
         // WHEN
@@ -254,7 +260,7 @@ class ActionExecutorTracingTest {
                 .withRetry(StaleRecordException.class, new RetryConfig(2, Duration.ZERO))
                 .build();
         var executor = buildExecutor(actionRegistry()
-                .withAction(FailingItemAction.class, () -> new FailingItemAction(clock, attempts))
+                .withAction(FailingItemAction.class, new FailingItemAction(clock, attempts))
                 .build());
 
         // WHEN
@@ -278,7 +284,7 @@ class ActionExecutorTracingTest {
         // GIVEN / WHEN / THEN — this test class uses OpenTelemetryExtension which registers an SDK,
         // but the test validates that tracing doesn't break the action result
         var executor = buildExecutor(actionRegistry()
-                .withAction(CreateItemAction.class, () -> new CreateItemAction(clock))
+                .withAction(CreateItemAction.class, new CreateItemAction(clock))
                 .build());
 
         var result = executor.execute(() -> "user", CreateItemAction.class, new CreateItemAction.Params("wallet"));
@@ -347,7 +353,7 @@ class ActionExecutorTracingTest {
 
         @Override
         protected Item perform(Principal principal, Params params) {
-            return plan.add(Item.createItem(params.name, clock.instant()).build());
+            return plan().add(Item.createItem(params.name, clock.instant()).build());
         }
     }
 
@@ -366,7 +372,7 @@ class ActionExecutorTracingTest {
             if (attempts.incrementAndGet() <= params.failUntilAttempt) {
                 throw new StaleRecordException("stale", null);
             }
-            return plan.add(Item.createItem("recovered", clock.instant()).build());
+            return plan().add(Item.createItem("recovered", clock.instant()).build());
         }
     }
 

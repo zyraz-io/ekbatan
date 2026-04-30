@@ -3,12 +3,12 @@ package io.ekbatan.core.action.persister.event.single_table_json;
 import io.ekbatan.core.config.DataSourceConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
-import org.flywaydb.core.Flyway;
+import io.ekbatan.core.test.testcontainers.ClasspathTransferable;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import org.jooq.SQLDialect;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mariadb.MariaDBContainer;
-import org.testcontainers.utility.MountableFile;
 
 @Testcontainers
 class MariadbSingleTableJsonEventPersisterTest extends BaseSingleTableJsonEventPersisterTest {
@@ -18,9 +18,8 @@ class MariadbSingleTableJsonEventPersisterTest extends BaseSingleTableJsonEventP
             .withDatabaseName("testdb")
             .withUsername("test")
             .withPassword("test")
-            .withCopyFileToContainer(
-                    MountableFile.forClasspathResource("mariadb_init.sql"),
-                    "/docker-entrypoint-initdb.d/mariadb_init.sql")
+            .withCopyToContainer(
+                    ClasspathTransferable.of("mariadb_init.sql"), "/docker-entrypoint-initdb.d/mariadb_init.sql")
             .withEnv("TZ", "UTC");
 
     private static final TransactionManager TRANSACTION_MANAGER;
@@ -43,11 +42,7 @@ class MariadbSingleTableJsonEventPersisterTest extends BaseSingleTableJsonEventP
         TRANSACTION_MANAGER =
                 new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider, SQLDialect.MARIADB);
 
-        Flyway.configure()
-                .dataSource(jdbcUrl, username, password)
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(jdbcUrl, username, password);
     }
 
     MariadbSingleTableJsonEventPersisterTest() {

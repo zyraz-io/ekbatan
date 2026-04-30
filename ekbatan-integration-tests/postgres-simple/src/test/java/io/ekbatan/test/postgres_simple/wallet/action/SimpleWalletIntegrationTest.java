@@ -10,13 +10,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.persistence.TransactionManager;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import io.ekbatan.test.postgres_simple.wallet.models.Wallet;
 import io.ekbatan.test.postgres_simple.wallet.models.WalletState;
 import io.ekbatan.test.postgres_simple.wallet.repository.WalletRepository;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.UUID;
-import org.flywaydb.core.Flyway;
 import org.jooq.DSLContext;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
@@ -53,11 +53,7 @@ public class SimpleWalletIntegrationTest {
         var tm = new TransactionManager(
                 hikariConnectionProvider(config), hikariConnectionProvider(config), SQLDialect.POSTGRES);
 
-        Flyway.configure()
-                .dataSource(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword())
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
 
         var databaseRegistry = databaseRegistry().withDatabase(tm).build();
 
@@ -67,9 +63,9 @@ public class SimpleWalletIntegrationTest {
         var clock = Clock.systemUTC();
 
         var actionRegistry = actionRegistry()
-                .withAction(WalletCreateAction.class, () -> new WalletCreateAction(clock))
-                .withAction(WalletDepositAction.class, () -> new WalletDepositAction(clock, walletRepo))
-                .withAction(WalletCloseAction.class, () -> new WalletCloseAction(clock, walletRepo))
+                .withAction(WalletCreateAction.class, new WalletCreateAction(clock))
+                .withAction(WalletDepositAction.class, new WalletDepositAction(clock, walletRepo))
+                .withAction(WalletCloseAction.class, new WalletCloseAction(clock, walletRepo))
                 .build();
 
         executor = actionExecutor()

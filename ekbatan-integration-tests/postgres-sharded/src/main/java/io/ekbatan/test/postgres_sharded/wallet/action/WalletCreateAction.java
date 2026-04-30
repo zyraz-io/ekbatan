@@ -30,7 +30,7 @@ public class WalletCreateAction extends Action<WalletCreateAction.Params, Wallet
                         shard, UUID.randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, clock.instant())
                 .build();
 
-        return plan.add(wallet);
+        return plan().add(wallet);
     }
 
     private ShardIdentifier resolveShard(String countryCode) {

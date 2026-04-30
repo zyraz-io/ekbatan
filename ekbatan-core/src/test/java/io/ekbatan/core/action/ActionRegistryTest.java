@@ -25,7 +25,7 @@ class ActionRegistryTest {
 
         // WHEN
         var registry = actionRegistry()
-                .withAction(CreateAction.class, () -> new CreateAction(clock))
+                .withAction(CreateAction.class, new CreateAction(clock))
                 .build();
 
         // THEN
@@ -37,7 +37,7 @@ class ActionRegistryTest {
         // GIVEN
         var clock = new VirtualClock();
         var registry = actionRegistry()
-                .withAction(CreateAction.class, () -> new CreateAction(clock))
+                .withAction(CreateAction.class, new CreateAction(clock))
                 .build();
 
         // WHEN
@@ -49,19 +49,20 @@ class ActionRegistryTest {
     }
 
     @Test
-    void get_returns_fresh_instance_each_call() {
-        // GIVEN
+    void get_returns_the_registered_singleton_on_every_call() {
+        // GIVEN — Action is a singleton: registered once, shared across all executions.
+        // Per-call mutable state lives in ActionPlan via ScopedValue, not on the instance.
         var clock = new VirtualClock();
-        var registry = actionRegistry()
-                .withAction(CreateAction.class, () -> new CreateAction(clock))
-                .build();
+        var action = new CreateAction(clock);
+        var registry = actionRegistry().withAction(CreateAction.class, action).build();
 
         // WHEN
         var first = registry.get(CreateAction.class);
         var second = registry.get(CreateAction.class);
 
         // THEN
-        assertThat(first).isNotSameAs(second);
+        assertThat(first).isSameAs(second);
+        assertThat(first).isSameAs(action);
     }
 
     @Test
@@ -78,17 +79,18 @@ class ActionRegistryTest {
     @Test
     void withAction_rejects_null_class() {
         // GIVEN / WHEN / THEN
-        assertThatThrownBy(() -> actionRegistry().withAction(null, () -> null))
+        var action = new CreateAction(new VirtualClock());
+        assertThatThrownBy(() -> actionRegistry().withAction(null, action))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("actionClass cannot be null");
     }
 
     @Test
-    void withAction_rejects_null_supplier() {
+    void withAction_rejects_null_action() {
         // GIVEN / WHEN / THEN
         assertThatThrownBy(() -> actionRegistry().withAction(CreateAction.class, null))
                 .isInstanceOf(NullPointerException.class)
-                .hasMessageContaining("actionSupplier cannot be null");
+                .hasMessageContaining("action cannot be null");
     }
 
     @Test
@@ -98,8 +100,8 @@ class ActionRegistryTest {
 
         // WHEN
         var registry = actionRegistry()
-                .withAction(CreateAction.class, () -> new CreateAction(clock))
-                .withAction(FailingAction.class, () -> new FailingAction(clock))
+                .withAction(CreateAction.class, new CreateAction(clock))
+                .withAction(FailingAction.class, new FailingAction(clock))
                 .build();
 
         // THEN

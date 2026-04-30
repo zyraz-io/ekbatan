@@ -2,6 +2,7 @@ rootProject.name = "ekbatan"
 
 include(
     "ekbatan-core",
+    "ekbatan-native",
     "ekbatan-events:streaming",
     "ekbatan-events:streaming:action-event:json",
     "ekbatan-events:streaming:action-event:avro",
@@ -35,5 +36,16 @@ include(
     "ekbatan-annotation-processor",
     "ekbatan-distributed-jobs",
     "ekbatan-keyed-lock-redis",
+    "ekbatan-di:annotations",
+    "ekbatan-di:bootstrap",
+    "ekbatan-di:spring:autoconfigure",
+    "ekbatan-di:spring:starter",
+    "ekbatan-di:quarkus:runtime",
+    "ekbatan-di:quarkus:deployment",
+    "ekbatan-di:micronaut",
     "ekbatan-integration-tests:keyed-lock-provider:redis",
+    "ekbatan-integration-tests:di:shared",
+    "ekbatan-integration-tests:di:spring-boot-starter",
+    "ekbatan-integration-tests:di:quarkus",
+    "ekbatan-integration-tests:di:micronaut",
 )

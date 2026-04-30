@@ -22,6 +22,6 @@ public class WalletCloseAction extends Action<WalletCloseAction.Params, Wallet> 
     protected Wallet perform(Principal principal, Params params) throws Exception {
         final var wallet = walletRepository.getById(params.walletId().getValue());
         final var closed = wallet.close();
-        return plan.update(closed);
+        return plan().update(closed);
     }
 }

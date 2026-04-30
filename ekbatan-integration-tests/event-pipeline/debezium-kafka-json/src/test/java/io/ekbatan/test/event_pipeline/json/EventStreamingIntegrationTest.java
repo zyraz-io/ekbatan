@@ -12,6 +12,7 @@ import io.debezium.testing.testcontainers.ConnectorConfiguration;
 import io.debezium.testing.testcontainers.DebeziumContainer;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.persistence.TransactionManager;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import io.ekbatan.test.event_pipeline.common.router.EventRoute;
 import io.ekbatan.test.event_pipeline.common.wallet.action.WalletCreateAction;
 import io.ekbatan.test.event_pipeline.common.wallet.action.WalletDepositMoneyAction;
@@ -26,7 +27,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
-import org.flywaydb.core.Flyway;
 import org.jooq.SQLDialect;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -89,21 +89,15 @@ class EventStreamingIntegrationTest {
         var secondaryProvider = hikariConnectionProvider(dataSourceConfig);
         var transactionManager = new TransactionManager(primaryProvider, secondaryProvider, SQLDialect.POSTGRES);
 
-        Flyway.configure()
-                .dataSource(PG.getJdbcUrl(), PG.getUsername(), PG.getPassword())
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(PG.getJdbcUrl(), PG.getUsername(), PG.getPassword());
 
         var databaseRegistry =
                 databaseRegistry().withDatabase(transactionManager).build();
 
         var walletRepo = new WalletRepository(databaseRegistry);
         var actionRegistry = actionRegistry()
-                .withAction(WalletCreateAction.class, () -> new WalletCreateAction(Clock.systemUTC()))
-                .withAction(
-                        WalletDepositMoneyAction.class,
-                        () -> new WalletDepositMoneyAction(Clock.systemUTC(), walletRepo))
+                .withAction(WalletCreateAction.class, new WalletCreateAction(Clock.systemUTC()))
+                .withAction(WalletDepositMoneyAction.class, new WalletDepositMoneyAction(Clock.systemUTC(), walletRepo))
                 .build();
 
         executor = actionExecutor()

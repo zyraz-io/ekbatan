@@ -37,6 +37,20 @@ dependencies {
     testImplementation("net.javacrumbs.json-unit:json-unit-assertj:${project.property("jsonUnitVersion")}")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
+    // testFixtures consumers (the integration-test modules) need access to the
+    // GraalVM-native helpers — FlywayHelper, NativeImageFlywayResourceProvider, and the
+    // auto-registered Jackson3RecordsFeature — which now live in :ekbatan-native (the
+    // publishable module any downstream user adds when they want their app to build as
+    // a native image). `testFixturesApi` so the dependency reaches the integration tests
+    // transitively via `testFixtures(project(":ekbatan-core"))`.
+    testFixturesApi(project(":ekbatan-native"))
+
+    // ClasspathTransferable in testFixtures wraps a classpath resource into a
+    // Testcontainers Transferable so test setups can use `withCopyToContainer(...)`
+    // (works under native image) instead of `MountableFile.forClasspathResource(...)`
+    // (broken under native image because the resource has no filesystem path).
+    testFixturesImplementation("org.testcontainers:testcontainers:${project.property("testcontainersVersion")}")
+
     // Apache Commons Lang3
     implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
 
@@ -53,6 +67,11 @@ dependencies {
 
     // YAML support for ShardingConfig deserialization sanity-check tests
     testImplementation("tools.jackson.dataformat:jackson-dataformat-yaml:${project.property("jacksonDatabindVersion")}")
+
+    // GraalVM SVM API for the @TargetClass / @Substitute fix to jOOQ's Internal.arrayType.
+    // compileOnly because the API is provided by native-image at AOT time and is never on
+    // the JVM runtime classpath; the substitution class is invisible to JVM execution.
+    compileOnly("org.graalvm.nativeimage:svm:25.0.2")
 }
 
 tasks.withType<Test> {

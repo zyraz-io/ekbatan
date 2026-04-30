@@ -20,6 +20,6 @@ public class WidgetCreateAction extends Action<WidgetCreateAction.Params, Widget
     protected Widget perform(Principal principal, Params params) {
         final var widget = createWidget(params.shard(), params.name(), params.color(), clock.instant())
                 .build();
-        return plan.add(widget);
+        return plan().add(widget);
     }
 }

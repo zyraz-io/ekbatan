@@ -3,7 +3,7 @@ package io.ekbatan.core.action.persister.event.single_table_json;
 import io.ekbatan.core.config.DataSourceConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
-import org.flywaydb.core.Flyway;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import org.jooq.SQLDialect;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -39,11 +39,7 @@ class PgSingleTableJsonEventPersisterTest extends BaseSingleTableJsonEventPersis
         TRANSACTION_MANAGER =
                 new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider, SQLDialect.POSTGRES);
 
-        Flyway.configure()
-                .dataSource(jdbcUrl, username, password)
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(jdbcUrl, username, password);
     }
 
     PgSingleTableJsonEventPersisterTest() {

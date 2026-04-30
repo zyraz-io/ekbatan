@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.ekbatan.core.action.Action;
+import io.ekbatan.core.action.ActionPlan;
 import io.ekbatan.core.action.persister.event.EventPersister;
 import io.ekbatan.core.domain.GenericState;
 import io.ekbatan.core.domain.Id;
@@ -72,7 +73,7 @@ class ChangePersisterTest {
 
         @Override
         protected Item perform(Principal principal, Params params) {
-            return plan.add(Item.createItem(clock.instant()).build());
+            return plan().add(Item.createItem(clock.instant()).build());
         }
     }
 
@@ -88,7 +89,7 @@ class ChangePersisterTest {
 
         @Override
         protected Item perform(Principal principal, Params params) {
-            return plan.update(existing.copy().state(GenericState.DELETED).build());
+            return plan().update(existing.copy().state(GenericState.DELETED).build());
         }
     }
 
@@ -208,7 +209,8 @@ class ChangePersisterTest {
         var persister = new ChangePersister(registry, eventPersister, clock);
 
         var action = new CreateItemAction(clock);
-        action.perform(() -> "user", new CreateItemAction.Params());
+        var plan = new ActionPlan();
+        action.runIn(plan, () -> "user", new CreateItemAction.Params());
 
         // WHEN
         persister.persist(
@@ -216,7 +218,7 @@ class ChangePersisterTest {
                 action.getClass().getSimpleName(),
                 new CreateItemAction.Params(),
                 Instant.now(),
-                action.plan.changes(),
+                plan.changes(),
                 io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
                 java.util.UUID.randomUUID());
 
@@ -243,7 +245,8 @@ class ChangePersisterTest {
                 .build();
 
         var action = new UpdateItemAction(clock, existing);
-        action.perform(() -> "user", new UpdateItemAction.Params());
+        var plan = new ActionPlan();
+        action.runIn(plan, () -> "user", new UpdateItemAction.Params());
 
         // WHEN
         persister.persist(
@@ -251,7 +254,7 @@ class ChangePersisterTest {
                 action.getClass().getSimpleName(),
                 new UpdateItemAction.Params(),
                 Instant.now(),
-                action.plan.changes(),
+                plan.changes(),
                 io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
                 java.util.UUID.randomUUID());
 
@@ -271,7 +274,8 @@ class ChangePersisterTest {
         var persister = new ChangePersister(registry, eventPersister, clock);
 
         var action = new CreateItemAction(clock);
-        action.perform(() -> "user", new CreateItemAction.Params());
+        var plan = new ActionPlan();
+        action.runIn(plan, () -> "user", new CreateItemAction.Params());
 
         // WHEN
         persister.persist(
@@ -279,7 +283,7 @@ class ChangePersisterTest {
                 action.getClass().getSimpleName(),
                 new CreateItemAction.Params(),
                 Instant.now(),
-                action.plan.changes(),
+                plan.changes(),
                 io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
                 java.util.UUID.randomUUID());
 
@@ -299,7 +303,8 @@ class ChangePersisterTest {
         var persister = new ChangePersister(registry, eventPersister, clock);
 
         var action = new CreateItemAction(clock);
-        action.perform(() -> "user", new CreateItemAction.Params());
+        var plan = new ActionPlan();
+        action.runIn(plan, () -> "user", new CreateItemAction.Params());
 
         // WHEN
         persister.persist(
@@ -307,7 +312,7 @@ class ChangePersisterTest {
                 action.getClass().getSimpleName(),
                 new CreateItemAction.Params(),
                 Instant.now(),
-                action.plan.changes(),
+                plan.changes(),
                 io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
                 java.util.UUID.randomUUID());
 
@@ -327,7 +332,8 @@ class ChangePersisterTest {
         var persister = new ChangePersister(registry, eventPersister, clock);
 
         var action = new CreateItemAction(clock);
-        action.perform(() -> "user", new CreateItemAction.Params());
+        var plan = new ActionPlan();
+        action.runIn(plan, () -> "user", new CreateItemAction.Params());
 
         // WHEN
         var startDate = Instant.parse("2025-06-01T11:59:59Z");
@@ -336,7 +342,7 @@ class ChangePersisterTest {
                 action.getClass().getSimpleName(),
                 new CreateItemAction.Params(),
                 startDate,
-                action.plan.changes(),
+                plan.changes(),
                 io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
                 java.util.UUID.randomUUID());
 
@@ -354,7 +360,8 @@ class ChangePersisterTest {
         var persister = new ChangePersister(registry, eventPersister, clock);
 
         var action = new NoOpAction(clock);
-        action.perform(() -> "user", new NoOpAction.Params());
+        var plan = new ActionPlan();
+        action.runIn(plan, () -> "user", new NoOpAction.Params());
 
         // WHEN
         persister.persist(
@@ -362,7 +369,7 @@ class ChangePersisterTest {
                 action.getClass().getSimpleName(),
                 new NoOpAction.Params(),
                 Instant.now(),
-                action.plan.changes(),
+                plan.changes(),
                 io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
                 java.util.UUID.randomUUID());
 
@@ -381,7 +388,8 @@ class ChangePersisterTest {
         var persister = new ChangePersister(registry, eventPersister, clock);
 
         var action = new CreateItemAction(clock);
-        action.perform(() -> "user", new CreateItemAction.Params());
+        var plan = new ActionPlan();
+        action.runIn(plan, () -> "user", new CreateItemAction.Params());
 
         // WHEN / THEN
         assertThatThrownBy(() -> persister.persist(
@@ -389,7 +397,7 @@ class ChangePersisterTest {
                         action.getClass().getSimpleName(),
                         new CreateItemAction.Params(),
                         Instant.now(),
-                        action.plan.changes(),
+                        plan.changes(),
                         io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
                         java.util.UUID.randomUUID()))
                 .isInstanceOf(IllegalStateException.class)
@@ -408,7 +416,8 @@ class ChangePersisterTest {
 
         var action = new CreateItemAction(clock);
         var params = new CreateItemAction.Params();
-        action.perform(() -> "user", params);
+        var plan = new ActionPlan();
+        action.runIn(plan, () -> "user", params);
 
         // WHEN
         persister.persist(
@@ -416,7 +425,7 @@ class ChangePersisterTest {
                 action.getClass().getSimpleName(),
                 params,
                 Instant.now(),
-                action.plan.changes(),
+                plan.changes(),
                 io.ekbatan.core.shard.ShardIdentifier.DEFAULT,
                 java.util.UUID.randomUUID());
 

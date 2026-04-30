@@ -27,7 +27,7 @@ public class WalletCreateMultiShardAction extends Action<WalletCreateMultiShardA
         var globalWallet = createWallet(
                         GLOBAL_SHARD, UUID.randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, clock.instant())
                 .build();
-        plan.add(globalWallet);
+        plan().add(globalWallet);
 
         var mexicoWallet = createWallet(
                         MEXICO_SHARD,
@@ -36,7 +36,7 @@ public class WalletCreateMultiShardAction extends Action<WalletCreateMultiShardA
                         BigDecimal.valueOf(100),
                         clock.instant())
                 .build();
-        plan.add(mexicoWallet);
+        plan().add(mexicoWallet);
 
         return globalWallet;
     }

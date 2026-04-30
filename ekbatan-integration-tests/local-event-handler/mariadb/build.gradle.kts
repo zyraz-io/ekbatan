@@ -86,6 +86,7 @@ dependencies {
     implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
 
     testImplementation(testFixtures(project(":ekbatan-integration-tests:local-event-handler:shared")))
+    testImplementation(testFixtures(project(":ekbatan-core")))
 
     testImplementation("org.testcontainers:testcontainers-mariadb:${project.property("testcontainersVersion")}")
 }

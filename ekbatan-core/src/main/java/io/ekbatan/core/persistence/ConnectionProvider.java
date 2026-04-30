@@ -5,7 +5,7 @@ import io.ekbatan.core.config.DataSourceConfig;
 import java.sql.Connection;
 import java.sql.SQLException;
 
-public class ConnectionProvider {
+public class ConnectionProvider implements AutoCloseable {
 
     private final HikariDataSource pool;
 
@@ -44,6 +44,15 @@ public class ConnectionProvider {
 
     public HikariDataSource getDataSource() {
         return pool;
+    }
+
+    /**
+     * Closes the underlying Hikari pool. Idempotent — safe to call multiple times.
+     * After {@code close()}, no further {@link #acquire()} calls are valid.
+     */
+    @Override
+    public void close() {
+        pool.close();
     }
 
     public static ConnectionProvider hikariConnectionProvider(DataSourceConfig cfg) {

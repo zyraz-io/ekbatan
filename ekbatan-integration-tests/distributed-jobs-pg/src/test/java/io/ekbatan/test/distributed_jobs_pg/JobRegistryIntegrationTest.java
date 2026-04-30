@@ -10,11 +10,11 @@ import com.github.kagkarlsson.scheduler.task.schedule.FixedDelay;
 import com.github.kagkarlsson.scheduler.task.schedule.Schedule;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.distributedjobs.DistributedJob;
+import io.ekbatan.graalvm.flyway.FlywayHelper;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Container;
@@ -47,11 +47,7 @@ class JobRegistryIntegrationTest {
                 .maximumPoolSize(8)
                 .build());
 
-        Flyway.configure()
-                .dataSource(jdbcUrl, username, password)
-                .locations("classpath:db/migration")
-                .load()
-                .migrate();
+        FlywayHelper.migrate(jdbcUrl, username, password);
     }
 
     @AfterEach

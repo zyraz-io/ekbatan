@@ -14,6 +14,6 @@ class DeleteAction extends Action<DeleteAction.Params, TestModel> {
 
     @Override
     protected TestModel perform(Principal principal, Params params) {
-        return plan.update(existing.delete());
+        return plan().update(existing.delete());
     }
 }

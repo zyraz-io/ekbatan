@@ -1273,6 +1273,29 @@ The Kafka Connect SMT plugins target Java 21 to match the Kafka Connect runtime;
 
 ---
 
+## Native Image
+
+Ekbatan ships first-class GraalVM native-image support via the `ekbatan-native` module. Drop it on the classpath and a set of `Feature` classes auto-load to register the reflection metadata that Jackson 3 records, `@AutoBuilder` Builders, JDBC drivers, Avro `SpecificRecord`s, Kafka clients, and Testcontainers' docker-java types need at runtime.
+
+**Telling the framework where YOUR records live.** The Jackson scan defaults to `io.ekbatan` (Ekbatan's own framework records). If you have your own records, `@AutoBuilder` Builders, `@JsonCreator` mixins, or jOOQ-generated classes under a different namespace, you have to extend the scan roots — otherwise none of your types will be reflectively reachable on native and Jackson will fail at runtime with `UnsupportedFeatureError: Record components not available for record class …`.
+
+The override is a JVM system property passed at native-image **build** time:
+
+| Consumer | How to set it |
+|---|---|
+| Spring Boot / Micronaut / plain GraalVM Build Tools (Gradle) | `graalvmNative.binaries.all { buildArgs.add("-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,com.your.package") }` |
+| Quarkus | `quarkus.native.additional-build-args=-Dio.ekbatan.graalvm.scan.packages=io.ekbatan\,com.your.package` in `application.properties` (the comma in the value must be escaped — Quarkus uses comma to separate multiple build args) |
+| Maven (any) | `<buildArg>-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,com.your.package</buildArg>` inside the native-maven-plugin's `<buildArgs>` |
+
+A few related properties exist for the Avro Feature (`io.ekbatan.graalvm.avro.scan.packages`) and follow the same pattern. The Kafka and Testcontainers Features scan fixed library namespaces and don't need any user configuration.
+
+**What about everything else?** Things like the Postgres JDBC driver and HikariCP need their own native metadata, and the path differs by consumer:
+
+- **Spring Boot / Micronaut** — the GraalVM Build Tools plugin auto-pulls the GraalVM Reachability Metadata Repository, which already covers HikariCP and the major JDBC drivers. Nothing to do.
+- **Quarkus** — does not auto-consume the GraalVM RMR. JDBC drivers come via Quarkus extensions (`quarkus-jdbc-postgresql` / `quarkus-jdbc-mysql` / `quarkus-jdbc-mariadb` — register the driver class). HikariCP isn't covered by any Quarkus extension (Quarkus blesses Agroal); you have to vendor the upstream RMR JSON yourself. See `ekbatan-integration-tests/di/quarkus/src/main/resources/META-INF/native-image/com.zaxxer/HikariCP/reachability-metadata.json` for a working example.
+
+---
+
 ## Examples
 
 The `ekbatan-integration-tests/` directory contains complete, runnable examples that mirror the snippets in this README. They are the recommended starting point — each subproject is a working application you can study, run, and adapt:

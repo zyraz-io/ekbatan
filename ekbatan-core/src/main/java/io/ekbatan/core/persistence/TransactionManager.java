@@ -15,7 +15,7 @@ import org.jooq.SQLDialect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class TransactionManager {
+public class TransactionManager implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(TransactionManager.class);
     private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
@@ -120,6 +120,18 @@ public class TransactionManager {
         return currentTransaction.isBound()
                 ? Optional.of(currentTransaction.get().dslContext())
                 : Optional.empty();
+    }
+
+    /**
+     * Closes the primary and (distinct) secondary connection providers. Safe to call multiple
+     * times — Hikari's {@code close()} is idempotent.
+     */
+    @Override
+    public void close() {
+        primaryConnectionProvider.close();
+        if (secondaryConnectionProvider != primaryConnectionProvider) {
+            secondaryConnectionProvider.close();
+        }
     }
 
     @FunctionalInterface
