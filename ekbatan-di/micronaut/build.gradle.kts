@@ -12,7 +12,6 @@ java {
 // live) using this jar as a service-loader source for the TypeElementVisitor.
 dependencies {
     api(project(":ekbatan-core"))
-    api(project(":ekbatan-di:bootstrap"))
     api(project(":ekbatan-di:annotations"))
     api(project(":ekbatan-events:local-event-handler"))
     api(project(":ekbatan-distributed-jobs"))

@@ -1,16 +1,17 @@
 package io.ekbatan.quarkus.runtime;
 
-import io.ekbatan.bootstrap.RegistryAssembler;
-import io.ekbatan.bootstrap.jackson.EkbatanConfigJacksonModule;
 import io.ekbatan.core.action.Action;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.action.ActionRegistry;
+import io.ekbatan.core.action.persister.event.EventPersister;
+import io.ekbatan.core.config.jackson.EkbatanConfigJacksonModule;
 import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.repository.RepositoryRegistry;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.config.ShardingConfig;
 import io.quarkus.arc.All;
 import jakarta.enterprise.inject.Disposes;
+import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Singleton;
 import java.time.Clock;
@@ -80,7 +81,9 @@ public class EkbatanCoreConfiguration {
     @Produces
     @Singleton
     public RepositoryRegistry ekbatanRepositoryRegistry(@All List<AbstractRepository<?, ?, ?, ?>> repositories) {
-        return RegistryAssembler.repositoryRegistry(repositories);
+        return RepositoryRegistry.Builder.repositoryRegistry()
+                .withRepositories(repositories)
+                .build();
     }
 
     // Singleton-scoped Actions: per-call mutable state on Action.plan is bound by the framework
@@ -90,7 +93,9 @@ public class EkbatanCoreConfiguration {
     @Singleton
     @SuppressWarnings({"unchecked", "rawtypes"})
     public ActionRegistry ekbatanActionRegistry(@All List<Action<?, ?>> actions) {
-        return (ActionRegistry) RegistryAssembler.actionRegistry((List) actions);
+        return (ActionRegistry) ActionRegistry.Builder.actionRegistry()
+                .withActions((List) actions)
+                .build();
     }
 
     @Produces
@@ -101,14 +106,21 @@ public class EkbatanCoreConfiguration {
             ActionRegistry actionRegistry,
             RepositoryRegistry repositoryRegistry,
             JsonMapper jsonMapper,
-            Clock clock) {
-        return ActionExecutor.Builder.actionExecutor()
+            Clock clock,
+            Instance<EventPersister> eventPersisterInstance) {
+        var builder = ActionExecutor.Builder.actionExecutor()
                 .namespace(config.namespace())
                 .databaseRegistry(databaseRegistry)
                 .actionRegistry(actionRegistry)
                 .repositoryRegistry(repositoryRegistry)
                 .objectMapper(jsonMapper)
-                .clock(clock)
-                .build();
+                .clock(clock);
+        // Optional override: an application can supply its own EventPersister bean (e.g. one that
+        // encrypts payloads, writes to a separate sink, or uses a different table layout).
+        // Otherwise the builder falls back to its built-in SingleTableJsonEventPersister default.
+        if (eventPersisterInstance.isResolvable()) {
+            builder.eventPersister(eventPersisterInstance.get());
+        }
+        return builder.build();
     }
 }

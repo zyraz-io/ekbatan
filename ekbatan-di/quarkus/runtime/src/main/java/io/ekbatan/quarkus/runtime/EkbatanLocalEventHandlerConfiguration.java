@@ -1,6 +1,5 @@
 package io.ekbatan.quarkus.runtime;
 
-import io.ekbatan.bootstrap.RegistryAssembler;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.events.localeventhandler.EventHandlerRegistry;
@@ -20,7 +19,9 @@ public class EkbatanLocalEventHandlerConfiguration {
     @Produces
     @Singleton
     public EventHandlerRegistry ekbatanEventHandlerRegistry(@All List<EventHandler<?>> handlers) {
-        return RegistryAssembler.eventHandlerRegistry(handlers);
+        return EventHandlerRegistry.eventHandlerRegistry()
+                .withHandlers(handlers)
+                .build();
     }
 
     @Produces

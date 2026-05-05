@@ -1,5 +1,6 @@
 package io.ekbatan.test.local_event_handler.widget.handler;
 
+import io.ekbatan.events.localeventhandler.EventEnvelope;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.test.local_event_handler.widget.models.events.WidgetCreatedEvent;
 import java.util.List;
@@ -20,8 +21,8 @@ public final class WidgetCreatedIndexerHandler implements EventHandler<WidgetCre
     }
 
     @Override
-    public void handle(WidgetCreatedEvent event) {
-        received.add(event);
+    public void handle(EventEnvelope<WidgetCreatedEvent> envelope) {
+        received.add(envelope.event);
     }
 
     public int callCount() {

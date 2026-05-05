@@ -1,6 +1,5 @@
 package io.ekbatan.quarkus.runtime;
 
-import io.ekbatan.bootstrap.RegistryAssembler;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.core.shard.config.ShardMemberConfig;
@@ -58,7 +57,7 @@ public class EkbatanDistributedJobsConfiguration {
         j.pollingInterval().ifPresent(builder::pollInterval);
         j.heartbeatInterval().ifPresent(builder::heartbeatInterval);
         j.shutdownMaxWait().ifPresent(builder::shutdownMaxWait);
-        return RegistryAssembler.jobRegistry(builder, jobs);
+        return builder.withJobs(jobs).build();
     }
 
     // Inject as Instance so this observer doesn't pull the registry into existence before the

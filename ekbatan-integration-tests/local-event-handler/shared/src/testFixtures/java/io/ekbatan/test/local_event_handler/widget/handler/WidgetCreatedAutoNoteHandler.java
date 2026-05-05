@@ -2,6 +2,7 @@ package io.ekbatan.test.local_event_handler.widget.handler;
 
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.shard.ShardedUUID;
+import io.ekbatan.events.localeventhandler.EventEnvelope;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.test.local_event_handler.note.action.NoteCreateAction;
 import io.ekbatan.test.local_event_handler.widget.models.events.WidgetCreatedEvent;
@@ -28,10 +29,11 @@ public final class WidgetCreatedAutoNoteHandler implements EventHandler<WidgetCr
     }
 
     @Override
-    public void handle(WidgetCreatedEvent event) throws Exception {
+    public void handle(EventEnvelope<WidgetCreatedEvent> envelope) throws Exception {
         // Co-locate the auto-note with the widget that triggered it: decode the widget's shard
         // from its ID (a ShardedUUID with shard bits embedded) and create the note on that
         // same shard.
+        final var event = envelope.event;
         final var widgetShard = ShardedUUID.from(UUID.fromString(event.modelId)).resolveShardIdentifier();
         actionExecutor.execute(
                 () -> "auto-note",

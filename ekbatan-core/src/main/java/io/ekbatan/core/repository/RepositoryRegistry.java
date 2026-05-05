@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import io.ekbatan.core.domain.Entity;
 import io.ekbatan.core.domain.Model;
 import io.ekbatan.core.domain.Persistable;
+import java.util.Collection;
 import java.util.Map;
 import org.apache.commons.lang3.Validate;
 
@@ -42,6 +43,24 @@ public final class RepositoryRegistry {
             Validate.notNull(entityClass, "entityClass cannot be null");
             Validate.notNull(repository, "repository cannot be null");
             repositories.put(entityClass, repository);
+            return this;
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        public Builder withRepositories(Collection<? extends AbstractRepository<?, ?, ?, ?>> repositories) {
+            Validate.notNull(repositories, "repositories cannot be null");
+            for (var repo : repositories) {
+                Class<? extends Persistable<?>> domain = repo.domainClass;
+                if (Model.class.isAssignableFrom(domain)) {
+                    withModelRepository((Class) domain, (AbstractRepository) repo);
+                } else if (Entity.class.isAssignableFrom(domain)) {
+                    withEntityRepository((Class) domain, (AbstractRepository) repo);
+                } else {
+                    throw new IllegalStateException("Repository domainClass " + domain.getName()
+                            + " is neither a Model nor an Entity — "
+                            + repo.getClass().getName() + " cannot be registered.");
+                }
+            }
             return this;
         }
 

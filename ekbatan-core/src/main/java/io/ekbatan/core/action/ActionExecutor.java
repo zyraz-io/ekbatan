@@ -37,6 +37,7 @@ public class ActionExecutor {
     private final DatabaseRegistry databaseRegistry;
     private final ActionRegistry actionRegistry;
     private final RepositoryRegistry repositoryRegistry;
+    public final EventPersister eventPersister;
     private final ChangePersister changePersister;
     private final Clock clock;
     private final ExecutionConfiguration defaultExecutionConfiguration;
@@ -50,7 +51,7 @@ public class ActionExecutor {
 
         this.repositoryRegistry = Validate.notNull(builder.repositoryRegistry, "repositoryRegistry is required");
 
-        final var eventPersister = builder.eventPersister != null
+        this.eventPersister = builder.eventPersister != null
                 ? builder.eventPersister
                 : new SingleTableJsonEventPersister(builder.databaseRegistry, objectMapper);
 

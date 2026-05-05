@@ -1,11 +1,14 @@
 package io.ekbatan.events.localeventhandler.job;
 
+import static io.ekbatan.events.localeventhandler.EventEnvelope.Builder.eventEnvelope;
+
 import com.github.kagkarlsson.scheduler.task.ExecutionContext;
 import com.github.kagkarlsson.scheduler.task.schedule.FixedDelay;
 import com.github.kagkarlsson.scheduler.task.schedule.Schedule;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.distributedjobs.DistributedJob;
+import io.ekbatan.events.localeventhandler.EventEnvelope;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.events.localeventhandler.EventHandlerRegistry;
 import io.ekbatan.events.localeventhandler.model.EventNotification;
@@ -284,7 +287,20 @@ public final class EventHandlingJob extends DistributedJob {
                     + notification.eventId + ")");
         }
         final var typedEvent = objectMapper.treeToValue(notification.payload, handler.eventType());
-        ((EventHandler) handler).handle(typedEvent);
+        final EventEnvelope envelope = eventEnvelope()
+                .event(typedEvent)
+                .eventId(notification.eventId)
+                .namespace(notification.namespace)
+                .actionId(notification.actionId)
+                .actionName(notification.actionName)
+                .actionParams(notification.actionParams)
+                .startedDate(notification.startedDate)
+                .completionDate(notification.completionDate)
+                .modelId(notification.modelId)
+                .modelType(notification.modelType)
+                .eventDate(notification.eventDate)
+                .build();
+        handler.handle(envelope);
     }
 
     private static boolean shouldStop(ExecutionContext ctx) {

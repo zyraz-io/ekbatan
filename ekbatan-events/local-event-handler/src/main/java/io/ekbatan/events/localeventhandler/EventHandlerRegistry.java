@@ -2,6 +2,7 @@ package io.ekbatan.events.localeventhandler;
 
 import io.ekbatan.core.domain.ModelEvent;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -79,6 +80,12 @@ public final class EventHandlerRegistry {
             namesByEventType
                     .computeIfAbsent(eventType.getSimpleName(), _ -> new ArrayList<>())
                     .add(name);
+            return this;
+        }
+
+        public Builder withHandlers(Collection<? extends EventHandler<?>> handlers) {
+            Validate.notNull(handlers, "handlers cannot be null");
+            handlers.forEach(this::withHandler);
             return this;
         }
 

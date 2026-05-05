@@ -35,6 +35,7 @@ dependencies {
     testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
     testImplementation("org.mockito:mockito-core:${project.property("mockitoVersion")}")
     testImplementation("net.javacrumbs.json-unit:json-unit-assertj:${project.property("jsonUnitVersion")}")
+    testImplementation("tools.jackson.dataformat:jackson-dataformat-yaml:${project.property("jacksonDatabindVersion")}")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     // testFixtures consumers (the integration-test modules) need access to the

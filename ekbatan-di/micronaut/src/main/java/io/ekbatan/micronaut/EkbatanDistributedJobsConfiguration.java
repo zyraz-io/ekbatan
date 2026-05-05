@@ -1,6 +1,5 @@
 package io.ekbatan.micronaut;
 
-import io.ekbatan.bootstrap.RegistryAssembler;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.core.shard.config.ShardMemberConfig;
@@ -54,7 +53,7 @@ public class EkbatanDistributedJobsConfiguration {
         if (j.getPollingInterval() != null) builder.pollInterval(j.getPollingInterval());
         if (j.getHeartbeatInterval() != null) builder.heartbeatInterval(j.getHeartbeatInterval());
         if (j.getShutdownMaxWait() != null) builder.shutdownMaxWait(j.getShutdownMaxWait());
-        return RegistryAssembler.jobRegistry(builder, jobs);
+        return builder.withJobs(jobs).build();
     }
 
     @Singleton

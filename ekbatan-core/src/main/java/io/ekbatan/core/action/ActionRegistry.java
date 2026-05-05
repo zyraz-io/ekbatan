@@ -1,6 +1,7 @@
 package io.ekbatan.core.action;
 
 import com.google.common.collect.ImmutableMap;
+import java.util.Collection;
 import java.util.Map;
 import org.apache.commons.lang3.Validate;
 
@@ -41,6 +42,16 @@ public class ActionRegistry {
             Validate.notNull(actionClass, "actionClass cannot be null");
             Validate.notNull(action, "action cannot be null");
             actions.put(actionClass, action);
+            return this;
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        public Builder withActions(Collection<? extends Action<?, ?>> actions) {
+            Validate.notNull(actions, "actions cannot be null");
+            for (var action : actions) {
+                Class cls = action.getClass();
+                withAction(cls, action);
+            }
             return this;
         }
 

@@ -217,6 +217,19 @@ All timestamps in Ekbatan should be stored and processed in **UTC**. This applie
 
 > **For agents writing new migrations:** before writing schema, open one existing Flyway migration in `ekbatan-integration-tests/.../db/migration/` and copy its column-type conventions verbatim. The existing migrations are the source of truth — not memory of "what's typical" elsewhere, and not example fragments scattered through other docs.
 
+### DDL Defaults — Recommendation: set values in code, not in SQL
+
+**Recommendation, not a hard rule.** Ekbatan migrations generally avoid `DEFAULT` clauses on column declarations: required columns are `NOT NULL` and the framework code (persisters, repositories, builders) supplies the value on every INSERT explicitly.
+
+Why this is the preferred default:
+- One source of truth for "what gets written when nothing is supplied" — the Java builder/persister, not a SQL clause that's invisible from the call site.
+- Cross-dialect parity: PostgreSQL / MySQL / MariaDB all express defaults slightly differently (boolean literals, sequences, function calls); keeping defaults out of DDL reduces the dialect-conditional surface.
+- Hand-written test SQL and one-off admin queries surface missing-column bugs immediately rather than silently inheriting a default that drifts from what the framework writes.
+
+Example: `eventlog.events.delivered` is declared `BOOLEAN NOT NULL` (no `DEFAULT FALSE`). `SingleTableJsonEventPersister` always writes it as `false`; the local-event-handler fan-out flips it to `true`. Hand-written SQL must include the column.
+
+It's fine to use `DEFAULT` when it actually buys clarity — e.g. counters that always start at zero, like `attempts INT NOT NULL DEFAULT 0` in `event_notifications`, where the framework is the only writer and the meaning is unambiguous. When in doubt, lean toward writing the value in code.
+
 ### Repository connection helpers (`db` / `readonlyDb` / `txDb` / `txDbElseDb`)
 
 `AbstractRepository` exposes four families of `protected` helpers for pulling a JOOQ `DSLContext` for the right shard. Custom queries in repository subclasses (or any standalone repository like `EventEntityRepository` and `EventNotificationRepository` in `local-event-handler`) should use these instead of poking at `databaseRegistry.primary` / `secondary` directly.

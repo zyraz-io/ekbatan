@@ -28,10 +28,12 @@ public interface EventHandler<E extends ModelEvent<?>> {
     Class<E> eventType();
 
     /**
-     * Handle one delivery. Throwing causes the dispatch job to record a failure and
-     * schedule a retry, subject to the {@code maxBackoffCap} backoff and the
+     * Handle one delivery. The {@link EventEnvelope} carries the typed event payload plus
+     * the surrounding action context (namespace, action id/name/params, timestamps,
+     * model id/type, event date, event id). Throwing causes the dispatch job to record a
+     * failure and schedule a retry, subject to the {@code maxBackoffCap} backoff and the
      * {@code retentionWindow} cap (after which the row is transitioned to {@code EXPIRED}
      * and never invoked again).
      */
-    void handle(E event) throws Exception;
+    void handle(EventEnvelope<E> envelope) throws Exception;
 }

@@ -1,5 +1,6 @@
 package io.ekbatan.test.local_event_handler.note.handler;
 
+import io.ekbatan.events.localeventhandler.EventEnvelope;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.test.local_event_handler.note.models.events.NoteCreatedEvent;
 import java.util.List;
@@ -20,8 +21,8 @@ public final class NoteCreatedAuditHandler implements EventHandler<NoteCreatedEv
     }
 
     @Override
-    public void handle(NoteCreatedEvent event) {
-        received.add(event);
+    public void handle(EventEnvelope<NoteCreatedEvent> envelope) {
+        received.add(envelope.event);
     }
 
     public int callCount() {

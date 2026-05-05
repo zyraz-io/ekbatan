@@ -2,6 +2,7 @@ package io.ekbatan.test.local_event_handler.note.handler;
 
 import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.shard.ShardedUUID;
+import io.ekbatan.events.localeventhandler.EventEnvelope;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.test.local_event_handler.audit.models.AuditEntry;
 import io.ekbatan.test.local_event_handler.note.models.events.NoteCreatedEvent;
@@ -29,9 +30,10 @@ public final class NoteCreatedAuditEntryHandler implements EventHandler<NoteCrea
     }
 
     @Override
-    public void handle(NoteCreatedEvent event) {
+    public void handle(EventEnvelope<NoteCreatedEvent> envelope) {
         // Co-locate the audit entry with the note that triggered it: decode the note's shard
         // from its ID and create the entry on that same shard.
+        final var event = envelope.event;
         final var noteShard = ShardedUUID.from(UUID.fromString(event.modelId)).resolveShardIdentifier();
         final var entry = AuditEntry.createAuditEntry(noteShard, event.modelId, event.widgetId, clock.instant())
                 .build();

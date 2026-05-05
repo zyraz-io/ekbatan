@@ -1,6 +1,5 @@
 package io.ekbatan.spring;
 
-import io.ekbatan.bootstrap.RegistryAssembler;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.core.shard.config.ShardMemberConfig;
@@ -57,7 +56,7 @@ public class EkbatanDistributedJobsConfiguration {
         if (j.pollingInterval() != null) builder.pollInterval(j.pollingInterval());
         if (j.heartbeatInterval() != null) builder.heartbeatInterval(j.heartbeatInterval());
         if (j.shutdownMaxWait() != null) builder.shutdownMaxWait(j.shutdownMaxWait());
-        return RegistryAssembler.jobRegistry(builder, jobs);
+        return builder.withJobs(jobs).build();
     }
 
     private static ShardMemberConfig findDefaultMember(ShardingConfig cfg) {

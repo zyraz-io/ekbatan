@@ -14,7 +14,6 @@ import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.core.shard.ShardedUUID;
-import io.ekbatan.events.localeventhandler.LocalEventHandlerPersister;
 import io.ekbatan.test.local_event_handler.audit.models.AuditEntry;
 import io.ekbatan.test.local_event_handler.note.action.NoteCreateAction;
 import io.ekbatan.test.local_event_handler.note.handler.NoteCreatedAuditEntryHandler;
@@ -74,7 +73,6 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
                         .withAction(WidgetCreateAction.class, new WidgetCreateAction(clock))
                         .withAction(NoteCreateAction.class, new NoteCreateAction(clock))
                         .build())
-                .eventPersister(new LocalEventHandlerPersister(databaseRegistry, objectMapper))
                 .build();
     }
 

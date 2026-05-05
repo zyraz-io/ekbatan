@@ -1,0 +1,62 @@
+# The outbox: atomic state + events
+
+The framework's central guarantee. Every action's commit is a single database transaction that touches as many domain tables as the action needs **plus** the `eventlog.events` outbox. They land together, or none of them do.
+
+```
+┌──────────────────  ONE DATABASE TRANSACTION  ──────────────────────┐
+│                                                                    │
+│  ┌────────────────┐  ┌────────────────┐  ┌────────────────────┐    │
+│  │    wallets     │  │     orders     │  │  eventlog.events   │    │
+│  │   (UPDATE)     │  │    (INSERT)    │  │     (INSERT)       │    │
+│  ├────────────────┤  ├────────────────┤  ├────────────────────┤    │
+│  │ id             │  │ id             │  │ id                 │    │
+│  │ balance        │  │ wallet_id      │  │ action_id          │    │
+│  │ version        │  │ amount         │  │ event_type         │    │
+│  │ ...            │  │ status: placed │  │ payload (JSONB)    │    │
+│  └────────────────┘  │ ...            │  │ ...                │    │
+│                      └────────────────┘  └────────────────────┘    │
+│         domain                domain               outbox          │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+       commit (all rows persist)  —or—  rollback (nothing persists)
+```
+
+This is the **outbox pattern** baked into the framework. There is no second write to a broker, no two-phase commit between database and Kafka, and no application-level retry loop trying to keep the two in sync. After commit, the rows in `eventlog.events` are the canonical record of what happened — downstream tooling (Debezium → Kafka) or in-process handlers consume them after the fact.
+
+## How rows get there
+
+The outbox write is owned by **`EventPersister`**. The default implementation, `SingleTableJsonEventPersister`, runs inside `ActionExecutor.persistChanges()` after the domain rows have been written and before the transaction commits.
+
+For each model in the action plan, `ChangePersister` extracts the `events` list, and `SingleTableJsonEventPersister` writes one row per event (or a single **sentinel row** if there are none — the action's existence is always recorded). All rows for a given action share the same `action_id`. The `namespace` value comes from the `ActionExecutor` builder:
+
+```java
+var executor = ActionExecutor.Builder.actionExecutor()
+        .namespace("com.example.finance")    // → eventlog.events.namespace on every row
+        .databaseRegistry(databaseRegistry)
+        .objectMapper(objectMapper)
+        .repositoryRegistry(repositoryRegistry)
+        .actionRegistry(actionRegistry)
+        .build();
+```
+
+The on-disk shape of the outbox — the SQL DDL, the dialect-specific column types, the `delivered` column written on every insert, the `event_notifications` table the local-event-handler path adds for in-process dispatch, the indexes — lives in **[Outbox schema](../database/outbox-schema.md)**.
+
+## Two consumer paths
+
+The outbox is **just a table**. Anything that can read it can consume it.
+
+- **In-process** — the [`ekbatan-events:local-event-handler`](../events/local-event-handler.md) module ships two `DistributedJob` workers (`EventFanoutJob` + `EventHandlingJob`) that drain the outbox and invoke typed `EventHandler` beans, with retry and expiry. No broker, no CDC. Ideal for small monoliths and internal-tool deployments.
+- **CDC → Kafka** — point Debezium at `eventlog.events`, optionally apply one of the `OutboxToAvro`/`OutboxToProtobuf` SMTs, and ship rows to per-event-type topics. See [Streaming via Debezium → Kafka](../events/event-streaming.md).
+
+Both can run against the same outbox simultaneously. The in-process fan-out flips the `delivered` flag from `false` to `true`, generating `UPDATE` rows on `eventlog.events`; the Kafka SMTs drop non-INSERT operations so those flips are invisible to downstream topics.
+
+## See also
+
+- [Actions, ActionPlan, ActionExecutor](actions.md) — what stages the events that end up in the outbox
+- [Models and Entities](models-and-entities.md) — only Models emit events
+- [Outbox schema](../database/outbox-schema.md) — the SQL tables, columns, indexes, dialect specifics
+- [Sharding](../database/sharding.md) — how the outbox interacts with shard routing (each shard gets its own copy of cross-shard events)
+- [Listen-to-yourself](../events/local-event-handler.md) — the in-process consumer path
+- [Streaming via Debezium → Kafka](../events/event-streaming.md) — the CDC consumer path

@@ -1,12 +1,12 @@
 package io.ekbatan.events.localeventhandler.repository;
 
+import io.ekbatan.core.action.persister.event.single_table_json.EventEntity;
 import io.ekbatan.core.persistence.jooq.converter.InstantConverter;
 import io.ekbatan.core.persistence.jooq.converter.JSONBObjectNodeConverter;
 import io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter;
 import io.ekbatan.core.persistence.jooq.converter.mysql.UuidStringConverter;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
-import io.ekbatan.events.localeventhandler.model.EventEntity;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -22,16 +22,14 @@ import org.jooq.impl.SQLDataType;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * JOOQ-style repository for {@code eventlog.events}, mirroring the layout of
- * {@code SingleTableJsonEventPersister}'s package-private {@code EventEntityRepository} in
- * {@code ekbatan-core}. Field definitions for {@code UUID} and JSON columns are dialect-
- * specific (selected at construction time); everything else is dialect-neutral.
+ * JOOQ-style repository for the in-process consumer's read path against
+ * {@code eventlog.events}. Returns {@link EventEntity} (defined in {@code ekbatan-core});
+ * writes go through {@code SingleTableJsonEventPersister} in core, not through this class.
  *
- * <p>Reads route through {@link #readonlyDb(ShardIdentifier)} (replica). Writes route
- * through {@link #txDbElseDb(ShardIdentifier)} which prefers the active transaction's
- * connection when one is open on the same shard, falling back to primary otherwise. The
- * helper shape mirrors {@code AbstractRepository}'s {@code db / readonlyDb / txDb /
- * txDbElseDb} families.
+ * <p>The two queries here ({@link #findUndelivered} and {@link #markDelivered}) are specific
+ * to the fan-out job and have no place in core. Same field-constant convention as core's
+ * repository: dialect-specific {@code UUID} and JSON column definitions chosen at
+ * construction time, dialect-neutral fields shared as constants.
  */
 public final class EventEntityRepository {
 
@@ -169,49 +167,6 @@ public final class EventEntityRepository {
     }
 
     /**
-     * Insert one row per event, writing {@code delivered} explicitly so the inserted row
-     * matches {@link EventEntity#delivered}. Newly-persisted events default to {@code false}
-     * via {@link EventEntity.Builder}. Empty input is a no-op. Single round-trip via
-     * multi-row INSERT.
-     */
-    public void addAllNoResult(Collection<EventEntity> entities, ShardIdentifier shard) {
-        if (entities.isEmpty()) return;
-        final var insert = txDbElseDb(shard)
-                .insertInto(
-                        EVENTS,
-                        idField,
-                        NAMESPACE,
-                        actionIdField,
-                        ACTION_NAME,
-                        actionParamsField,
-                        STARTED_DATE,
-                        COMPLETION_DATE,
-                        MODEL_ID,
-                        MODEL_TYPE,
-                        EVENT_TYPE,
-                        payloadField,
-                        EVENT_DATE,
-                        DELIVERED);
-        for (var e : entities) {
-            insert.values(
-                    e.id,
-                    e.namespace,
-                    e.actionId,
-                    e.actionName,
-                    e.actionParams,
-                    e.startedDate,
-                    e.completionDate,
-                    e.modelId,
-                    e.modelType,
-                    e.eventType,
-                    e.payload,
-                    e.eventDate,
-                    e.delivered);
-        }
-        insert.execute();
-    }
-
-    /**
      * Read up to {@code limit} undelivered, non-sentinel events ordered by {@code event_date}
      * ascending. Sentinel rows (zero-event actions, where {@code event_type} is NULL) are
      * filtered out — they have no handlers to fan out to.
@@ -250,8 +205,8 @@ public final class EventEntityRepository {
                                 r.get(MODEL_TYPE),
                                 r.get(EVENT_TYPE),
                                 r.get(payloadField),
-                                r.get(EVENT_DATE),
-                                r.get(DELIVERED))
+                                r.get(EVENT_DATE))
+                        .delivered(r.get(DELIVERED))
                         .build());
     }
 

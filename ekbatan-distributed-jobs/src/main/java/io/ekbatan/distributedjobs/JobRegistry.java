@@ -9,6 +9,7 @@ import com.github.kagkarlsson.scheduler.task.helper.Tasks;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -81,6 +82,12 @@ public final class JobRegistry {
 
         public Builder withJob(DistributedJob job) {
             this.jobs.add(job);
+            return this;
+        }
+
+        public Builder withJobs(Collection<? extends DistributedJob> jobs) {
+            Validate.notNull(jobs, "jobs cannot be null");
+            this.jobs.addAll(jobs);
             return this;
         }
 

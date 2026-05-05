@@ -27,9 +27,3 @@ CREATE TABLE eventlog.event_notifications (
 CREATE INDEX event_notifications_due
     ON eventlog.event_notifications (next_retry_at)
     WHERE state IN ('PENDING', 'FAILED');
-
--- Also flag undelivered events on eventlog.events. The fanout job uses this column.
-ALTER TABLE eventlog.events
-    ADD COLUMN delivered BOOLEAN NOT NULL DEFAULT FALSE;
-
-CREATE INDEX events_undelivered ON eventlog.events (event_date) WHERE delivered = FALSE;

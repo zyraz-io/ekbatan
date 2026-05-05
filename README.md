@@ -1,30 +1,57 @@
 # Ekbatan
 
-**A Java persistence framework with the outbox pattern built in — implicit and hassle-free.**
+**A Java persistence framework with the outbox pattern built in - easy to do and hassle-free.**
 
-The **outbox pattern** stores domain events alongside state in the same atomic database transaction — both writes land together, or neither does — making the database the single source of truth for both. Downstream tools like Debezium can later publish those events to Kafka, Pulsar, or any other broker, without the dual-write trap.
+The **outbox pattern** stores domain events alongside state in the same atomic database transaction - both writes land together, or neither does - making the database the single source of truth for both. Downstream tools like Debezium can later publish those events to Kafka, Pulsar, or any other broker, without the dual-write trap.
 
-Ekbatan is a Java library you embed in your application — Spring, Quarkus, Micronaut, or plain Java. It does **not** replace your full-stack framework; it replaces the persistence layer where Spring Data, Hibernate, JPA, or hand-rolled JDBC usually live.
+Ekbatan is a Java library you embed in your application - Spring, Quarkus, Micronaut, or plain Java. It does **not** replace your full-stack framework; it replaces the persistence layer where Spring Data, Hibernate, JPA, or hand-rolled JDBC usually live.
 
-Built for Java 25+, sitting directly on JOOQ, designed around virtual threads.
+Built for **Java 25+**, sitting directly on **JOOQ**, designed around **virtual threads**.
 
 ---
 
 ## The Big Picture
 
-In most business applications, two things matter equally — **what is true now**, and **what happened along the way**. Every change produces both: a new state, and an event that records it. For example:
+Every business change produces **two things at once** - a new state, and an event recording how it got there. They have to travel together:
 
-- Sara opens a wallet → state: balance is **\$0**, event: `WalletCreated`
-- Sara deposits \$250 → state: balance is **\$250**, event: `MoneyDeposited(\$250)`
-- Sara spends \$100 → state: balance is **\$150**, event: `MoneySpent(\$100)`
+```
+                       ┌──▶  STATE:   balance = $0
+  Sara opens wallet  ──┤
+                       └──▶  EVENT:   WalletCreated
 
-Persisting the state in a database while separately publishing the events to a broker like Kafka creates the **dual-write problem** — if the process fails between the two writes, the database and the broker disagree, and downstream consumers see an inconsistent view.
+                       ┌──▶  STATE:   balance = $250
+  Sara deposits $250 ──┤
+                       └──▶  EVENT:   MoneyDeposited($250)
 
-The established solution is the **outbox pattern** — write the events into a table in the same transaction as the state, and propagate them later to event streaming tools such as Kafka or Pulsar to power an event-driven architecture. The pattern is well-known and not specific to Ekbatan.
+                       ┌──▶  STATE:   balance = $150
+  Sara spends   $100 ──┤
+                       └──▶  EVENT:   MoneySpent($100)
+```
 
-Ekbatan makes the outbox pattern easy and implicit. The outbox table, the row schema, and the write path are part of the framework; applications simply attach events to their domain objects and never deal with the outbox plumbing directly.
+The **state** is what your application reads. The **events** are what downstream systems consume - audit logs, analytics, other services. Persisting them as **two separate writes** - state to the database, events to Kafka - is where things break:
 
-Visually, every action's commit looks like this — one transaction can touch as many domain tables as the action needs, plus the outbox:
+```
+  ✗  TWO WRITES - the dual-write problem        ✓  ONE WRITE + OUTBOX
+
+             app                                              app
+            ╱   ╲                                              │
+           ▼     ▼                                             ▼
+        ┌────┐ ┌───────┐                              ┌────────────────────┐
+        │ DB │ │ Kafka │                              │      DATABASE      │
+        └────┘ └───────┘                              │   state │  outbox  │
+        state    events                               └────────────────────┘
+                                                               │
+        crash between the two writes                           ▼  CDC tails the outbox
+          ⇒ DB and Kafka disagree                          ┌───────┐
+            ⇒ downstream consumers                         │ Kafka │
+              see an inconsistent view                     └───────┘
+                                                                ⇒ events shipped later,
+                                                                  always in sync with state
+```
+
+The **outbox pattern** - the right-hand side - is well known and not specific to Ekbatan. What Ekbatan adds is making it **easy to do**: the outbox table, the row schema, and the write path are part of the framework. Applications just attach events to their domain objects, and the framework persists state-and-events together.
+
+Visually, every action's commit looks like this - one transaction can touch as many domain tables as the action needs, plus the outbox:
 
 ```
 ┌──────────────────  ONE DATABASE TRANSACTION  ──────────────────────┐
@@ -44,10 +71,10 @@ Visually, every action's commit looks like this — one transaction can touch as
 └────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
-       commit (all rows persist)  —or—  rollback (nothing persists)
+       commit (all rows persist)  -or-  rollback (nothing persists)
 ```
 
-Placing an order, for example, might insert a new `orders` row, debit the `wallets` row, and insert one `eventlog.events` row per emitted event — all in the same atomic write. Whatever the action stages on its `ActionPlan`, the executor flushes together.
+Placing an order, for example, might insert a new `orders` row, debit the `wallets` row, and insert one `eventlog.events` row per emitted event - all in the same atomic write. Whatever the action stages on its `ActionPlan`, the executor flushes together.
 
 Around this core, the framework provides multi-database support, optional horizontal sharding, configurable retry policies, and built-in observability. Each capability is opt-in and adds no overhead when unused.
 
@@ -72,7 +99,7 @@ A domain object whose changes produce events. Mutations return a new immutable i
 ### Entity
 Persistable, version-tracked, and immutable, but produces no events. Use it for lookup tables, settings, or auxiliary records whose history is not consumed downstream.
 
-Supporting types — `ModelEvent`, `Repository`, `TransactionManager`, `DatabaseRegistry`, `ShardedUUID` — are introduced in the relevant sections below.
+Supporting types - `ModelEvent`, `Repository`, `TransactionManager`, `DatabaseRegistry`, `ShardedUUID` - are introduced in the relevant sections below.
 
 Putting these five together, every action follows the same two-phase lifecycle:
 
@@ -80,7 +107,7 @@ Putting these five together, every action follows the same two-phase lifecycle:
         executor.execute(WalletDepositAction.class, params)
                               │
                               ▼
-   ┌─── Phase 1 — Action.perform()  (no DB transaction yet) ────┐
+   ┌─── Phase 1 - Action.perform()  (no DB transaction yet) ────┐
    │                                                            │
    │   1. Read from repositories   (primary or readonly DB)     │
    │   2. Build new immutable Models / Entities                 │
@@ -94,7 +121,7 @@ Putting these five together, every action follows the same two-phase lifecycle:
    └────────────────────────────────────────────────────────────┘
                               │
                               ▼
-   ┌─── Phase 2 — Executor.persistChanges()  (one atomic TX) ───┐
+   ┌─── Phase 2 - Executor.persistChanges()  (one atomic TX) ───┐
    │                                                            │
    │   1. Group plan changes by ShardIdentifier                 │
    │   2. TransactionManager.inTransaction(shard, () -> {       │
@@ -111,13 +138,13 @@ Putting these five together, every action follows the same two-phase lifecycle:
                   result returned to the caller
 ```
 
-Phase 1 is pure construction — reads are allowed, but no writes happen. Phase 2 is the only place the framework opens a transaction, and it always wraps every staged change plus the matching event rows together. Anything that throws inside Phase 2 rolls the whole transaction back; on optimistic-lock conflicts (`StaleRecordException`) the executor re-runs the entire action from Phase 1 with a fresh plan.
+Phase 1 is pure construction - reads are allowed, but no writes happen. Phase 2 is the only place the framework opens a transaction, and it always wraps every staged change plus the matching event rows together. Anything that throws inside Phase 2 rolls the whole transaction back; on optimistic-lock conflicts (`StaleRecordException`) the executor re-runs the entire action from Phase 1 with a fresh plan.
 
 ---
 
-## Example: A Wallet
+## Learn by Example: A Wallet
 
-A wallet is a Model with an owner, a currency, and a balance:
+A wallet is a **Model** with an owner, a currency, and a balance:
 
 ```java
 @AutoBuilder
@@ -132,25 +159,24 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
         this.currency = Validate.notNull(builder.currency, "currency cannot be null");
         this.balance = Validate.notNull(builder.balance, "balance cannot be null");
     }
-    // deposit(), close(), copy()...
+
+    public Wallet deposit(BigDecimal amount) {
+        var newBalance = balance.add(amount);
+        return copy()
+                .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
+                .balance(newBalance)
+                .build();
+    }
+    // close(), copy()...
 }
 ```
 
-A deposit returns a new wallet with the corresponding event attached. No database call is made here:
+`deposit(...)` returns a new wallet with the corresponding event attached - no database call is made here.
+
+An **Action** wraps the operation so the executor can run it:
 
 ```java
-public Wallet deposit(BigDecimal amount) {
-    var newBalance = balance.add(amount);
-    return copy()
-            .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
-            .balance(newBalance)
-            .build();
-}
-```
-
-An Action wraps the operation so the executor can run it:
-
-```java
+@EkbatanAction
 public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
 
     public record Params(Id<Wallet> walletId, BigDecimal amount) {}
@@ -166,14 +192,14 @@ public class WalletDepositAction extends Action<WalletDepositAction.Params, Wall
     protected Wallet perform(Principal principal, Params params) {
         var wallet = walletRepository.getById(params.walletId().getValue());
         var updated = wallet.deposit(params.amount());
-        return plan.update(updated);
+        return plan().update(updated);
     }
 }
 ```
 
-No database write yet — only a registered change on the plan.
+No database write yet - only a registered change on the **plan**.
 
-The executor runs the action by class and parameters:
+The **Action Executor** runs the action by class and parameters:
 
 ```java
 Wallet result = executor.execute(
@@ -184,97 +210,17 @@ Wallet result = executor.execute(
 
 The executor opens a single transaction, writes the new wallet row, writes the `WalletMoneyDepositedEvent` row into the events table, and commits. If any step throws, both writes are rolled back together.
 
----
-
-## Going Deeper
-
-### Models vs Entities
-
-Both are immutable. Both are version-tracked. Both end up in tables with a `state` column that supports soft delete. The difference is whether mutations to them produce events.
-
-|                                                          | Model | Entity |
-|----------------------------------------------------------|:-----:|:------:|
-| `id`, `state`, `version`                                 |  yes  |  yes   |
-| `created_date` / `updated_date` managed by the framework |  yes  |   no   |
-| Mutations emit `ModelEvent`s                             |  yes  |   no   |
-
-Choose **Model** when a mutation should be recorded as an event — for downstream consumers, *listen-to-yourself* patterns within the same service, audit and compliance trails, or any other reason a discrete record of *what happened* is valuable. Choose **Entity** when the current state alone is sufficient and the history of individual mutations is not needed.
-
-Entity does not ship framework-managed `created_date` / `updated_date` columns, but a subclass is free to add its own timestamp columns (or any other columns) to the underlying table — the framework simply will not populate or track them automatically.
-
-### Optimistic Locking, Always
-
-Every persistable carries a `version`. Updates always include `WHERE version = ?`:
-
-```sql
-UPDATE wallets
-SET balance = ?, version = ?
-WHERE id = ? AND version = ?
-```
-
-If another transaction got there first, zero rows are affected and Ekbatan throws `StaleRecordException`. The transaction unwinds, and (by default) the executor retries the action once with a 100ms delay. You can tune the policy — or remove it — per executor:
+The `WalletRepository` injected into the action above maps the domain to JOOQ records. The base class gives you full CRUD; you add custom queries - `readonlyDb()` for replica reads, `db()` for primary reads:
 
 ```java
-ExecutionConfiguration.builder()
-        .withRetry(StaleRecordException.class, new RetryConfig(3, Duration.ofMillis(50)))
-        .build();
-```
-
-Ekbatan's own write path takes no pessimistic row locks — concurrent conflicts surface as `StaleRecordException` rather than blocked threads. When pessimistic locking is genuinely required, the [Pessimistic Locking with `KeyedLockProvider`](#pessimistic-locking-with-keyedlockprovider) section introduces a session-scoped, key-based mutex that fits the Action lifecycle. For lower-level needs, applications can also issue `SELECT ... FOR UPDATE` directly against the `DSLContext`, either standalone or inside a transactional scope via `transactionManager.inTransaction(...)`.
-
-### Soft Deletion
-
-By default, records are never physically removed. Their `state` flips to `DELETED` and queries automatically filter them out, keeping the history of every row intact for replay or audit. When a physical delete is genuinely required — for example to honor an erasure request or purge expired data — applications can issue the `DELETE` directly through the JOOQ repository.
-
-### Repositories
-
-Each persistable type has a repository that knows how to convert it to and from a JOOQ record. Repositories extend either `ModelRepository` (for Models) or `EntityRepository` (for Entities), both of which build on `AbstractRepository`. The base class provides the full CRUD surface:
-
-```java
-public abstract class AbstractRepository<PERSISTABLE, RECORD, TABLE, DB_ID> {
-
-    // Subclass contract
-    public abstract PERSISTABLE fromRecord(RECORD record);
-    public abstract RECORD toRecord(PERSISTABLE domainObject);
-
-    // Writes
-    public PERSISTABLE add(PERSISTABLE domainObject);
-    public List<PERSISTABLE> addAll(Collection<PERSISTABLE> domainObjects);
-    public PERSISTABLE update(PERSISTABLE domainObject);
-    public List<PERSISTABLE> updateAll(Collection<PERSISTABLE> domainObjects);
-
-    // Reads
-    public Optional<PERSISTABLE> findById(DB_ID id);
-    public PERSISTABLE getById(DB_ID id);                            // throws if missing
-    public List<PERSISTABLE> findAllByIds(Collection<DB_ID> ids);
-    public List<PERSISTABLE> findAll();
-    public Optional<PERSISTABLE> findOneWhere(Condition condition);
-    public List<PERSISTABLE> findAllWhere(Condition condition);
-
-    // Counts and existence
-    public long count();
-    public long countWhere(Condition condition);
-    public boolean existsById(DB_ID id);
-    public boolean existsWhere(Condition condition);
-
-    // Direct DSLContext access — for custom queries
-    protected DSLContext db();                // primary, default shard
-    protected DSLContext readonlyDb();        // secondary, default shard
-    protected Optional<DSLContext> txDb();    // current transaction context, if any
-    protected DSLContext txDbElseDb();        // transaction context, or fallback to db()
-}
-```
-
-A concrete repository implements only `fromRecord` and `toRecord`; the rest is inherited. Optimistic locking, soft-delete filtering, dialect handling, and shard routing are all applied automatically by the base class.
-
-```java
+@EkbatanRepository
 public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
 
     public WalletRepository(DatabaseRegistry databaseRegistry) {
         super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry);
     }
 
-    // Custom query — example of how a domain-specific query method is added.
+    // Replica read - list / search queries that tolerate replication lag
     public List<Wallet> findAllByOwnerId(UUID ownerId) {
         return readonlyDb()
                 .selectFrom(WALLETS)
@@ -282,705 +228,36 @@ public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wal
                 .fetch(this::fromRecord);
     }
 
-    @Override
-    public Wallet fromRecord(WalletsRecord record) {
-        return wallet().id(Id.of(Wallet.class, record.getId()))
-                .version(record.getVersion())
-                .state(WalletState.valueOf(record.getState()))
-                .ownerId(record.getOwnerId())
-                .currency(Currency.getInstance(record.getCurrency()))
-                .balance(record.getBalance())
-                .createdDate(record.getCreatedDate())
-                .updatedDate(record.getUpdatedDate())
-                .build();
+    // Primary read - strongly-consistent reads (e.g. immediately after a write)
+    public Optional<Wallet> findByIdOnPrimary(UUID walletId) {
+        return db()
+                .selectFrom(WALLETS)
+                .where(WALLETS.ID.eq(walletId))
+                .fetchOptional(this::fromRecord);
     }
 
     @Override
-    public WalletsRecord toRecord(Wallet model) {
-        return new WalletsRecord(
-                model.id.getValue(),
-                model.version,
-                model.state.name(),
-                model.ownerId,
-                model.currency.getCurrencyCode(),
-                model.balance,
-                model.createdDate,
-                model.updatedDate);
-    }
-}
-```
-
-Subclasses are free to add domain-specific query methods. The `findAllByOwnerId` example above uses `readonlyDb()` to construct a JOOQ query directly — note that when bypassing the inherited helpers, soft-delete filtering becomes the subclass's responsibility. For simpler predicate-based queries, the inherited helpers (`findAllWhere`, `findOneWhere`, `existsWhere`, `countWhere`) preserve soft-delete filtering and shard routing automatically. Either path stays within the same shard- and transaction-aware context as the rest of the framework.
-
-### Writing Custom Queries
-
-When the inherited CRUD methods aren't enough, a repository drops down to JOOQ. To pull a `DSLContext` for the right shard, use one of the four helper families on `AbstractRepository`. Each family has overloads for *no argument* (default shard), *id*, *persistable*, *shard identifier* — and `db()` / `readonlyDb()` also expose `dbs()` / `readonlyDbs()` for scatter-gather across all shards.
-
-```java
-// --- db() — primary writes / strongly-consistent reads ---
-protected DSLContext db();                          // default shard
-protected DSLContext db(DB_ID id);                  // shard derived from id
-protected DSLContext db(PERSISTABLE p);             // shard derived from entity
-protected DSLContext db(ShardIdentifier shard);     // explicit shard
-protected Collection<DSLContext> dbs();             // every shard (scatter-gather)
-
-// --- readonlyDb() — replica reads, less load on primary ---
-protected DSLContext readonlyDb();
-protected DSLContext readonlyDb(DB_ID id);
-protected DSLContext readonlyDb(ShardIdentifier shard);
-protected Collection<DSLContext> readonlyDbs();
-
-// --- txDb() — the active transaction's connection, if one is open ---
-protected Optional<DSLContext> txDb();
-protected Optional<DSLContext> txDb(DB_ID id);
-protected Optional<DSLContext> txDb(PERSISTABLE p);
-protected Optional<DSLContext> txDb(ShardIdentifier shard);
-
-// --- txDbElseDb() — transaction connection if open, primary otherwise ---
-protected DSLContext txDbElseDb();
-protected DSLContext txDbElseDb(DB_ID id);
-protected DSLContext txDbElseDb(PERSISTABLE p);
-protected DSLContext txDbElseDb(ShardIdentifier shard);
-```
-
-**Picking the right one:**
-
-| You want to… | Use |
-|---|---|
-| Read rows, doesn't have to see writes from the *current* transaction | `readonlyDb(...)` — pulls from the replica |
-| Read rows that *must* reflect uncommitted writes from the current action | `txDbElseDb(...)` — reuses the action's transaction connection if one is open |
-| Insert / update / delete | `txDbElseDb(...)` — atomically joins the action's transaction when called from within `Action.perform()` or any `tm.inTransaction(...)` block; falls back to primary outside of one |
-| Scatter-gather a query across every shard | `readonlyDbs()` (or `dbs()` for primary), then `.flatMap` over the resulting `Collection<DSLContext>` |
-| Assert "we must already be in a transaction" and fail loudly otherwise | `txDb(...).orElseThrow(...)` |
-
-**Examples:**
-
-A list query that doesn't need read-after-write consistency — pulls from the replica:
-```java
-public List<Wallet> findAllByOwnerId(UUID ownerId) {
-    return readonlyDb()
-            .selectFrom(WALLETS)
-            .where(WALLETS.OWNER_ID.eq(ownerId))
-            .fetch(this::fromRecord);
-}
-```
-
-A custom batch update — uses `txDbElseDb` so it joins the action's transaction when called from within one, and goes to primary otherwise:
-```java
-public void markAllSettled(Collection<UUID> walletIds) {
-    if (walletIds.isEmpty()) return;
-    txDbElseDb()
-            .update(WALLETS)
-            .set(WALLETS.STATE, "SETTLED")
-            .where(WALLETS.ID.in(walletIds))
-            .execute();
-}
-```
-
-A scatter-gather across every shard — useful for admin counts:
-```java
-public long totalActiveWallets() {
-    return readonlyDbs().stream()
-            .mapToLong(db -> db.selectCount()
-                    .from(WALLETS)
-                    .where(WALLETS.STATE.eq("ACTIVE"))
-                    .fetchOne(0, long.class))
-            .sum();
-}
-```
-
-An idempotent INSERT — when the same logical row could be inserted twice (e.g. a worker re-reading from a lagging replica), prefer letting the database handle the conflict over catching the exception in code:
-```java
-txDbElseDb(shard)
-        .insertInto(NOTIFICATIONS, NOTIF_ID, EVENT_ID, HANDLER_NAME, /* ... */)
-        .values(/* ... */)
-        .onConflictDoNothing()         // PG: ON CONFLICT DO NOTHING ; MySQL/MariaDB: INSERT IGNORE
-        .execute();
-```
-
-### `@AutoBuilder`
-
-Domain classes use the builder pattern. To avoid writing builders by hand, annotate the class:
-
-```java
-@AutoBuilder
-public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> { ... }
-```
-
-A `WalletBuilder` is generated at compile time with fluent setters, getters, a `wallet()` static factory, and a `build()` method. `@AutoBuilder` is opt-in; if a domain class needs custom builder logic, write the builder by hand instead.
-
-### What the Event Log Looks Like
-
-Every event Ekbatan writes lands in a single denormalized table:
-
-```
-eventlog.events
-─────────────────────────────────
-id              UUID
-namespace       text
-action_id       UUID
-action_name     text
-action_params   JSONB
-started_date    timestamp
-completion_date timestamp
-model_id        UUID
-model_type      text
-event_type      text
-payload         JSONB
-event_date      timestamp
-```
-
-One row per event. Each row carries everything a downstream consumer needs — the action that caused it, when it ran, the params it received, and the event payload itself. Actions that produce zero events still get a sentinel row (no `event_type`), so the action's existence is always recorded.
-
-Because every row already includes its action context, downstream consumers don't need to join back to anything. They tail the table and ship rows.
-
-### Putting It Together
-
-A minimal wiring of the executor looks like this:
-
-```java
-// Two datasource configs — primary handles writes and transactional reads,
-// secondary handles non-transactional reads (typically a read replica).
-var primaryConfig = dataSourceConfig()
-        .jdbcUrl(primaryJdbcUrl).username(user).password(pass)
-        .maximumPoolSize(10)
-        .build();
-
-var readonlyConfig = dataSourceConfig()
-        .jdbcUrl(readReplicaJdbcUrl).username(user).password(pass)
-        .maximumPoolSize(10)
-        .build();
-
-var tm = new TransactionManager(
-        hikariConnectionProvider(primaryConfig),     // writes + transactional reads
-        hikariConnectionProvider(readonlyConfig),    // non-transactional reads (read replica)
-        SQLDialect.POSTGRES);
-
-var databaseRegistry = databaseRegistry().withDatabase(tm).build();
-var walletRepo = new WalletRepository(databaseRegistry);
-
-var executor = actionExecutor()
-        .namespace("billing")
-        .databaseRegistry(databaseRegistry)
-        .objectMapper(new ObjectMapper())
-        .repositoryRegistry(repositoryRegistry()
-                .withModelRepository(Wallet.class, walletRepo)
-                .build())
-        .actionRegistry(actionRegistry()
-                .withAction(WalletCreateAction.class, () -> new WalletCreateAction(clock))
-                .withAction(WalletDepositAction.class, () -> new WalletDepositAction(clock, walletRepo))
-                .build())
-        .build();
-```
-
-The two `hikariConnectionProvider` arguments are the **primary** (writes plus any reads inside an active transaction) and the **secondary** (non-transactional reads). Pointing the secondary at a read replica lets `findAll`, `findAllWhere`, `count`, and other non-transactional reads scale independently from the write path. If the deployment has no read replica yet, point both arguments at the same datasource — the framework treats them identically in that case.
-
-In a Spring or Quarkus application, the executor is built once and registered as a bean. Controllers and services then call `executor.execute(...)` like any other dependency.
-
----
-
-## Sharding
-
-Sharding is opt-in and has no overhead when disabled. Single-database deployments can skip this section.
-
-### Addressing
-
-Ekbatan uses a two-level addressing scheme:
-
-- **Group** — a business or regulatory boundary (for example, *"Mexico data stays in Mexico"*). 8 bits, up to 256 groups.
-- **Member** — a performance boundary within a group. 6 bits, up to 64 members per group.
-
-A `ShardIdentifier(group, member)` is a numeric address. Each shard is a regular `TransactionManager`, constructed with its own primary and secondary datasources, and registered in the `DatabaseRegistry`:
-
-```java
-private static final ShardIdentifier GLOBAL_SHARD = ShardIdentifier.of(0, 0);
-private static final ShardIdentifier MEXICO_SHARD = ShardIdentifier.of(1, 0);
-
-// Each shard gets its own primary (writes) and readonly (read replica) datasource.
-var globalPrimary  = dataSourceConfig().jdbcUrl(globalPrimaryUrl).username(u).password(p).maximumPoolSize(10).build();
-var globalReadonly = dataSourceConfig().jdbcUrl(globalReadReplicaUrl).username(u).password(p).maximumPoolSize(10).build();
-var mexicoPrimary  = dataSourceConfig().jdbcUrl(mexicoPrimaryUrl).username(u).password(p).maximumPoolSize(10).build();
-var mexicoReadonly = dataSourceConfig().jdbcUrl(mexicoReadReplicaUrl).username(u).password(p).maximumPoolSize(10).build();
-
-var globalTm = new TransactionManager(
-        hikariConnectionProvider(globalPrimary),     // writes + transactional reads
-        hikariConnectionProvider(globalReadonly),    // non-transactional reads (read replica)
-        SQLDialect.POSTGRES,
-        GLOBAL_SHARD);
-
-var mexicoTm = new TransactionManager(
-        hikariConnectionProvider(mexicoPrimary),
-        hikariConnectionProvider(mexicoReadonly),
-        SQLDialect.POSTGRES,
-        MEXICO_SHARD);
-
-var databaseRegistry = databaseRegistry()
-        .withDefaultDatabase(globalTm)   // fallback for shards not explicitly registered
-        .withDatabase(mexicoTm)
-        .build();
-```
-
-Each shard owns its own pair of datasources. The default shard receives traffic for any logical shard that is not explicitly registered — for example, a wallet routed to an Australia shard that has not yet been deployed will fall through to the default. As before, if a shard has no read replica, point both providers at the same datasource.
-
-### Group vs Member: The Two Axes
-
-The two levels in a `ShardIdentifier` exist for different reasons:
-
-- **Group is the *policy axis*** — boundaries forced on you from the outside. Regulatory data residency (*"Mexico data stays in Mexico"*), tenant isolation contracts, business-domain separation, compliance scoping. Group cardinality is driven by external constraints; you don't choose how many.
-- **Member is the *performance axis*** — horizontal scaling within a single policy boundary. You add members when one database can't handle the write throughput. Member cardinality is driven by capacity planning.
-
-If you follow the design's intent — group for policy, member for performance — the natural shape is **members of a group sharing network locality and failure domain** (same region, same data center, same VPC). Cross-member queries within a group are scatter-gather across every member, so intra-group latency directly affects their performance. Naming conventions like `global-eu-1`, `global-eu-2`, `global-eu-3` reflect this — members of the EU group all live in EU infrastructure.
-
-That said, **these are conventions, not enforced rules.** The framework can't tell network topology from JDBC URLs, and plenty of applications legitimately need other patterns — multi-region active-active members for read locality, a tenant tier that doesn't map onto geography, a non-geographic policy axis entirely, or a single global lock service that spans every group. Use the axes however fits your application; the framework doesn't object.
-
-### Declarative Configuration
-
-Rather than wiring `TransactionManager`s by hand, you can describe the entire shard topology as a `ShardingConfig` and hand it to `DatabaseRegistry.fromConfig(config)`. The same structure maps directly to YAML, which makes it easy to load topology from a configuration file:
-
-```yaml
-sharding:
-  defaultShard:
-    group: 0
-    member: 0
-
-  groups:
-    - group: 0
-      name: global
-      members:
-        - member: 0
-          name: global-eu-1
-          configs:
-            primaryConfig:                # required
-              jdbcUrl: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
-              username: wallets_app
-              password: ${EU_1_PASSWORD}
-              maximumPoolSize: 20
-              leakDetectionThreshold: 30000
-            secondaryConfig:              # optional, but encouraged
-              jdbcUrl: jdbc:postgresql://global-eu-1-ro.example.com:5432/wallets
-              username: wallets_app_ro
-              password: ${EU_1_RO_PASSWORD}
-              maximumPoolSize: 20
-            lockConfig:                   # user-defined; consumed by your own code
-              jdbcUrl: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
-              username: wallets_lock
-              password: ${EU_1_LOCK_PASSWORD}
-              maximumPoolSize: 50
-              leakDetectionThreshold: 0   # locks may sit idle while held; disable
-
-        - member: 1
-          name: global-eu-2
-          configs:
-            primaryConfig:
-              jdbcUrl: jdbc:postgresql://global-eu-2-rw.example.com:5432/wallets
-              username: wallets_app
-              password: ${EU_2_PASSWORD}
-              maximumPoolSize: 20
-            secondaryConfig:
-              jdbcUrl: jdbc:postgresql://global-eu-2-ro.example.com:5432/wallets
-              username: wallets_app_ro
-              password: ${EU_2_RO_PASSWORD}
-              maximumPoolSize: 20
-
-        - member: 2
-          name: global-eu-3
-          configs:
-            primaryConfig:                # only primary — reads will use it as fallback for the secondary
-              jdbcUrl: jdbc:postgresql://global-eu-3.example.com:5432/wallets
-              username: wallets_app
-              password: ${EU_3_PASSWORD}
-              maximumPoolSize: 20
-
-    - group: 1
-      name: mexico
-      members:
-        - member: 0
-          name: mexico-cdmx-1
-          configs:
-            primaryConfig:
-              jdbcUrl: jdbc:postgresql://mexico-cdmx-1-rw.example.com:5432/wallets
-              username: wallets_app
-              password: ${MX_1_PASSWORD}
-              maximumPoolSize: 20
-            secondaryConfig:
-              jdbcUrl: jdbc:postgresql://mexico-cdmx-1-ro.example.com:5432/wallets
-              username: wallets_app_ro
-              password: ${MX_1_RO_PASSWORD}
-              maximumPoolSize: 20
-
-        - member: 1
-          name: mexico-cdmx-2
-          configs:
-            primaryConfig:
-              jdbcUrl: jdbc:postgresql://mexico-cdmx-2-rw.example.com:5432/wallets
-              username: wallets_app
-              password: ${MX_2_PASSWORD}
-              maximumPoolSize: 20
-            secondaryConfig:
-              jdbcUrl: jdbc:postgresql://mexico-cdmx-2-ro.example.com:5432/wallets
-              username: wallets_app_ro
-              password: ${MX_2_RO_PASSWORD}
-              maximumPoolSize: 20
-            analyticsConfig:              # user-defined; e.g. for reporting on a slow replica
-              jdbcUrl: jdbc:postgresql://mexico-analytics.example.com:5432/wallets
-              username: wallets_analytics
-              password: ${MX_ANALYTICS_PASSWORD}
-              maximumPoolSize: 5
-```
-
-**On the `configs:` map of each member:**
-
-- **`primaryConfig` is required.** Every member must have one. The framework validates this at startup and refuses to build a `ShardMemberConfig` without it.
-- **`secondaryConfig` is optional but encouraged.** Pointing it at a read replica lets `findAll`, `findAllWhere`, `count`, and other non-transactional reads scale independently from the write path. If absent, the framework transparently falls back to `primaryConfig` for those reads — the application code doesn't change.
-- **Any other named entry is user-defined.** `lockConfig`, `analyticsConfig`, `auditConfig`, anything else: the framework doesn't consume them. Your application code reaches for them via `member.configFor("lockConfig")`, typically to wire its own components — for example, supplying a `ConnectionProvider` to `PostgresKeyedLockProvider`, or pointing a reporting tool at a slow replica.
-
-This keeps every database connection that *belongs to a member* in one place. A reader of the config sees the full database surface for `mexico-cdmx-2` at a glance; nothing is scattered across separate config trees.
-
-Accessing the configs from Java mirrors the YAML structure exactly:
-
-```java
-ShardMemberConfig member = ...;
-DataSourceConfig primary = member.primaryConfig();                          // required, non-null
-Optional<DataSourceConfig> secondary = member.secondaryConfig();            // empty if absent
-Optional<DataSourceConfig> lock = member.configFor("lockConfig");           // user-defined
-```
-
-### Sharded Models
-
-A Model that participates in sharding declares its ID type as `ShardedId<T>` instead of `Id<T>`:
-
-```java
-@AutoBuilder
-public final class Wallet extends Model<Wallet, ShardedId<Wallet>, WalletState> {
-    public final UUID ownerId;
-    public final Currency currency;
-    public final BigDecimal balance;
-    // constructor, deposit(), copy()...
-
-    public static WalletBuilder createWallet(
-            ShardIdentifier shard, UUID ownerId, Currency currency, BigDecimal balance, Instant createdDate) {
-        final var id = ShardedId.generate(Wallet.class, shard);   // shard bits encoded into the UUID
-        return WalletBuilder.wallet()
-                .id(id)
-                .state(OPENED)
-                .ownerId(ownerId)
-                .currency(currency)
-                .balance(balance)
-                .createdDate(createdDate)
-                .withInitialVersion()
-                .withEvent(new WalletCreatedEvent(id, ownerId, currency, balance));
-    }
-}
-```
-
-`ShardedId` wraps a UUID v7 with the shard's group/member bits embedded inside `rand_b`. The shard can be recovered from the ID at any time without a lookup table:
-
-```java
-ShardedId<Wallet> id = ShardedId.generate(Wallet.class, MEXICO_SHARD);
-ShardIdentifier shard = id.resolveShardIdentifier();   // group=1, member=0
-```
-
-The full routing flow, end to end:
-
-```
-ShardedUUID
-┌──────────────────────────────────────────────────────────────┐
-│ MSB: [48-bit timestamp][4-bit version=7][12-bit rand_a]      │
-│ LSB: [2-bit variant][8-bit GROUP][6-bit MEMBER][48-bit rand] │
-└──────────────────────────────────────────────────────────────┘
-                              │
-                              │  resolveShardIdentifier()
-                              ▼
-                ShardIdentifier(group=1, member=0)
-                              │
-                              │  DatabaseRegistry lookup
-                              ▼
-              ┌──────────────────────────────┐
-              │ TransactionManager(mexico_db)│
-              └──────────────────────────────┘
-                              │
-                              ▼
-              DSLContext — ready to query
-              (no lookup table, no routing service)
-```
-
-### Sharded Repositories
-
-A repository opts into sharding by passing a `ShardingStrategy` to `super(...)`. The bundled `EmbeddedBitsShardingStrategy` decodes the shard from the UUID's embedded bits:
-
-```java
-public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
-
-    public WalletRepository(DatabaseRegistry databaseRegistry) {
-        super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry, new EmbeddedBitsShardingStrategy());
-    }
+    public Wallet fromRecord(WalletsRecord r) { /* … */ }
 
     @Override
-    public Wallet fromRecord(WalletsRecord record) {
-        return wallet()
-                .id(ShardedId.of(Wallet.class, ShardedUUID.from(record.getId())))
-                // ... remaining fields ...
-                .build();
-    }
-
-    // toRecord(...) unchanged
+    public WalletsRecord toRecord(Wallet w) { /* … */ }
 }
 ```
 
-With the strategy in place, all CRUD methods route automatically:
+A **Distributed Job** is periodic background work that should run on **at most one** instance across the cluster - daily reports, hourly cleanups, periodic reconciliations:
 
 ```java
-walletRepository.findById(walletId);      // routes to the wallet's shard (decoded from the ID)
-walletRepository.update(updatedWallet);   // routes to the wallet's shard
-walletRepository.findAllByIds(ids);       // groups IDs by shard, queries each shard once
-walletRepository.findAll();               // scatter-gathers across all shards
-```
-
-Custom queries that drop into raw JOOQ can target a specific shard using the ID-aware accessors:
-
-```java
-public List<Wallet> findAllByOwnerOnSameShardAs(ShardedId<Wallet> walletId, UUID ownerId) {
-    return readonlyDb(walletId.getValue())            // routes to the wallet's shard
-            .selectFrom(WALLETS)
-            .where(WALLETS.OWNER_ID.eq(ownerId))
-            .fetch(this::fromRecord);
-}
-```
-
-The same accessors come in `db(id)`, `txDb(id)`, and `txDbElseDb(id)` flavors, plus `db(persistable)` / `txDb(persistable)` overloads when the full domain object is on hand instead of the raw ID. To run a query against *every* shard, `dbs()` and `readonlyDbs()` return the full collection of `DSLContext`s.
-
-### Custom Sharding Strategies
-
-`EmbeddedBitsShardingStrategy` is the default strategy bundled with the framework, and most applications can use it as-is. IDs self-describe their shard, no lookup is needed, and routing requires no extra state — for the common case, this is the right pick.
-
-A custom `ShardingStrategy` is only needed when the bundled default does not match the domain model. For example:
-
-- **Column-based** — the shard is derived from a non-ID column on the entity (country code, tenant ID, region).
-- **Hash-based** — hash one or more columns and modulo by the member count.
-- **Range-based** — partition by ID ranges (e.g., wallets `0..1M` on shard A, `1M..2M` on shard B).
-- **Lookup-table** — read the shard mapping from a separate table or external config service.
-
-The interface has three methods:
-
-```java
-public interface ShardingStrategy<DB_ID> {
-    boolean usesShardAwareId();
-    Optional<ShardIdentifier> resolveShardIdentifierById(DB_ID id);
-    Optional<ShardIdentifier> resolveShardIdentifier(Persistable<?> persistable);
-}
-```
-
-A column-based example that routes by a country code on the entity:
-
-```java
-public final class CountryCodeShardingStrategy implements ShardingStrategy<UUID> {
-
-    @Override
-    public boolean usesShardAwareId() {
-        return false;   // raw UUIDs do not encode the shard
-    }
-
-    @Override
-    public Optional<ShardIdentifier> resolveShardIdentifierById(UUID id) {
-        return Optional.empty();   // the ID alone is not enough
-    }
-
-    @Override
-    public Optional<ShardIdentifier> resolveShardIdentifier(Persistable<?> p) {
-        if (p instanceof CountryAware ca) {
-            return Optional.of(switch (ca.countryCode()) {
-                case "MX" -> ShardIdentifier.of(1, 0);
-                case "AU" -> ShardIdentifier.of(2, 0);
-                default   -> ShardIdentifier.of(0, 0);
-            });
-        }
-        return Optional.empty();
-    }
-}
-```
-
-Wire it into the repository the same way as the bundled strategy — just pass it to `super(...)`:
-
-```java
-public WalletRepository(DatabaseRegistry databaseRegistry) {
-    super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry, new CountryCodeShardingStrategy());
-}
-```
-
-When `usesShardAwareId()` returns `false`, ID-only methods like `findById(id)` are rejected — without inspecting the entity, the framework cannot know which shard to query. In that case, use condition-based reads (`findAllWhere`, `findOneWhere`) which scatter-gather across all shards, or work from the persistable directly via `db(persistable)` / `txDb(persistable)` in custom queries.
-
-### Picking the Shard When Creating
-
-Sharded Models need a shard chosen *at creation time* — typically in the Action that creates them, derived from the business input:
-
-```java
-public class WalletCreateAction extends Action<WalletCreateAction.Params, Wallet> {
-
-    public record Params(String countryCode) {}
-
-    @Override
-    protected Wallet perform(Principal principal, Params params) {
-        var shardIdentifier = switch (params.countryCode()) {
-            case "MX" -> MEXICO_SHARD;
-            case "AU" -> AUSTRALIA_SHARD;
-            default   -> GLOBAL_SHARD;
-        };
-        var wallet = createWallet(shardIdentifier, ownerId, EUR, BigDecimal.TEN, clock.instant()).build();
-        return plan.add(wallet);
-    }
-}
-```
-
-After this point, the shard travels with the wallet's ID — every subsequent read or update finds its way back to the correct database without any explicit shard parameter.
-
-### Cross-Shard Actions
-
-Cross-shard actions are rejected by default. If an action plans changes that span shards, the executor throws `CrossShardException`. Applications can opt in when needed:
-
-```java
-var config = executionConfiguration()
-        .allowCrossShard(true)
-        .build();
-```
-
-When enabled, each involved shard gets its own transaction, and the action-event row is duplicated to each one with the same UUID so every shard contains the full action context.
-
-### Sharding Does Not Provide
-
-- Cross-shard foreign keys.
-- Offset/limit pagination, which cannot return correct results across shards. Concrete repositories should use cursor-based pagination instead.
-- Distributed transactions; each shard commits independently.
-
----
-
-## Pessimistic Locking with `KeyedLockProvider`
-
-Some operations don't fit optimistic locking — **at-most-once idempotency** around external side effects (a webhook handler that calls a payment API), or **single-flight execution** across nodes (a daily reconciliation job). Others (a wallet deposit) can be done either way, but pessimistic locking avoids the retry thrash optimistic locking causes on hot accounts. For all of these, Ekbatan ships `KeyedLockProvider`. You call `provider.tryAcquire(key, maxWait, maxHold)` to get an `Optional<Lease>` — empty if you couldn't acquire within `maxWait`, populated otherwise; closing the lease releases the lock. The key is a `String` — namespace per type when locking on entity IDs (e.g. `"wallet:" + walletId`) so two unrelated ID spaces never collide. Two acquirers using the same key are mutually exclusive (the second waits up to `maxWait` for the first to release); acquirers using different keys don't block each other.
-
-Five implementations: `InProcessKeyedLockProvider` (single JVM, semaphore-backed); `PostgresKeyedLockProvider` / `MariaDBKeyedLockProvider` / `MySQLKeyedLockProvider` (cross-JVM, session-scoped at the database — auto-released if the holder crashes); and `RedisKeyedLockProvider` (cross-JVM, Redisson-backed, sub-millisecond hand-off — opt in via the `ekbatan-keyed-lock-redis` module).
-
-**Reentrancy.** All five providers are reentrant per `(thread, key)` — the same thread can re-acquire a key it already holds without blocking. The underlying lock is released only when the *outermost* lease is closed (or the `maxHold` watchdog fires). The first acquire's `maxHold` governs the watchdog; inner re-entries' `maxHold` arguments are ignored, so an inner timer can never shorten the outer holder's commitment. This is stricter than Redisson/Hazelcast's last-call-wins convention. Reentrancy is per-thread, not per-call-stack — a child thread spawned inside a held region is a different identity and will block.
-
-A wallet deposit, serialized per-wallet by acquiring the lease before reading and persisting:
-
-```java
-public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
-
-    private final WalletRepository walletRepo;
-    private final KeyedLockProvider lockProvider;
-
-    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
-
-    public WalletDepositAction(Clock clock, WalletRepository walletRepo, KeyedLockProvider lockProvider) {
-        super(clock);
-        this.walletRepo = walletRepo;
-        this.lockProvider = lockProvider;
-    }
-
-    @Override
-    protected Wallet perform(Principal principal, Params params) throws InterruptedException {
-        try (var lockLease = lockProvider.tryAcquire("wallet:" + params.walletId, Duration.ofSeconds(2), Duration.ofSeconds(10))
-                .orElseThrow(() -> new IllegalStateException(
-                        "Wallet " + params.walletId + " is busy; try again later"))) {
-            var wallet = walletRepo.getById(params.walletId.getValue());
-            return plan.update(wallet.copy()
-                    .balance(wallet.balance.add(params.amount))
-                    .build());
-        }
-    }
-}
-```
-
-The same deposit can be implemented with optimistic locking alone — but each concurrent conflict on the same wallet would surface as a `StaleRecordException` that triggers a retry. With pessimistic locking, callers wait briefly for the lease and then succeed on their first attempt; the retry loop disappears, trading retry-driven tail latency for a small, predictable wait. On hot wallets that's usually the better trade.
-
-Three things worth noting:
-
-- **`maxWait` (2s above) bounds how long the caller will block** before giving up and surfacing a domain error. Without it (e.g., the no-wait `acquire(key, maxHold)` variant), a caller would queue indefinitely behind any prior holders — bounded eventually by their `maxHold`, but with worst-case latency proportional to the queue depth.
-- **`maxHold` (10s above) is a safety net, not a hint.** If the action overruns, the lock auto-releases — capping the blast radius of a hung holder regardless of what the calling thread is doing.
-- **Each acquire borrows its own JDBC connection** for the lifetime of the lease (and for the wait, if any). For lock-heavy workloads, point the provider at a dedicated pool via `member.configFor("lockConfig")` so locks don't starve normal queries.
-
-A typical `ShardingConfig` member with a dedicated lock pool:
-
-```yaml
-sharding:
-  defaultShard: { group: 0, member: 0 }
-  groups:
-    - group: 0
-      name: global
-      members:
-        - member: 0
-          name: global-eu-1
-          configs:
-            primaryConfig:
-              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db
-              username: app
-              password: secret
-              maximumPoolSize: 20
-              minimumIdle: 5
-
-            secondaryConfig:
-              jdbcUrl: jdbc:postgresql://replica-eu-1:5432/db
-              username: app
-              password: secret
-              maximumPoolSize: 10
-
-            # Dedicated pool for KeyedLockProvider — keeps lock acquisitions
-            # from competing for connections with normal queries.
-            lockConfig:
-              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db   # same DB; locks must coordinate on the same instance
-              username: app
-              password: secret
-              maximumPoolSize: 40         # per-instance — sized for the concurrent leases this instance will hold
-              minimumIdle: 5
-              leakDetectionThreshold: 120000   # set comfortably above your largest expected maxHold; catches real leaks without warning on legitimate long-held leases
-```
-
-Wiring up a `PostgresKeyedLockProvider` from the parsed `ShardingConfig`:
-
-```java
-import static io.ekbatan.core.concurrent.PostgresKeyedLockProvider.Builder.postgresKeyedLockProvider;
-import static io.ekbatan.core.persistence.ConnectionProvider.hikariConnectionProvider;
-
-// Pull the lockConfig entry from whichever member you want to coordinate on
-var lockDataSourceConfig = shardingConfig.groups.get(0).members.get(0)
-        .configFor("lockConfig")
-        .orElseThrow();
-
-var lockProvider = postgresKeyedLockProvider()
-        .connectionProvider(hikariConnectionProvider(lockDataSourceConfig))
-        .build();
-```
-
-The same pattern works for `MariaDBKeyedLockProvider`, `MySQLKeyedLockProvider`, and `RedisKeyedLockProvider` (the Redis variant lives in `ekbatan-keyed-lock-redis` and takes a `RedissonClient` instead of a `ConnectionProvider`).
-
-> **Caveat: not the right primitive at very high concurrency.** `KeyedLockProvider` fits coarse-grained coordination (single-flight cron jobs, admin actions, per-shard locks) and low-to-medium contention on the write path. At higher concurrency, every held lease - and every thread blocked waiting for one - pins a JDBC connection for its entire lifetime, which can quickly demand more connections than your database is sized for.
-
----
-
-## Distributed Background Jobs
-
-For periodic background work that should run on **at most one** instance across a cluster — daily reports, hourly cleanups, periodic reconciliation — Ekbatan ships `JobRegistry` in the `ekbatan-distributed-jobs` module. It's a thin, opinionated facade over [db-scheduler](https://github.com/kagkarlsson/db-scheduler) that handles the tricky parts (atomic claim across instances, heartbeat-based crash recovery, graceful shutdown, per-task virtual-thread workers) while keeping the user-facing API tiny.
-
-Define a job by extending `DistributedJob`:
-
-```java
-public class DailyReportJob extends DistributedJob {
+@EkbatanDistributedJob
+public class DailyWalletReportJob extends DistributedJob {
 
     private final ReportService reportService;
 
-    public DailyReportJob(ReportService reportService) {
+    public DailyWalletReportJob(ReportService reportService) {
         this.reportService = reportService;
     }
 
-    @Override
-    public String name() {
-        return "daily-report"; // cluster-wide unique
-    }
-
-    @Override
-    public Schedule schedule() {
-        return Schedules.daily(LocalTime.of(2, 0)); // every day at 02:00
-    }
+    @Override public String name()       { return "daily-wallet-report"; }   // cluster-wide unique
+    @Override public Schedule schedule() { return Schedules.daily(LocalTime.of(2, 0)); }
 
     @Override
     public void execute(ExecutionContext ctx) {
@@ -989,398 +266,138 @@ public class DailyReportJob extends DistributedJob {
 }
 ```
 
-`Schedule` is db-scheduler's interface, so any of its implementations work directly: `FixedDelay`, `FixedRate`, `Cron`, `Daily`, and so on.
-
-Wire it into a `JobRegistry` at application startup, pointing at a dedicated connection pool:
+An **Event Handler** reacts to a specific event in the same JVM after the action commits - for sending notifications, writing audit rows, or triggering downstream workflows. The framework's fan-out and dispatch jobs deliver each committed event with retry and at-least-once semantics:
 
 ```java
-import static io.ekbatan.distributedjobs.JobRegistry.jobRegistry;
-import static io.ekbatan.core.persistence.ConnectionProvider.hikariConnectionProvider;
+@EkbatanEventHandler
+public class WalletMoneyDepositedEventHandler implements EventHandler<WalletMoneyDepositedEvent> {
 
-var jobsPool = hikariConnectionProvider(jobsDataSourceConfig);
+    private final NotificationService notificationService;
 
-var registry = jobRegistry()
-        .connectionProvider(jobsPool)
-        .withJob(new DailyReportJob(reportService))
-        .withJob(new HourlyCleanupJob(cleanupService))
-        .pollInterval(Duration.ofSeconds(10))
-        .heartbeatInterval(Duration.ofSeconds(30))
-        .build(); // a JVM shutdown hook is installed by default
+    public WalletMoneyDepositedEventHandler(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
 
-registry.start();
-```
+    @Override public String name()                                 { return "wallet-deposit-notification"; }
+    @Override public Class<WalletMoneyDepositedEvent> eventType()  { return WalletMoneyDepositedEvent.class; }
 
-For advanced db-scheduler settings not exposed by the builder (`missedHeartbeatsLimit`, `deleteUnresolvedAfter`, custom polling strategy, etc.), `customizeScheduler(...)` runs last in `build()` and can override any of Ekbatan's defaults:
-
-```java
-var registry = jobRegistry()
-        .connectionProvider(jobsPool)
-        .withJob(new DailyReportJob(reportService))
-        .customizeScheduler(b -> b
-                .missedHeartbeatsLimit(3)
-                .deleteUnresolvedAfter(Duration.ofDays(30)))
-        .build();
-```
-
-**Use a dedicated connection pool for the `JobRegistry`** — separate from your primary application pool. db-scheduler polls continuously, so you don't want it competing with normal queries for connections. A small pool is enough (polling + heartbeats are low-volume); add a `jobSchedulerConfig` slot to the relevant `ShardingConfig` member:
-
-```yaml
-sharding:
-  groups:
-    - members:
-        - configs:
-            primaryConfig:    { ... }
-            secondaryConfig:  { ... }
-            lockConfig:       { ... }
-            jobSchedulerConfig:
-              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db
-              username: app
-              password: secret
-              maximumPoolSize: 5
-              minimumIdle: 1
-```
-
----
-
-## Event Streaming
-
-The events table is a regular table. To turn it into a stream, point a CDC tool at it.
-
-Ekbatan ships with a Debezium → Kafka pipeline:
-
-```
-Your App
-   │  one transaction per action
-   ▼
-┌─────────────────────────────────────────────┐
-│  wallets, orders, …  +  eventlog.events     │  ← all committed atomically
-└─────────────────────────────────────────────┘
-   │  outbox rows visible to CDC after commit
-   ▼
-┌─────────────────────────────────────────────┐
-│  Debezium (CDC connector)                   │  ← optional SMT encodes
-│                                             │     payload (Avro/Protobuf)
-└─────────────────────────────────────────────┘
-   │
-   ▼
-┌─────────────────────────────────────────────┐
-│  Kafka — raw topic                          │
-└─────────────────────────────────────────────┘
-   │  router fans out by event_type
-   ▼
-┌─────────────────────────────────────────────┐
-│  Per-event-type topics                      │
-└─────────────────────────────────────────────┘
-   │
-   ▼
-Your consumers
-```
-
-The framework writes only **JSON** to the database. Binary encoding (Avro, Protobuf) is performed by **Kafka Connect Single Message Transforms**, not by the application. This separation is deliberate:
-
-- Database transactions remain small and fast; serialization is kept out of the write path.
-- Schema mismatches surface in Kafka Connect rather than aborting the application transaction.
-- Schema evolution is centralized in the SMT configuration rather than spread across services.
-
-Three consumer-side envelope contracts are published; pick the one matching your wire format:
-
-| Module | Format |
-|---|---|
-| `ekbatan-events:streaming:action-event:json` | POJO + Jackson |
-| `ekbatan-events:streaming:action-event:avro` | generated from `.avsc` |
-| `ekbatan-events:streaming:action-event:protobuf` | generated from `.proto` |
-
-Topic naming is conventional:
-
-```
-ekbatan.{namespace}.model.{ModelType}
-ekbatan.{namespace}.event.{EventType}
-```
-
-### In-Process Consumption — Listen-to-Yourself Without Kafka
-
-For applications that don't need to fan events out to separate services — small monoliths, internal tools, or anywhere a Kafka cluster would be overkill — the `ekbatan-events:local-event-handler` module consumes the same `eventlog.events` outbox **inside the same JVM** via two background jobs. Same outbox row, same atomic-with-the-action guarantee, no broker.
-
-```
-Your App
-   │  one transaction per action
-   ▼
-┌─────────────────────────────────────────────────┐
-│  widgets, orders, …  +  eventlog.events         │  ← committed atomically
-│                                                  │    (delivered = FALSE)
-└─────────────────────────────────────────────────┘
-   │
-   ▼
-┌─────────────────────────────────────────────────┐
-│  EventFanoutJob                                 │  ← polls undelivered events,
-│                                                  │    materializes one
-│                                                  │    event_notifications row
-│                                                  │    per (event × subscribed
-│                                                  │    handler), flips delivered
-└─────────────────────────────────────────────────┘
-   │
-   ▼
-┌─────────────────────────────────────────────────┐
-│  EventHandlingJob                               │  ← polls due notifications,
-│                                                  │    invokes the typed
-│                                                  │    EventHandler, transitions
-│                                                  │    to SUCCEEDED / FAILED /
-│                                                  │    EXPIRED with backoff
-└─────────────────────────────────────────────────┘
-   │
-   ▼
-Your handlers (in-process, virtual threads)
-```
-
-Both jobs are `DistributedJob`s registered with the existing `JobRegistry`, so cluster exclusivity, heartbeating, and crash recovery are inherited — only one instance per cluster runs the fan-out job, only one runs the event-handling job.
-
-#### Wiring
-
-```java
-var handlerRegistry = eventHandlerRegistry()
-        .withHandler(new WidgetCreatedEmailHandler())
-        .withHandler(new WidgetCreatedIndexerHandler())
-        .build();
-
-var jobs = jobRegistry()
-        .connectionProvider(jobsConnectionProvider)
-        .withJob(eventFanoutJob()
-                .databaseRegistry(databaseRegistry)
-                .eventHandlerRegistry(handlerRegistry)
-                .clock(clock)
-                .build())
-        .withJob(eventHandlingJob()
-                .databaseRegistry(databaseRegistry)
-                .eventHandlerRegistry(handlerRegistry)
-                .objectMapper(objectMapper)
-                .clock(clock)
-                .build())
-        .build();
-jobs.start();
-```
-
-Configure the action executor with `LocalEventHandlerPersister` so committed events default to `delivered = FALSE` and become visible to the fan-out job:
-
-```java
-var executor = actionExecutor()
-        .namespace("my-app")
-        .databaseRegistry(databaseRegistry)
-        .repositoryRegistry(repositoryRegistry)
-        .actionRegistry(actionRegistry)
-        .objectMapper(objectMapper)
-        .eventPersister(new LocalEventHandlerPersister(databaseRegistry, objectMapper))
-        .build();
-```
-
-The in-process and Debezium/Kafka paths can coexist on the same `eventlog.events` table. The outbox SMTs (`OutboxToAvroTransform`, `OutboxToProtobufTransform`) drop non-INSERT operations, so the `UPDATE delivered = TRUE` flips written by the fan-out job never become Kafka messages. Run one path or both as needed.
-
-#### Defining a handler
-
-A handler is a class implementing `EventHandler<E>`:
-
-```java
-public final class WidgetCreatedEmailHandler implements EventHandler<WidgetCreatedEvent> {
-
-    @Override public String name() { return "widget-created-email"; }
-
-    @Override public Class<WidgetCreatedEvent> eventType() { return WidgetCreatedEvent.class; }
-
-    @Override public void handle(WidgetCreatedEvent event) throws Exception {
-        emailService.sendWelcome(event.modelId, event.name);
+    @Override
+    public void handle(EventEnvelope<WalletMoneyDepositedEvent> envelope) {
+        notificationService.notifyDeposit(envelope.event.modelId, envelope.event.amount);
     }
 }
 ```
 
-Multiple handlers may subscribe to the same event type; each gets its own `event_notifications` row and its own retry/expiry lifecycle. `name()` is the cluster-stable identifier persisted on every notification row, so **treat handler names as part of your schema**: renaming a handler in code orphans the rows queued under the old name.
+---
 
-#### Handlers must be idempotent
+## Install
 
-The event-handling pipeline guarantees **at-least-once** delivery — never less, occasionally more. Handlers can run twice for the same event in realistic scenarios:
-
-- The handler succeeds but the event-handling JVM crashes before the notification is marked SUCCEEDED. The next round picks the row up again and re-invokes the handler.
-- The handler partially succeeds (sends an email, then fails to write a follow-up row). The event-handling job marks the notification FAILED. On retry, the email goes out a second time.
-- A handler invocation takes longer than `pollDelay`, the event-handling round times out, db-scheduler reschedules, and the row is re-claimed.
-
-A handler must therefore make replays produce the same final state. Practical patterns:
-
-- **`INSERT ... ON CONFLICT DO NOTHING`** for any rows the handler creates, keyed by something derived from the source event id (often the `event.modelId`, the notification's row id, or a UUID computed from both). On replay the second insert no-ops.
-- **`UPDATE ... WHERE state = '<expected source state>'`** for state transitions. The first call moves the row out of the source state; replays no-op because the predicate no longer matches.
-- **External-effect dedup keys.** Most third-party APIs accept an `Idempotency-Key` header; pass `event.modelId` (or the notification row id) and the API enforces single-execution. For internal services, use a `sent_messages` table guarded by a unique key.
-- **Chained actions.** When the handler triggers another `Action` via `ActionExecutor.execute(...)`, that action's own `eventlog.events` row carries the source event id in its action params; the consuming side dedups on that.
-
-What you must **not** rely on:
-
-- Ordering between handlers subscribed to the same event — they run on virtual threads concurrently.
-- Ordering between events — each shard processes its own backlog independently of the others.
-- The handler being called *exactly* once. Plan for two.
-
-If your handler can't be made idempotent in any of those ways, you probably want the Kafka path with consumer-group offset commits, not the in-process event-handling job.
+> ⚠️ **Coming soon** - Ekbatan is being prepared for publication on Maven Central. Once published, this section will list the Gradle and Maven coordinates for each module.
+>
+> In the meantime, you can clone this repository and run `./gradlew publishToMavenLocal` to consume the artifacts from your local Maven cache.
 
 ---
 
-## Built-in Observability
+## Capabilities
 
-Ekbatan depends only on the OpenTelemetry **API**; no SDK is bundled, so the calls are no-ops with zero overhead unless an SDK is registered at runtime. When an SDK is registered, every action produces a span tree of the following shape:
+Each topic links to a focused deep-dive doc with the full surface area, schema, and examples.
 
-```
-ekbatan.action.execute
-├── ekbatan.action.perform
-└── ekbatan.action.persist
-    └── ekbatan.transaction              (per shard)
-        ├── ekbatan.repository           (db.operation.name, batch.size)
-        └── ekbatan.event.persist        (event.count)
-```
+### Get started
+- [Wiring without DI](docs/wiring/without-di.md) - full plain-Java end-to-end snippet, every line explained
+- [Wiring with Spring Boot](docs/wiring/spring.md) - one starter dep + `@Ekbatan*` annotations
+- [Wiring with Quarkus](docs/wiring/quarkus.md) - extension + build-step / native specifics
+- [Wiring with Micronaut](docs/wiring/micronaut.md) - integration jar + compile-time visitor
 
-Retries are recorded as span events on the action span. Failures set `StatusCode.ERROR` and attach the exception. Shard identifiers, batch sizes, action names, and entity types are recorded as span attributes, compatible with any standard OpenTelemetry backend (Jaeger, Tempo, Honeycomb, etc.).
+### Core
+- [The outbox: atomic state + events](docs/concepts/outbox.md) - the framework's atomic state-and-events guarantee
+- [Actions, ActionPlan, ActionExecutor](docs/concepts/actions.md) - the two-phase lifecycle, retries, no nesting, single-threaded perform
+- [Models and Entities](docs/concepts/models-and-entities.md) - when to use which, immutability, `@AutoBuilder`, optimistic locking
+
+### Database
+- [Repositories on JOOQ](docs/database/repositories.md) - `db()` / `readonlyDb()` / `txDb()` / `txDbElseDb()`, soft delete, custom queries
+- [TransactionManager](docs/database/transaction-manager.md) - direct transactional DB access outside the Action pipeline
+- [Outbox schema](docs/database/outbox-schema.md) - the SQL DDL of `eventlog.events`, the `delivered` flag, `event_notifications`, indexes
+- [Sharding](docs/database/sharding.md) - group + member, `ShardedUUID`, custom `ShardingStrategy`, cross-shard rules
+- [Pessimistic locking via `KeyedLockProvider`](docs/database/keyed-locks.md) - five backends (Postgres, MySQL, MariaDB, Redis, in-process), reentrancy contract
+- [Multi-database (PostgreSQL / MySQL / MariaDB)](docs/database/multi-database.md) - dialect cheatsheet, init scripts, partial indexes
+- [JOOQ codegen](docs/database/jooq-codegen.md) - per-dialect `build.gradle.kts` blocks for `dev.monosoul.jooq-docker`
+
+### Jobs
+- [Distributed background jobs](docs/jobs/distributed-jobs.md) - `@EkbatanDistributedJob`, db-scheduler-backed cluster exclusivity
+
+### Events out
+- [Listen-to-yourself: in-process event handlers](docs/events/local-event-handler.md) - `@EkbatanEventHandler`, fan-out + dispatch jobs, retry & expiry, idempotency
+- [Streaming via Debezium → Kafka](docs/events/event-streaming.md) - JSON / Avro / Protobuf SMTs, the router, topic naming
+
+### Observability & native
+- [OpenTelemetry tracing](docs/runtime/observability.md) - span hierarchy, attributes, retry events
+- [GraalVM native-image](docs/runtime/native-image.md) - auto-loading Features, scan-package overrides, framework-specific notes
 
 ---
 
-## Where Ekbatan Fits
+## Where Ekbatan fits
 
-Ekbatan is **not** a replacement for Spring, Quarkus, or Micronaut. It does not provide HTTP, dependency injection, configuration, or security — those concerns remain with the host framework.
+Ekbatan is **not** a replacement for Spring, Quarkus, or Micronaut. HTTP, dependency injection, configuration, security - those concerns remain with the host framework.
 
 Ekbatan **is** a replacement for the persistence layer typically built with **Spring Data, Hibernate, JPA, MyBatis, or hand-rolled JDBC + transaction management**. It is intended for applications that need:
 
 - writes to a relational database with strong transactional guarantees,
 - a reliable audit trail of business changes,
-- propagation of changes to downstream consumers — via Kafka (Debezium SMT pipeline) or in-process (fan-out + event-handling jobs) — without dual-write coordination.
-
-Integrations with Spring, Quarkus, and Micronaut are planned. The general approach is to register `ActionExecutor`, `DatabaseRegistry`, and the repositories as beans and inject them where required.
+- propagation of changes to downstream consumers - via Kafka (Debezium SMT pipeline) or in-process (fan-out + handling jobs) - without dual-write coordination.
 
 ---
 
-## Non-Goals
+## Non-goals
 
-The following are intentionally outside the scope of the framework:
-
-- **Nested or composable actions.** Operations that must happen together belong in a single Action; independent operations are invoked separately. The action boundary is the transaction boundary.
-- **Saga orchestration.** Cross-service workflows are the responsibility of the layer above the framework.
+- **Nested or composable actions.** The action boundary *is* the transaction boundary; cross-action orchestration belongs above the framework.
+- **Saga orchestration.** Cross-service workflows are the responsibility of the layer above this framework.
 - **Reactive runtime.** Concurrency is handled by Java 25 virtual threads.
-- **Integration with Spring's `PlatformTransactionManager` / `@Transactional`.** Ekbatan owns its own `TransactionManager` (ScopedValue-backed), and the action boundary *is* the transaction boundary. The Spring Boot starter (and any future Quarkus / Micronaut module) will not bridge to the host framework's transaction manager. Code outside an Action that needs database transactions should use the host framework's facilities directly on its own datasource — Ekbatan stays out of that path.
+- **Bridging to Spring's `@Transactional` / `PlatformTransactionManager`.** Ekbatan owns its own `TransactionManager`. Code outside an Action that needs database transactions should use the host framework's facilities directly on its own datasource.
 
 ---
 
-## Stack & Requirements
+## Stack & requirements
 
-- **Java 25** — required for `ScopedValue`, records, and other recent language features.
-- **JOOQ 3.20** — type-safe SQL.
-- **HikariCP 7** — connection pooling.
-- **PostgreSQL, MySQL, or MariaDB** — dialect differences are handled internally.
-- *(Optional)* **OpenTelemetry SDK** — for tracing.
-- *(Optional)* **Debezium + Kafka Connect** — for event streaming.
-
-The Kafka Connect SMT plugins target Java 21 to match the Kafka Connect runtime; all other modules target Java 25.
-
----
-
-## Native Image
-
-Ekbatan ships first-class GraalVM native-image support via the `ekbatan-native` module. Drop it on the classpath and a set of `Feature` classes auto-load to register the reflection metadata that Jackson 3 records, `@AutoBuilder` Builders, JDBC drivers, Avro `SpecificRecord`s, Kafka clients, and Testcontainers' docker-java types need at runtime.
-
-**Telling the framework where YOUR records live.** The Jackson scan defaults to `io.ekbatan` (Ekbatan's own framework records). If you have your own records, `@AutoBuilder` Builders, `@JsonCreator` mixins, or jOOQ-generated classes under a different namespace, you have to extend the scan roots — otherwise none of your types will be reflectively reachable on native and Jackson will fail at runtime with `UnsupportedFeatureError: Record components not available for record class …`.
-
-The override is a JVM system property passed at native-image **build** time:
-
-| Consumer | How to set it |
-|---|---|
-| Spring Boot / Micronaut / plain GraalVM Build Tools (Gradle) | `graalvmNative.binaries.all { buildArgs.add("-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,com.your.package") }` |
-| Quarkus | `quarkus.native.additional-build-args=-Dio.ekbatan.graalvm.scan.packages=io.ekbatan\,com.your.package` in `application.properties` (the comma in the value must be escaped — Quarkus uses comma to separate multiple build args) |
-| Maven (any) | `<buildArg>-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,com.your.package</buildArg>` inside the native-maven-plugin's `<buildArgs>` |
-
-A few related properties exist for the Avro Feature (`io.ekbatan.graalvm.avro.scan.packages`) and follow the same pattern. The Kafka and Testcontainers Features scan fixed library namespaces and don't need any user configuration.
-
-**What about everything else?** Things like the Postgres JDBC driver and HikariCP need their own native metadata, and the path differs by consumer:
-
-- **Spring Boot / Micronaut** — the GraalVM Build Tools plugin auto-pulls the GraalVM Reachability Metadata Repository, which already covers HikariCP and the major JDBC drivers. Nothing to do.
-- **Quarkus** — does not auto-consume the GraalVM RMR. JDBC drivers come via Quarkus extensions (`quarkus-jdbc-postgresql` / `quarkus-jdbc-mysql` / `quarkus-jdbc-mariadb` — register the driver class). HikariCP isn't covered by any Quarkus extension (Quarkus blesses Agroal); you have to vendor the upstream RMR JSON yourself. See `ekbatan-integration-tests/di/quarkus/src/main/resources/META-INF/native-image/com.zaxxer/HikariCP/reachability-metadata.json` for a working example.
+- **Java 25** - required (uses `ScopedValue`, records, recent language features). The Kafka Connect SMT plugins target Java 21 to match the Connect runtime; everything else targets 25.
+- **JOOQ 3.20** - type-safe SQL.
+- **HikariCP 7** - connection pooling.
+- **PostgreSQL, MySQL, or MariaDB** - dialect differences handled internally.
+- *(Optional)* **OpenTelemetry SDK** - for tracing.
+- *(Optional)* **Debezium + Kafka Connect** - for event streaming.
+- *(Optional)* **Redis (Redisson)** - for the distributed `KeyedLockProvider`.
 
 ---
 
 ## Examples
 
-The `ekbatan-integration-tests/` directory contains complete, runnable examples that mirror the snippets in this README. They are the recommended starting point — each subproject is a working application you can study, run, and adapt:
+The [`ekbatan-integration-tests/`](./ekbatan-integration-tests) directory contains complete, runnable examples that mirror every snippet on this page. Each subproject is a working application you can study, run, and adapt:
 
-- **`postgres-simple/`** — single-database wallet with create / deposit / close actions. The closest match to the *Example: A Wallet* code above.
-- **`postgres-sharded/`** — same wallet model sharded across multiple Postgres instances, including cross-shard tests and shard-aware repositories.
-- **`core-repo/{pg,mysql,mariadb}/`** — repository CRUD and `SingleTableJsonEventPersister` coverage across all three supported databases.
-- **`keyed-lock-provider/{pg,mariadb,mysql,redis}/`** — `KeyedLockProvider` implementations and reentrancy/timeout coverage.
-- **`distributed-jobs-pg/`** — `JobRegistry` + `DistributedJob` cluster-exclusive scheduling.
-- **`event-pipeline/`** — end-to-end Debezium → Kafka pipeline with JSON, Avro (SMT), and Protobuf (SMT) variants.
-- **`local-event-handler/{shared,pg,mariadb,mysql}/`** — in-process consumer (fan-out + event-handling jobs), single-shard MariaDB/MySQL and multi-shard Postgres (two databases in one container).
-
-Each subproject ships its own Flyway migrations, JOOQ codegen, and `@Testcontainers` setup, so they double as templates for new applications.
+| Subproject | What it demonstrates |
+|---|---|
+| `postgres-simple/` | Single-database wallet with create / deposit / close actions |
+| `postgres-sharded/` | The same wallet model sharded across multiple Postgres instances, with cross-shard tests |
+| `core-repo/{pg,mysql,mariadb}/` | Repository CRUD coverage across all three supported databases |
+| `keyed-lock-provider/{pg,mariadb,mysql,redis}/` | `KeyedLockProvider` implementations and reentrancy/timeout coverage |
+| `distributed-jobs-pg/` | `JobRegistry` + `DistributedJob` cluster-exclusive scheduling |
+| `event-pipeline/` | End-to-end Debezium → Kafka pipeline with JSON, Avro (SMT), and Protobuf (SMT) variants |
+| `local-event-handler/{shared,pg,mariadb,mysql}/` | In-process consumer (fan-out + handling jobs) on PG / MariaDB / MySQL |
+| `di/{spring-boot-starter,quarkus,micronaut}/` | DI integration smoke tests showcasing the `@Ekbatan*` annotations |
 
 ---
 
-## Building & Testing
+## Building & testing
 
 ```bash
-./gradlew build            # full build (includes spotlessApply)
-./gradlew test             # all tests
-./gradlew spotlessApply    # format
-./gradlew checkFormat      # verify formatting only
-```
-
-Per-module integration tests:
-
-```bash
-# Repository CRUD across dialects
-./gradlew :ekbatan-integration-tests:core-repo:pg:repository:test
-./gradlew :ekbatan-integration-tests:core-repo:mysql:repository:test
-./gradlew :ekbatan-integration-tests:core-repo:mariadb:repository:test
-
-# In-process consumer (fan-out + event-handling jobs) across dialects
-./gradlew :ekbatan-integration-tests:local-event-handler:pg:test
-./gradlew :ekbatan-integration-tests:local-event-handler:mariadb:test
-./gradlew :ekbatan-integration-tests:local-event-handler:mysql:test
-
-# Distributed background jobs (db-scheduler-backed)
-./gradlew :ekbatan-integration-tests:distributed-jobs-pg:test
-
-# KeyedLockProvider implementations
-./gradlew :ekbatan-integration-tests:keyed-lock-provider:pg:test
-./gradlew :ekbatan-integration-tests:keyed-lock-provider:mariadb:test
-./gradlew :ekbatan-integration-tests:keyed-lock-provider:mysql:test
-./gradlew :ekbatan-integration-tests:keyed-lock-provider:redis:test
+./gradlew build           # full build (includes spotlessApply)
+./gradlew test            # all tests
+./gradlew spotlessApply   # format
 ```
 
 Tests use TestContainers and require Docker to be running.
 
 ---
 
-## Project Layout
+## Documentation
 
-```
-ekbatan/
-├── ekbatan-core/                                    — the framework: actions, models, repositories, sharding, locking
-├── ekbatan-annotation-processor/                    — @AutoBuilder compile-time builder generation
-├── ekbatan-distributed-jobs/                        — db-scheduler-backed cluster-exclusive background jobs
-├── ekbatan-keyed-lock-redis/                        — Redis-backed KeyedLockProvider
-├── ekbatan-events/
-│   ├── streaming/                                   — outbox-to-Kafka pipeline
-│   │   ├── action-event/{json,avro,protobuf}        — consumer-side envelope contracts
-│   │   └── debezium-smt/{avro,protobuf}             — Kafka Connect SMTs that bind the outbox to typed Kafka messages
-│   └── local-event-handler/                         — in-process consumer (fan-out + event-handling jobs)
-└── ekbatan-integration-tests/                       — end-to-end tests with Testcontainers
-    ├── core-repo/                                   — repository tests
-    │   ├── shared/                                  — base test fixtures
-    │   ├── pg/{repository,events}
-    │   ├── mariadb/{repository,events}
-    │   └── mysql/{repository,events}
-    ├── postgres-simple/                             — single-shard end-to-end PG test
-    ├── postgres-sharded/                            — multi-shard end-to-end PG test
-    ├── keyed-lock-provider/{pg,mariadb,mysql,redis} — KeyedLockProvider implementations
-    ├── distributed-jobs-pg/                         — DistributedJob + JobRegistry
-    ├── event-pipeline/                              — Debezium → Kafka end-to-end
-    │   ├── common/                                  — shared wallet model + router
-    │   ├── debezium-kafka-json/
-    │   ├── debezium-kafka-avro-smt/
-    │   └── debezium-kafka-protobuf-smt/
-    └── local-event-handler/                         — in-process consumer end-to-end
-        ├── shared/                                  — Base test, models, handlers, action wiring
-        ├── pg/                                      — multi-shard PG (2 databases in one container)
-        ├── mariadb/
-        └── mysql/
-```
-
-For detailed architecture, conventions, and contribution guidelines, see [AGENTS.md](./AGENTS.md).
+- **[docs/](docs/README.md)** - capability deep-dives (linked from *Capabilities* above)
+- **[AGENTS.md](AGENTS.md)** - full architecture, conventions, and contributor guide

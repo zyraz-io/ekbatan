@@ -10,7 +10,8 @@ CREATE TABLE eventlog.events (
     model_type VARCHAR(255),
     event_type VARCHAR(255),
     payload JSON,
-    event_date DATETIME(6) NOT NULL
+    event_date DATETIME(6) NOT NULL,
+    delivered BOOLEAN NOT NULL
 );
 
 CREATE INDEX idx_events_action_id ON eventlog.events(action_id);

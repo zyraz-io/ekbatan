@@ -33,6 +33,7 @@ class EventEntityRepository {
     private final Field<String> eventTypeField;
     private final Field<ObjectNode> payloadField;
     private final Field<Instant> eventDateField;
+    private final Field<Boolean> deliveredField;
 
     private static final String SCHEMA_NAME = "eventlog";
     private static final String TABLE_NAME = "events";
@@ -68,6 +69,8 @@ class EventEntityRepository {
     private static final Field<Instant> PG_EVENT_DATE = DSL.field(
             DSL.name(SCHEMA_NAME, TABLE_NAME, "event_date"),
             SQLDataType.LOCALDATETIME.asConvertedDataType(new InstantConverter()));
+    private static final Field<Boolean> PG_DELIVERED =
+            DSL.field(DSL.name(SCHEMA_NAME, TABLE_NAME, "delivered"), Boolean.class);
 
     // MariaDB Definitions
     private static final Field<UUID> MARIADB_ID = DSL.field(DSL.name(SCHEMA_NAME, TABLE_NAME, "id"), UUID.class);
@@ -98,6 +101,8 @@ class EventEntityRepository {
     private static final Field<Instant> MARIADB_EVENT_DATE = DSL.field(
             DSL.name(SCHEMA_NAME, TABLE_NAME, "event_date"),
             SQLDataType.LOCALDATETIME.asConvertedDataType(new InstantConverter()));
+    private static final Field<Boolean> MARIADB_DELIVERED =
+            DSL.field(DSL.name(SCHEMA_NAME, TABLE_NAME, "delivered"), Boolean.class);
 
     // MySQL Definitions
     private static final Field<UUID> MYSQL_ID = DSL.field(
@@ -131,6 +136,8 @@ class EventEntityRepository {
     private static final Field<Instant> MYSQL_EVENT_DATE = DSL.field(
             DSL.name(SCHEMA_NAME, TABLE_NAME, "event_date"),
             SQLDataType.LOCALDATETIME.asConvertedDataType(new InstantConverter()));
+    private static final Field<Boolean> MYSQL_DELIVERED =
+            DSL.field(DSL.name(SCHEMA_NAME, TABLE_NAME, "delivered"), Boolean.class);
 
     EventEntityRepository(DatabaseRegistry databaseRegistry) {
         this.databaseRegistry = databaseRegistry;
@@ -151,6 +158,7 @@ class EventEntityRepository {
             this.eventTypeField = MYSQL_EVENT_TYPE;
             this.payloadField = MYSQL_PAYLOAD;
             this.eventDateField = MYSQL_EVENT_DATE;
+            this.deliveredField = MYSQL_DELIVERED;
         } else if (defaultTransactionManager.dialect.family() == SQLDialect.MARIADB) {
             this.idField = MARIADB_ID;
             this.namespaceField = MARIADB_NAMESPACE;
@@ -164,6 +172,7 @@ class EventEntityRepository {
             this.eventTypeField = MARIADB_EVENT_TYPE;
             this.payloadField = MARIADB_PAYLOAD;
             this.eventDateField = MARIADB_EVENT_DATE;
+            this.deliveredField = MARIADB_DELIVERED;
         } else {
             this.idField = PG_ID;
             this.namespaceField = PG_NAMESPACE;
@@ -177,6 +186,7 @@ class EventEntityRepository {
             this.eventTypeField = PG_EVENT_TYPE;
             this.payloadField = PG_PAYLOAD;
             this.eventDateField = PG_EVENT_DATE;
+            this.deliveredField = PG_DELIVERED;
         }
     }
 
@@ -205,7 +215,8 @@ class EventEntityRepository {
                         modelTypeField,
                         eventTypeField,
                         payloadField,
-                        eventDateField)
+                        eventDateField,
+                        deliveredField)
                 .from(EVENTS)
                 .fetch()
                 .map(r -> EventEntity.createEventEntity(
@@ -221,6 +232,7 @@ class EventEntityRepository {
                                 r.get(eventTypeField),
                                 r.get(payloadField),
                                 r.get(eventDateField))
+                        .delivered(r.get(deliveredField))
                         .build());
     }
 
@@ -238,7 +250,8 @@ class EventEntityRepository {
                         modelTypeField,
                         eventTypeField,
                         payloadField,
-                        eventDateField)
+                        eventDateField,
+                        deliveredField)
                 .from(EVENTS)
                 .where(actionIdField.eq(actionId))
                 .fetch()
@@ -255,6 +268,7 @@ class EventEntityRepository {
                                 r.get(eventTypeField),
                                 r.get(payloadField),
                                 r.get(eventDateField))
+                        .delivered(r.get(deliveredField))
                         .build());
     }
 
@@ -274,7 +288,8 @@ class EventEntityRepository {
                         modelTypeField,
                         eventTypeField,
                         payloadField,
-                        eventDateField);
+                        eventDateField,
+                        deliveredField);
         for (var entity : entities) {
             insert.values(
                     entity.id,
@@ -288,7 +303,8 @@ class EventEntityRepository {
                     entity.modelType,
                     entity.eventType,
                     entity.payload,
-                    entity.eventDate);
+                    entity.eventDate,
+                    entity.delivered);
         }
         insert.execute();
     }

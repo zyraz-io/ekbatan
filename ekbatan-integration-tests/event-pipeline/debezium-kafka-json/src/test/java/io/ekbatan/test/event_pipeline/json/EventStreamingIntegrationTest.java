@@ -236,13 +236,13 @@ class EventStreamingIntegrationTest {
         try (var conn = java.sql.DriverManager.getConnection(PG.getJdbcUrl(), PG.getUsername(), PG.getPassword());
                 var stmt = conn.createStatement()) {
             stmt.execute("INSERT INTO eventlog.events (id, namespace, action_id, action_name, action_params, "
-                    + "started_date, completion_date, model_id, model_type, event_type, payload, event_date) VALUES ("
+                    + "started_date, completion_date, model_id, model_type, event_type, payload, event_date, delivered) VALUES ("
                     + "'" + java.util.UUID.randomUUID() + "', "
                     + "'" + NAMESPACE + "', "
                     + "'" + java.util.UUID.randomUUID() + "', "
                     + "'NoOpAction', "
                     + "'{\"action\":\"noop\"}'::jsonb, "
-                    + "NOW(), NOW(), NULL, NULL, NULL, NULL, NOW())");
+                    + "NOW(), NOW(), NULL, NULL, NULL, NULL, NOW(), FALSE)");
         }
 
         // WHEN

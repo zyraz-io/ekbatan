@@ -1,5 +1,6 @@
 package io.ekbatan.test.local_event_handler.widget.handler;
 
+import io.ekbatan.events.localeventhandler.EventEnvelope;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.test.local_event_handler.widget.models.events.WidgetCreatedEvent;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -19,7 +20,7 @@ public final class AlwaysFailingWidgetCreatedHandler implements EventHandler<Wid
     }
 
     @Override
-    public void handle(WidgetCreatedEvent event) {
+    public void handle(EventEnvelope<WidgetCreatedEvent> envelope) {
         callCount.incrementAndGet();
         throw new RuntimeException("intentional failure");
     }

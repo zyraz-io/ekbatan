@@ -5,7 +5,7 @@ import java.util.UUID;
 import org.apache.commons.lang3.Validate;
 import tools.jackson.databind.node.ObjectNode;
 
-class EventEntity {
+public final class EventEntity {
 
     public final UUID id;
     public final String namespace;
@@ -19,6 +19,7 @@ class EventEntity {
     public final String eventType;
     public final ObjectNode payload;
     public final Instant eventDate;
+    public final boolean delivered;
 
     private EventEntity(Builder builder) {
         this.id = Validate.notNull(builder.id, "id cannot be null");
@@ -33,6 +34,7 @@ class EventEntity {
         this.eventType = builder.eventType;
         this.payload = builder.payload;
         this.eventDate = Validate.notNull(builder.eventDate, "eventDate cannot be null");
+        this.delivered = builder.delivered;
     }
 
     public static Builder createEventEntity(
@@ -76,7 +78,7 @@ class EventEntity {
         return id.hashCode();
     }
 
-    static final class Builder {
+    public static final class Builder {
         private UUID id;
         private String namespace;
         private UUID actionId;
@@ -89,6 +91,7 @@ class EventEntity {
         private String eventType;
         private ObjectNode payload;
         private Instant eventDate;
+        private boolean delivered = false;
 
         private Builder() {}
 
@@ -149,6 +152,11 @@ class EventEntity {
 
         public Builder eventDate(Instant eventDate) {
             this.eventDate = eventDate;
+            return this;
+        }
+
+        public Builder delivered(boolean delivered) {
+            this.delivered = delivered;
             return this;
         }
 

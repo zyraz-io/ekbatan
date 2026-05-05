@@ -1,10 +1,10 @@
 package io.ekbatan.spring;
 
-import io.ekbatan.bootstrap.RegistryAssembler;
-import io.ekbatan.bootstrap.jackson.EkbatanConfigJacksonModule;
 import io.ekbatan.core.action.Action;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.action.ActionRegistry;
+import io.ekbatan.core.action.persister.event.EventPersister;
+import io.ekbatan.core.config.jackson.EkbatanConfigJacksonModule;
 import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.repository.RepositoryRegistry;
 import io.ekbatan.core.shard.DatabaseRegistry;
@@ -17,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.AutowireCapableBeanFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
@@ -81,7 +82,9 @@ public class EkbatanCoreConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public RepositoryRegistry ekbatanRepositoryRegistry(List<AbstractRepository<?, ?, ?, ?>> repositories) {
-        return RegistryAssembler.repositoryRegistry(repositories);
+        return RepositoryRegistry.Builder.repositoryRegistry()
+                .withRepositories(repositories)
+                .build();
     }
 
     @Bean
@@ -97,7 +100,7 @@ public class EkbatanCoreConfiguration {
         for (var cls : actionClasses) {
             actions.add((Action<?, ?>) autowireBeanFactory.createBean(cls));
         }
-        return RegistryAssembler.actionRegistry(actions);
+        return ActionRegistry.Builder.actionRegistry().withActions(actions).build();
     }
 
     @Bean
@@ -108,15 +111,23 @@ public class EkbatanCoreConfiguration {
             ActionRegistry actionRegistry,
             RepositoryRegistry repositoryRegistry,
             ObjectMapper objectMapper,
-            Clock clock) {
-        return ActionExecutor.Builder.actionExecutor()
+            Clock clock,
+            ObjectProvider<EventPersister> eventPersisterProvider) {
+        var builder = ActionExecutor.Builder.actionExecutor()
                 .namespace(properties.namespace())
                 .databaseRegistry(databaseRegistry)
                 .actionRegistry(actionRegistry)
                 .repositoryRegistry(repositoryRegistry)
                 .objectMapper(objectMapper)
-                .clock(clock)
-                .build();
+                .clock(clock);
+        // Optional override: an application can supply its own EventPersister bean (e.g. one that
+        // encrypts payloads, writes to a separate sink, or uses a different table layout).
+        // Otherwise the builder falls back to its built-in SingleTableJsonEventPersister default.
+        var customPersister = eventPersisterProvider.getIfAvailable();
+        if (customPersister != null) {
+            builder.eventPersister(customPersister);
+        }
+        return builder.build();
     }
 
     @SuppressWarnings("unchecked")

@@ -37,7 +37,6 @@ include(
     "ekbatan-distributed-jobs",
     "ekbatan-keyed-lock-redis",
     "ekbatan-di:annotations",
-    "ekbatan-di:bootstrap",
     "ekbatan-di:spring:autoconfigure",
     "ekbatan-di:spring:starter",
     "ekbatan-di:quarkus:runtime",

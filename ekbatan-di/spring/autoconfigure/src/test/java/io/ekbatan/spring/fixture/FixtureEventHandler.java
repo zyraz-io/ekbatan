@@ -1,6 +1,7 @@
 package io.ekbatan.spring.fixture;
 
 import io.ekbatan.di.EkbatanEventHandler;
+import io.ekbatan.events.localeventhandler.EventEnvelope;
 import io.ekbatan.events.localeventhandler.EventHandler;
 
 /**
@@ -21,7 +22,7 @@ public class FixtureEventHandler implements EventHandler<FixtureEvent> {
     }
 
     @Override
-    public void handle(FixtureEvent event) {
+    public void handle(EventEnvelope<FixtureEvent> envelope) {
         // no-op for tests
     }
 }

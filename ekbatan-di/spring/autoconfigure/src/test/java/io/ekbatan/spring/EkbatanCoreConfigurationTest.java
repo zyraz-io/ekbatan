@@ -3,9 +3,9 @@ package io.ekbatan.spring;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
-import io.ekbatan.bootstrap.jackson.EkbatanConfigJacksonModule;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.action.ActionRegistry;
+import io.ekbatan.core.config.jackson.EkbatanConfigJacksonModule;
 import io.ekbatan.core.repository.RepositoryRegistry;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.config.ShardingConfig;

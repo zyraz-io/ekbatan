@@ -1,6 +1,5 @@
 package io.ekbatan.micronaut;
 
-import io.ekbatan.bootstrap.RegistryAssembler;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.events.localeventhandler.EventHandlerRegistry;
@@ -21,7 +20,9 @@ public class EkbatanLocalEventHandlerConfiguration {
     @Bean
     @Singleton
     public EventHandlerRegistry ekbatanEventHandlerRegistry(List<EventHandler<?>> handlers) {
-        return RegistryAssembler.eventHandlerRegistry(handlers);
+        return EventHandlerRegistry.eventHandlerRegistry()
+                .withHandlers(handlers)
+                .build();
     }
 
     @Bean

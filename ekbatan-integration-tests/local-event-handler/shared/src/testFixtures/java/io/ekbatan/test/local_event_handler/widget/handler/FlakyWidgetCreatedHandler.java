@@ -1,5 +1,6 @@
 package io.ekbatan.test.local_event_handler.widget.handler;
 
+import io.ekbatan.events.localeventhandler.EventEnvelope;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.test.local_event_handler.widget.models.events.WidgetCreatedEvent;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,7 +25,7 @@ public final class FlakyWidgetCreatedHandler implements EventHandler<WidgetCreat
     }
 
     @Override
-    public void handle(WidgetCreatedEvent event) {
+    public void handle(EventEnvelope<WidgetCreatedEvent> envelope) {
         final int attempt = callCount.incrementAndGet();
         if (attempt <= failFirstN) {
             throw new RuntimeException("flaky failure on attempt " + attempt);

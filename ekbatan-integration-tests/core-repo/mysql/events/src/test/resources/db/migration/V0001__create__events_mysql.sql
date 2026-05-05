@@ -11,6 +11,7 @@ CREATE TABLE eventlog.events (
     event_type VARCHAR(255),
     payload JSON,
     event_date DATETIME(6) NOT NULL,
+    delivered BOOLEAN NOT NULL,
     PRIMARY KEY (id)
 );
 

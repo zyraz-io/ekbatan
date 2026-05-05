@@ -9,7 +9,6 @@ java {
 
 dependencies {
     api(project(":ekbatan-core"))
-    api(project(":ekbatan-di:bootstrap"))
     api(project(":ekbatan-di:annotations"))
 
     // Auto-config classes are @ConditionalOnClass-gated on these modules.
