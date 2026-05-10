@@ -1,0 +1,12 @@
+# Default config for the integration test app context. The test's TestPropertyProvider supplies
+# the dynamic Testcontainers coordinates (ekbatan.sharding.*) — those override anything here.
+ekbatan:
+  namespace: test.micronaut
+  local-event-handler:
+    fanout-poll-delay: 200ms
+    handling-poll-delay: 200ms
+    handling:
+      enabled: true
+  jobs:
+    polling-interval: 1s
+    shutdown-max-wait: 5s

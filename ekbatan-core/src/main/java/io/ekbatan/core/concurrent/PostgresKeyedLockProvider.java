@@ -12,6 +12,30 @@ import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * PostgreSQL-backed implementation of {@link KeyedLockProvider} using session-level advisory
+ * locks: blocking acquires call {@code pg_advisory_lock(key)}, time-bounded acquires call
+ * {@code pg_try_advisory_lock(key)} (for {@code maxWait=0}) or {@code pg_advisory_lock} with
+ * a per-transaction {@code SET lock_timeout} (for bounded waits), and releases call
+ * {@code pg_advisory_unlock(key)}.
+ *
+ * <p>Each lease holds onto its own pooled {@link java.sql.Connection} for the lifetime of
+ * the lease so the Postgres session that acquired the lock is the one that releases it. The
+ * connection is returned to the pool on normal release; if release fails or the connection
+ * is left dirty (e.g. {@code SET lock_timeout} reset failed), the provider evicts the
+ * connection from the pool instead.
+ *
+ * <p>Keys are hashed via SipHash-2-4 into Postgres's 64-bit advisory-lock identifier.
+ * Collisions are statistically irrelevant for any practical key cardinality. Note that the
+ * 64-bit advisory-lock identifier space is shared with anything else in the database using
+ * advisory locks — if an external service uses the same Postgres instance with overlapping
+ * hashes, collisions across applications are possible (though hash-distance makes them very
+ * unlikely in practice).
+ *
+ * <p>Reentrancy is per-{@code (thread, key)} pair (see {@link KeyedLockProvider} for the
+ * full contract). The local {@link KeyedReentrantHolder} short-circuits same-thread reentry
+ * with no Postgres round-trip; backend acquisition happens only for the outermost lease.
+ */
 public final class PostgresKeyedLockProvider implements KeyedLockProvider {
 
     private static final Logger LOG = LoggerFactory.getLogger(PostgresKeyedLockProvider.class);
@@ -162,21 +186,30 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
 
     private record PgPayload(String userKey, long hashedKey, Connection connection, boolean dirty) {}
 
+    /** Fluent builder for {@link PostgresKeyedLockProvider}. Obtain via {@link #postgresKeyedLockProvider()}. */
     public static final class Builder {
 
         private ConnectionProvider connectionProvider;
 
         private Builder() {}
 
+        /** {@return a fresh builder for {@link PostgresKeyedLockProvider}} */
         public static Builder postgresKeyedLockProvider() {
             return new Builder();
         }
 
+        /**
+         * Sets the database connection provider.
+         *
+         * @param connectionProvider the provider whose pool the locks will run on.
+         * @return this builder, for chaining.
+         */
         public Builder connectionProvider(ConnectionProvider connectionProvider) {
             this.connectionProvider = connectionProvider;
             return this;
         }
 
+        /** {@return a configured {@link PostgresKeyedLockProvider}} */
         public PostgresKeyedLockProvider build() {
             return new PostgresKeyedLockProvider(this);
         }

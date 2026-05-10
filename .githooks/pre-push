@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# Validates that any pushed tag like `v<X.Y.Z>` points to a commit whose
+# gradle.properties says `version=<X.Y.Z>`. Catches the "tagged the wrong
+# commit" / "forgot to bump gradle.properties" footgun before Maven Central
+# artifacts get cut from a mislabeled commit.
+#
+# Bypass: git push --no-verify
+
+set -euo pipefail
+
+zero_sha="0000000000000000000000000000000000000000"
+exit_code=0
+
+# stdin: one line per ref being pushed:
+#   <local_ref> <local_sha> <remote_ref> <remote_sha>
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # Deletion push: nothing at the local side to validate.
+    [[ "$local_sha" == "$zero_sha" ]] && continue
+    [[ "$local_ref" =~ ^refs/tags/v[0-9] ]] || continue
+
+    tag_name="${local_ref#refs/tags/}"
+    expected="${tag_name#v}"
+
+    # Read gradle.properties at the tagged commit, not the working tree,
+    # so a half-applied bump can't slip through.
+    if ! line=$(git show "${local_sha}:gradle.properties" 2>/dev/null | grep '^version='); then
+        echo "pre-push: tag '$tag_name' points to a commit with no gradle.properties version line" >&2
+        exit_code=1
+        continue
+    fi
+
+    actual="${line#version=}"
+    actual="${actual//[[:space:]]/}"
+
+    if [[ "$actual" != "$expected" ]]; then
+        echo "pre-push: tag/version mismatch" >&2
+        echo "  tag:               $tag_name (expects version '$expected')" >&2
+        echo "  gradle.properties: version=$actual (at the tagged commit)" >&2
+        echo "" >&2
+        echo "Fix one of:" >&2
+        echo "  - retag at the right commit:  git tag -d $tag_name && git tag $tag_name <correct-sha>" >&2
+        echo "  - or bump gradle.properties:  edit, commit, then re-tag" >&2
+        echo "" >&2
+        echo "Bypass (not recommended): git push --no-verify" >&2
+        exit_code=1
+    fi
+done
+
+exit $exit_code

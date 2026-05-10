@@ -22,6 +22,14 @@ public abstract class EntityRepository<
                 DB_ID extends Comparable<DB_ID>>
         extends AbstractRepository<ENTITY, RECORD, TABLE, DB_ID> {
 
+    /**
+     * Convenience constructor for single-shard repositories.
+     *
+     * @param entityClass runtime {@link Class} of the entity type.
+     * @param table the jOOQ-generated table.
+     * @param idField the jOOQ-generated id field.
+     * @param databaseRegistry the registry of connection pools / transaction managers.
+     */
     protected EntityRepository(
             Class<ENTITY> entityClass,
             TABLE table,
@@ -30,6 +38,15 @@ public abstract class EntityRepository<
         super(entityClass, table, idField, databaseRegistry);
     }
 
+    /**
+     * Primary constructor for sharded entity repositories.
+     *
+     * @param entityClass runtime {@link Class} of the entity type.
+     * @param table the jOOQ-generated table.
+     * @param idField the jOOQ-generated id field.
+     * @param databaseRegistry the registry of connection pools / transaction managers.
+     * @param shardingStrategy strategy that maps each row's ID to a {@link io.ekbatan.core.shard.ShardIdentifier}.
+     */
     protected EntityRepository(
             Class<ENTITY> entityClass,
             TABLE table,

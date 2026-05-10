@@ -26,6 +26,7 @@ public final class InProcessKeyedLockProvider implements KeyedLockProvider {
     private final KeyedReentrantHolder<InProcessPayload> holder =
             new KeyedReentrantHolder<>("ekbatan-keyedlock-timeout");
 
+    /** Constructs an empty provider; per-key state is created lazily on first acquire. */
     public InProcessKeyedLockProvider() {}
 
     @Override
@@ -69,7 +70,11 @@ public final class InProcessKeyedLockProvider implements KeyedLockProvider {
         return Optional.of(holder.register(key, new InProcessPayload(key, entry), maxHold, this::backendRelease));
     }
 
-    /** Returns the number of distinct keys currently being tracked. Mostly for diagnostics. */
+    /**
+     * Returns the number of distinct keys currently being tracked. Mostly for diagnostics.
+     *
+     * @return the count of distinct keys with active or recently-active entries.
+     */
     public int activeKeyCount() {
         return locks.size();
     }

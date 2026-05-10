@@ -1,10 +1,13 @@
 plugins {
     `java-library`
-    `maven-publish`
+    id("ekbatan.publishing")
 }
 
-group = "io.ekbatan.native"
-version = "0.0.1-SNAPSHOT"
+ekbatanPublishing {
+    artifactId.set("ekbatan-native")
+    description.set("GraalVM native-image features for Ekbatan (Jackson 3 records, Kafka clients, testcontainers).")
+}
+
 java.sourceCompatibility = JavaVersion.VERSION_25
 java {
     toolchain {
@@ -30,12 +33,4 @@ dependencies {
     // analyser drops them. Exposed as `api` so consumers depending on this module
     // see Flyway transitively when they call FlywayHelper.
     api("org.flywaydb:flyway-core:${project.property("flywayVersion")}")
-}
-
-publishing {
-    publications {
-        create<MavenPublication>("mavenJava") {
-            from(components["java"])
-        }
-    }
 }

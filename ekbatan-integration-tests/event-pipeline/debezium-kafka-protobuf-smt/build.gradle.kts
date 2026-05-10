@@ -3,9 +3,6 @@ plugins {
     id("com.google.protobuf") version "0.9.4"
 }
 
-group = "io.ekbatan.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
@@ -28,20 +25,20 @@ val actionEventDescriptorFile: Configuration by configurations.creating {
 }
 
 dependencies {
-    smtPluginJar(project(":ekbatan-events:streaming:debezium-smt:protobuf")) {
+    smtPluginJar(project(":ekbatan-events-streaming-debezium-smt-protobuf")) {
         isTransitive = false
     }
     actionEventDescriptorFile(
         project(
             mapOf(
-                "path" to ":ekbatan-events:streaming:action-event:protobuf",
+                "path" to ":ekbatan-events-streaming-action-event-protobuf",
                 "configuration" to "actionEventDescriptor",
             ),
         ),
     )
 
-    testImplementation(project(":ekbatan-events:streaming:action-event:protobuf"))
-    testImplementation(project(":ekbatan-integration-tests:event-pipeline:common"))
+    testImplementation(project(":ekbatan-events-streaming-action-event-protobuf"))
+    testImplementation(project(":ekbatan-integration-tests-event-pipeline-common"))
 
     testImplementation("com.google.protobuf:protobuf-java:${project.property("protobufVersion")}")
     testImplementation("com.google.protobuf:protobuf-java-util:${project.property("protobufVersion")}")

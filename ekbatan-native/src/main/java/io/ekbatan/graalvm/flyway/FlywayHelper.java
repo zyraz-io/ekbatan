@@ -18,12 +18,27 @@ public final class FlywayHelper {
 
     private FlywayHelper() {}
 
-    /** Migrates using the conventional default location {@code classpath:db/migration}. */
+    /**
+     * Migrates using the conventional default location {@code classpath:db/migration}.
+     *
+     * @param jdbcUrl the JDBC URL of the target database.
+     * @param username the database username used to apply the migrations.
+     * @param password the database password.
+     */
     public static void migrate(String jdbcUrl, String username, String password) {
         migrate(jdbcUrl, username, password, "classpath:db/migration");
     }
 
-    /** Migrates using the supplied locations. */
+    /**
+     * Migrates using the supplied locations. When running under GraalVM native image, a
+     * {@link NativeImageFlywayResourceProvider} is installed automatically so migrations under
+     * {@code classpath:} prefixes are still walkable.
+     *
+     * @param jdbcUrl the JDBC URL of the target database.
+     * @param username the database username used to apply the migrations.
+     * @param password the database password.
+     * @param locations Flyway location descriptors (e.g. {@code "classpath:db/migration"}).
+     */
     public static void migrate(String jdbcUrl, String username, String password, String... locations) {
         var cfg = Flyway.configure().dataSource(jdbcUrl, username, password).locations(locations);
         if (NativeImageFlywayResourceProvider.inNativeImage()) {

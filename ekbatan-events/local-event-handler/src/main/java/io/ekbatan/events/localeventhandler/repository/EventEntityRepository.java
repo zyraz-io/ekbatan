@@ -96,6 +96,13 @@ public final class EventEntityRepository {
     private final Field<ObjectNode> actionParamsField;
     private final Field<ObjectNode> payloadField;
 
+    /**
+     * Constructs the repository against a database registry. Dialect-specific jOOQ field
+     * descriptors are chosen at construction time based on the default transaction manager's
+     * dialect, so per-row reads/writes pay no dialect-detection cost.
+     *
+     * @param databaseRegistry the registry of per-shard connection pools / transaction managers.
+     */
     public EventEntityRepository(DatabaseRegistry databaseRegistry) {
         this.databaseRegistry = Validate.notNull(databaseRegistry, "databaseRegistry cannot be null");
         final var defaultTm = databaseRegistry.defaultTransactionManager();
@@ -170,6 +177,10 @@ public final class EventEntityRepository {
      * Read up to {@code limit} undelivered, non-sentinel events ordered by {@code event_date}
      * ascending. Sentinel rows (zero-event actions, where {@code event_type} is NULL) are
      * filtered out — they have no handlers to fan out to.
+     *
+     * @param shard the shard to read from.
+     * @param limit max rows to return.
+     * @return the undelivered events on that shard, in chronological order.
      */
     public List<EventEntity> findUndelivered(ShardIdentifier shard, int limit) {
         return readonlyDb(shard)
@@ -210,7 +221,12 @@ public final class EventEntityRepository {
                         .build());
     }
 
-    /** Flip {@code delivered = TRUE} for the given event ids. Empty input is a no-op. */
+    /**
+     * Flip {@code delivered = TRUE} for the given event ids. Empty input is a no-op.
+     *
+     * @param ids the event row ids to mark.
+     * @param shard the shard the rows live on.
+     */
     public void markDelivered(Collection<UUID> ids, ShardIdentifier shard) {
         if (ids.isEmpty()) return;
         txDbElseDb(shard)

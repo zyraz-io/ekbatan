@@ -1,5 +1,11 @@
 plugins {
     `java-library`
+    id("ekbatan.publishing")
+}
+
+ekbatanPublishing {
+    artifactId.set("ekbatan-micronaut")
+    description.set("Micronaut Factory + annotation-processor visitor for Ekbatan @EkbatanAction discovery.")
 }
 
 java {
@@ -12,8 +18,13 @@ java {
 // live) using this jar as a service-loader source for the TypeElementVisitor.
 dependencies {
     api(project(":ekbatan-core"))
-    api(project(":ekbatan-di:annotations"))
-    api(project(":ekbatan-events:local-event-handler"))
+    api(project(":ekbatan-di-annotations"))
+
+    // Bundled by default — matches Spring and Quarkus so all three DI flavors give the same
+    // out-of-box experience. The @Requires(classes = ...) gates in
+    // EkbatanLocalEventHandlerConfiguration / EkbatanDistributedJobsConfiguration remain as
+    // defensive guards for users who manually exclude these modules.
+    api(project(":ekbatan-events-local-event-handler"))
     api(project(":ekbatan-distributed-jobs"))
 
     compileOnly("io.micronaut:micronaut-inject:${project.property("micronautVersion")}")

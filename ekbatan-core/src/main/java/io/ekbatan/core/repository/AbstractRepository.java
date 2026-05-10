@@ -42,7 +42,17 @@ import org.jooq.UpdateSetStep;
 import org.jooq.impl.DSL;
 
 /**
- * Abstract base repository implementation using JOOQ.
+ * Abstract base repository implementation using jOOQ. Subclasses provide the persistable type,
+ * jOOQ generated record type, jOOQ generated table type, and database-side ID type as the four
+ * type parameters; the framework supplies the CRUD machinery, optimistic locking, sharding-
+ * aware routing, and a rich query surface.
+ *
+ * @param <PERSISTABLE> the domain object type this repository persists (a {@link Persistable}).
+ * @param <RECORD> the jOOQ-generated {@link TableRecord} type for the table.
+ * @param <TABLE> the jOOQ-generated {@link Table} type.
+ * @param <DB_ID> the database-side identifier type (e.g. {@code UUID}, {@code Long}); typed
+ *     separately from the domain-side ID so the framework can carry custom wrapper types like
+ *     {@code Id<Wallet>} on the domain object while still emitting plain UUIDs to jOOQ.
  */
 public abstract class AbstractRepository<
                 PERSISTABLE extends Persistable<?>,
@@ -51,12 +61,25 @@ public abstract class AbstractRepository<
                 DB_ID extends Comparable<?>>
         implements Repository<PERSISTABLE> {
 
+    /** The registry of per-shard connection pools and transaction managers; supplied by the application. */
     public final DatabaseRegistry databaseRegistry;
+
+    /** Routes each row to a shard; defaults to {@link NoShardingStrategy} (single-shard) when not specified. */
     public final ShardingStrategy<DB_ID> shardingStrategy;
+
+    /** The jOOQ {@link Table} this repository reads/writes; typically a generated {@code Tables.MY_TABLE} singleton. */
     protected final TABLE table;
+
+    /** The jOOQ {@link TableField} for the primary key; used by {@link #findById}, {@link #getById}, etc. */
     public final TableField<RECORD, DB_ID> idField;
+
+    /** The jOOQ {@link TableField} for the optimistic-locking version column ({@code version}). */
     protected final TableField<RECORD, Long> versionField;
+
+    /** The jOOQ {@link TableField} for the discriminator/state column ({@code state}). */
     protected final TableField<RECORD, String> stateField;
+
+    /** The runtime {@link Class} of the persistable type; needed for reflective {@code nextVersion} and event emission. */
     public final Class<PERSISTABLE> domainClass;
 
     private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
@@ -64,6 +87,15 @@ public abstract class AbstractRepository<
     private static final String VERSION_FIELD_NAME = "version";
     private static final String STATE_FIELD_NAME = "state";
 
+    /**
+     * Convenience constructor for single-shard repositories — equivalent to passing
+     * {@link NoShardingStrategy}.
+     *
+     * @param domainClass runtime {@link Class} of the persistable type.
+     * @param table the jOOQ-generated table.
+     * @param idField the jOOQ-generated id field.
+     * @param databaseRegistry the registry of connection pools / transaction managers.
+     */
     protected AbstractRepository(
             Class<PERSISTABLE> domainClass,
             TABLE table,
@@ -72,6 +104,15 @@ public abstract class AbstractRepository<
         this(domainClass, table, idField, databaseRegistry, new NoShardingStrategy<>());
     }
 
+    /**
+     * Primary constructor for sharded repositories.
+     *
+     * @param domainClass runtime {@link Class} of the persistable type.
+     * @param table the jOOQ-generated table.
+     * @param idField the jOOQ-generated id field.
+     * @param databaseRegistry the registry of connection pools / transaction managers.
+     * @param shardingStrategy strategy that maps each row's ID to a {@link ShardIdentifier}.
+     */
     protected AbstractRepository(
             Class<PERSISTABLE> domainClass,
             TABLE table,
@@ -98,30 +139,63 @@ public abstract class AbstractRepository<
         return shardingStrategy;
     }
 
+    /** {@return the human-readable name of the domain type, used in error messages} */
     protected abstract String getDomainTypeName();
 
+    /**
+     * Maps a jOOQ-generated record into a domain object.
+     *
+     * @param record the database row.
+     * @return the corresponding domain object.
+     */
     public abstract PERSISTABLE fromRecord(RECORD record);
 
+    /**
+     * Maps a domain object into a jOOQ-generated record.
+     *
+     * @param domainObject the domain object.
+     * @return a record ready to insert/update.
+     */
     public abstract RECORD toRecord(PERSISTABLE domainObject);
 
     // --- db() variants ---
 
+    /** {@return the primary writer {@link DSLContext} for the default shard (non-transactional)} */
     protected DSLContext db() {
         return databaseRegistry.primary.get(databaseRegistry.defaultShard);
     }
 
+    /**
+     * Resolves the primary writer context for the shard that owns the given ID.
+     *
+     * @param id the database-side identifier.
+     * @return the primary {@link DSLContext} for the resolved shard.
+     */
     protected DSLContext db(DB_ID id) {
         return db(effectiveShard(id));
     }
 
+    /**
+     * Resolves the primary writer context for the shard that owns the given domain object.
+     *
+     * @param p the domain object.
+     * @return the primary {@link DSLContext} for the resolved shard.
+     */
     protected DSLContext db(PERSISTABLE p) {
         return db(effectiveShard(p));
     }
 
+    /**
+     * Returns the primary writer context for the given shard explicitly.
+     *
+     * @param shard the target shard.
+     * @return the primary {@link DSLContext}.
+     */
     protected DSLContext db(ShardIdentifier shard) {
         return databaseRegistry.primary.get(shard);
     }
 
+    /** {@return every primary writer context, one per shard (scatter-gather entrypoint for queries spanning shards)} */
     protected Collection<DSLContext> dbs() {
         if (shardingStrategy instanceof NoShardingStrategy<?>) {
             return List.of(db());
@@ -131,18 +205,32 @@ public abstract class AbstractRepository<
 
     // --- readonlyDb() variants ---
 
+    /** {@return the read-replica {@link DSLContext} for the default shard; falls back to primary if no replica is configured} */
     protected DSLContext readonlyDb() {
         return databaseRegistry.secondary.get(databaseRegistry.defaultShard);
     }
 
+    /**
+     * Resolves the read-replica context for the shard that owns the given ID.
+     *
+     * @param id the database-side identifier.
+     * @return the secondary {@link DSLContext}.
+     */
     protected DSLContext readonlyDb(DB_ID id) {
         return readonlyDb(effectiveShard(id));
     }
 
+    /**
+     * Returns the read-replica context for the given shard explicitly.
+     *
+     * @param shard the target shard.
+     * @return the secondary {@link DSLContext}.
+     */
     protected DSLContext readonlyDb(ShardIdentifier shard) {
         return databaseRegistry.secondary.get(shard);
     }
 
+    /** {@return every read-replica context, one per shard} */
     protected Collection<DSLContext> readonlyDbs() {
         if (shardingStrategy instanceof NoShardingStrategy<?>) {
             return List.of(readonlyDb());
@@ -152,36 +240,74 @@ public abstract class AbstractRepository<
 
     // --- txDb() variants ---
 
+    /** {@return the in-flight transaction's {@link DSLContext} for the default shard, or empty if no transaction is bound} */
     protected Optional<DSLContext> txDb() {
         return databaseRegistry.defaultTransactionManager().currentTransactionDbContext();
     }
 
+    /**
+     * Returns the in-flight transaction's context for the shard owning the given ID, if any.
+     *
+     * @param id the database-side identifier.
+     * @return the bound transactional {@link DSLContext}, or empty.
+     */
     protected Optional<DSLContext> txDb(DB_ID id) {
         return txDb(effectiveShard(id));
     }
 
+    /**
+     * Returns the in-flight transaction's context for the shard owning the given domain object, if any.
+     *
+     * @param p the domain object.
+     * @return the bound transactional {@link DSLContext}, or empty.
+     */
     protected Optional<DSLContext> txDb(PERSISTABLE p) {
         return txDb(effectiveShard(p));
     }
 
+    /**
+     * Returns the in-flight transaction's context for the given shard, if any.
+     *
+     * @param shard the target shard.
+     * @return the bound transactional {@link DSLContext}, or empty.
+     */
     protected Optional<DSLContext> txDb(ShardIdentifier shard) {
         return databaseRegistry.transactionManager(shard).currentTransactionDbContext();
     }
 
     // --- txDbElseDb() variants ---
 
+    /** {@return the in-flight transaction's context for the default shard if bound, otherwise a non-transactional primary context} */
     protected DSLContext txDbElseDb() {
         return txDb().orElseGet(this::db);
     }
 
+    /**
+     * Prefers the in-flight transaction's context; falls back to a non-transactional primary context.
+     *
+     * @param id the database-side identifier.
+     * @return the chosen {@link DSLContext}.
+     */
     protected DSLContext txDbElseDb(DB_ID id) {
         return txDb(id).orElseGet(() -> db(id));
     }
 
+    /**
+     * Prefers the in-flight transaction's context; falls back to a non-transactional primary context.
+     *
+     * @param p the domain object.
+     * @return the chosen {@link DSLContext}.
+     */
     protected DSLContext txDbElseDb(PERSISTABLE p) {
         return txDb(p).orElseGet(() -> db(p));
     }
 
+    /**
+     * Prefers the in-flight transaction's context; falls back to a non-transactional primary context.
+     *
+     * @param shard the target shard.
+     * @return the chosen {@link DSLContext}.
+     */
     protected DSLContext txDbElseDb(ShardIdentifier shard) {
         return txDb(shard).orElseGet(() -> db(shard));
     }
@@ -516,6 +642,13 @@ public abstract class AbstractRepository<
         return step;
     }
 
+    /**
+     * Looks up a single row by primary key on the shard that owns it. Soft-deleted rows (state =
+     * {@code "DELETED"}) are excluded.
+     *
+     * @param id the primary key value.
+     * @return the matching domain object, or empty if not found / soft-deleted.
+     */
     public Optional<PERSISTABLE> findById(DB_ID id) {
         return Optional.ofNullable(db(id).selectFrom(table)
                         .where(idField.eq(id).and(notDeleted()))
@@ -523,12 +656,26 @@ public abstract class AbstractRepository<
                 .map(this::fromRecord);
     }
 
+    /**
+     * Like {@link #findById} but raises {@link EntityNotFoundException} instead of returning empty.
+     *
+     * @param id the primary key value.
+     * @return the matching domain object.
+     */
     public PERSISTABLE getById(DB_ID id) {
         return findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
                         format("No entity found with id: %s[id=%s]", domainClass.getSimpleName(), id)));
     }
 
+    /**
+     * Batched lookup by primary key. Groups the IDs by shard so each shard's read is a single
+     * round-trip; uses a dialect-appropriate {@code IN} or {@code = ANY(?)} clause. Returns
+     * matching rows in arbitrary order; missing IDs are silently omitted.
+     *
+     * @param ids the primary key values.
+     * @return the matching domain objects.
+     */
     public List<PERSISTABLE> findAllByIds(Collection<DB_ID> ids) {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
@@ -571,24 +718,45 @@ public abstract class AbstractRepository<
                 .toList();
     }
 
+    /**
+     * Existence check by primary key (does not load the row).
+     *
+     * @param id the primary key value.
+     * @return {@code true} if a non-soft-deleted row with this id exists on its owning shard.
+     */
     public boolean existsById(DB_ID id) {
         final var shard = effectiveShard(id);
         var ctx = db(shard);
         return ctx.fetchExists(ctx.selectOne().from(table).where(idField.eq(id).and(notDeleted())));
     }
 
+    /** {@return count of non-soft-deleted rows in this table, summed across all shards} */
     public long count() {
         return dbs().stream()
                 .mapToLong(ctx -> ctx.fetchCount(table, notDeleted()))
                 .sum();
     }
 
+    /**
+     * Count of non-soft-deleted rows matching a custom condition, summed across all shards.
+     *
+     * @param condition the jOOQ {@link Condition} to AND with the soft-delete filter.
+     * @return the total count.
+     */
     public long countWhere(Condition condition) {
         return dbs().stream()
                 .mapToLong(ctx -> ctx.fetchCount(table, condition.and(notDeleted())))
                 .sum();
     }
 
+    /**
+     * Returns the first non-soft-deleted row matching the condition, querying shards in registry
+     * order and short-circuiting on the first match. Useful for unique-secondary-index lookups
+     * where you know at most one row matches across shards.
+     *
+     * @param condition the jOOQ {@link Condition}.
+     * @return the matching domain object, or empty.
+     */
     public Optional<PERSISTABLE> findOneWhere(Condition condition) {
         return dbs().stream()
                 .map(ctx ->
@@ -598,6 +766,12 @@ public abstract class AbstractRepository<
                 .findFirst();
     }
 
+    /**
+     * Returns all non-soft-deleted rows matching the condition, scatter-gathered across shards.
+     *
+     * @param condition the jOOQ {@link Condition}.
+     * @return the matching domain objects (per-shard order, then flattened).
+     */
     public List<PERSISTABLE> findAllWhere(Condition condition) {
         return dbs().stream()
                 .flatMap(ctx ->
@@ -605,22 +779,51 @@ public abstract class AbstractRepository<
                 .toList();
     }
 
+    /**
+     * Existence check by custom condition, short-circuiting across shards.
+     *
+     * @param condition the jOOQ {@link Condition}.
+     * @return {@code true} if any shard has a matching non-soft-deleted row.
+     */
     public boolean existsWhere(Condition condition) {
         return dbs().stream()
                 .anyMatch(ctx -> ctx.fetchExists(ctx.selectOne().from(table).where(condition.and(notDeleted()))));
     }
 
+    /**
+     * Resolves which shard owns a single domain object via the configured {@link ShardingStrategy};
+     * falls back to the default shard when the strategy declines to commit.
+     *
+     * @param domainObject the domain object.
+     * @return the effective {@link ShardIdentifier}.
+     */
     protected ShardIdentifier effectiveShard(PERSISTABLE domainObject) {
         var shard = shardingStrategy.resolveShardIdentifier(domainObject).orElse(databaseRegistry.defaultShard);
         return databaseRegistry.effectiveShard(shard);
     }
 
+    /**
+     * Resolves which shard owns a row given only its ID. Only strategies that advertise
+     * ID-based resolution (e.g. {@code EmbeddedBitsShardingStrategy}) can answer this — others
+     * raise {@link UnsupportedOperationException}.
+     *
+     * @param id the database-side identifier.
+     * @return the effective {@link ShardIdentifier}.
+     */
     protected ShardIdentifier effectiveShard(DB_ID id) {
         rejectNonIdBasedStrategy();
         var shard = shardingStrategy.resolveShardIdentifierById(id).orElse(databaseRegistry.defaultShard);
         return databaseRegistry.effectiveShard(shard);
     }
 
+    /**
+     * Resolves the shard for a collection of domain objects, requiring they all land on the same
+     * shard. Mixed-shard collections raise {@link CrossShardException} since the action would
+     * otherwise span shards and break the single-transaction-per-shard invariant.
+     *
+     * @param domainObjects the domain objects.
+     * @return the common {@link ShardIdentifier}.
+     */
     protected ShardIdentifier effectiveShard(Collection<PERSISTABLE> domainObjects) {
         if (shardingStrategy instanceof NoShardingStrategy<?>) {
             return databaseRegistry.defaultShard;
@@ -661,6 +864,18 @@ public abstract class AbstractRepository<
         return stateField.ne("DELETED");
     }
 
+    /**
+     * Looks up a typed {@link TableField} by name on a jOOQ generated table, returning null if
+     * the field isn't present or doesn't match the requested type. Used by the constructor to
+     * resolve {@code version} and {@code state} fields without subclasses having to pass them
+     * explicitly.
+     *
+     * @param table the jOOQ table.
+     * @param fieldName the field's column name.
+     * @param fieldType the expected Java type.
+     * @param <F> the field's Java type.
+     * @return the matching {@link TableField}, or {@code null} if absent / mistyped.
+     */
     @SuppressWarnings("unchecked")
     protected <F> TableField<RECORD, F> resolveField(Table<RECORD> table, String fieldName, Class<F> fieldType) {
         Field<?> field = table.field(fieldName);

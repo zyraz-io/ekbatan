@@ -15,7 +15,7 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  * with:
  * <pre>UnsupportedFeatureError: Record components not available for record class ...</pre>
  *
- * <h3>What it registers</h3>
+ * <h2>What it registers</h2>
  * <ul>
  *   <li>Every Java {@code record} found under the scan roots — full reflective access plus
  *       {@code RuntimeReflection.registerAllRecordComponents}.</li>
@@ -32,7 +32,7 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  *       output uses reflection to instantiate Records via no-arg constructors.</li>
  * </ul>
  *
- * <h3>Configuring scan roots</h3>
+ * <h2>Configuring scan roots</h2>
  * Default scan root is {@code io.ekbatan}. Override at native-image build time with:
  * <pre>
  *     -Dio.ekbatan.graalvm.scan.packages=io.ekbatan,com.acme.myapp
@@ -40,13 +40,13 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  * (set via {@code graalvmNative.binaries.named("main") { buildArgs.add("-D...") }} in
  * Gradle, or as a JVM system property when invoking {@code native-image} directly).
  *
- * <h3>Auto-loading</h3>
+ * <h2>Auto-loading</h2>
  * The Feature is registered automatically via
  * {@code META-INF/native-image/io.ekbatan/ekbatan-native/native-image.properties} which
  * appends {@code --features=io.ekbatan.graalvm.jackson.Jackson3RecordsFeature} to the
  * native-image command. Drop this dependency on the classpath and it activates.
  *
- * <h3>Why it exists</h3>
+ * <h2>Why it exists</h2>
  * Jackson 3 ships zero native-image metadata
  * (<a href="https://github.com/oracle/graalvm-reachability-metadata/issues/697">RMR #697</a>
  * closed unresolved), and the modern reachability-metadata.json schema dropped
@@ -55,6 +55,9 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  * during {@code beforeAnalysis} (calls from a reachability handler arrive too late).
  */
 public final class Jackson3RecordsFeature implements Feature {
+
+    /** Required by GraalVM's native-image SPI; instantiated reflectively when registered via {@code META-INF/native-image}. */
+    public Jackson3RecordsFeature() {}
 
     private static final String SCAN_PACKAGES_PROPERTY = "io.ekbatan.graalvm.scan.packages";
     private static final String DEFAULT_SCAN_PACKAGES = "io.ekbatan";

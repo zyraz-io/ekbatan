@@ -3,9 +3,6 @@ plugins {
     id("com.github.davidmc24.gradle.plugin.avro") version "1.9.1"
 }
 
-group = "io.ekbatan.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
@@ -28,17 +25,17 @@ val actionEventSchemaFile: Configuration by configurations.creating {
 }
 
 dependencies {
-    smtPluginJar(project(":ekbatan-events:streaming:debezium-smt:avro")) {
+    smtPluginJar(project(":ekbatan-events-streaming-debezium-smt-avro")) {
         isTransitive = false
     }
     actionEventSchemaFile(
         project(
-            mapOf("path" to ":ekbatan-events:streaming:action-event:avro", "configuration" to "actionEventSchema"),
+            mapOf("path" to ":ekbatan-events-streaming-action-event-avro", "configuration" to "actionEventSchema"),
         ),
     )
 
-    testImplementation(project(":ekbatan-events:streaming:action-event:avro"))
-    testImplementation(project(":ekbatan-integration-tests:event-pipeline:common"))
+    testImplementation(project(":ekbatan-events-streaming-action-event-avro"))
+    testImplementation(project(":ekbatan-integration-tests-event-pipeline-common"))
 
     // Avro for consumer-side deserialization
     testImplementation("org.apache.avro:avro:${project.property("avroVersion")}")

@@ -3,9 +3,6 @@ plugins {
     id("java-test-fixtures")
 }
 
-group = "io.ekbatan.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
@@ -18,7 +15,7 @@ repositories {
 dependencies {
     testFixturesApi(project(":ekbatan-core"))
     testFixturesApi(project(":ekbatan-distributed-jobs"))
-    testFixturesApi(project(":ekbatan-events:local-event-handler"))
+    testFixturesApi(project(":ekbatan-events-local-event-handler"))
 
     testFixturesCompileOnly(project(":ekbatan-annotation-processor"))
     testFixturesAnnotationProcessor(project(":ekbatan-annotation-processor"))

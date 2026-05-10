@@ -110,6 +110,7 @@ public final class RedisKeyedLockProvider implements KeyedLockProvider {
 
     private record RedisPayload(String userKey, RLock rlock) {}
 
+    /** Fluent builder for {@link RedisKeyedLockProvider}. Obtain via {@link #redisKeyedLockProvider()}. */
     public static final class Builder {
 
         private RedissonClient redissonClient;
@@ -117,10 +118,17 @@ public final class RedisKeyedLockProvider implements KeyedLockProvider {
 
         private Builder() {}
 
+        /** {@return a fresh builder for {@link RedisKeyedLockProvider}} */
         public static Builder redisKeyedLockProvider() {
             return new Builder();
         }
 
+        /**
+         * Sets the Redisson client that backs the distributed lock. Required.
+         *
+         * @param redissonClient an initialized {@link RedissonClient}; the caller retains ownership and is responsible for closing it.
+         * @return this builder, for chaining.
+         */
         public Builder redissonClient(RedissonClient redissonClient) {
             this.redissonClient = redissonClient;
             return this;
@@ -130,12 +138,16 @@ public final class RedisKeyedLockProvider implements KeyedLockProvider {
          * Prefix for the Redis keys this provider creates (default {@code "ekbatan-lock"}).
          * Lets multiple lock providers — or multiple unrelated apps — share one Redis instance
          * without colliding.
+         *
+         * @param namespace a non-blank prefix; the colon separator is added automatically.
+         * @return this builder, for chaining.
          */
         public Builder namespace(String namespace) {
             this.namespace = Validate.notBlank(namespace, "namespace cannot be blank");
             return this;
         }
 
+        /** {@return a configured {@link RedisKeyedLockProvider}; throws if {@code redissonClient} was not set} */
         public RedisKeyedLockProvider build() {
             return new RedisKeyedLockProvider(this);
         }

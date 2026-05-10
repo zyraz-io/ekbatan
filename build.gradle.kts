@@ -1,211 +1,209 @@
-plugins {
-    `java-library`
-    id("com.diffplug.spotless") version "8.1.0"
-    id("org.graalvm.buildtools.native") version "1.1.0" apply false
-    checkstyle
+// Spotless 8.1.0 pulls in JGit 7.4.0; JReleaser 1.24.0 still calls
+// `org.eclipse.jgit.lib.GpgObjectSigner` which JGit 7.x removed. Pin JGit to the latest 6.x
+// release (still has GpgObjectSigner; Spotless's git-diff usage is fine on 6.x) so both plugins
+// can coexist on the buildscript classpath.
+buildscript {
+    configurations.classpath {
+        resolutionStrategy {
+            force("org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r")
+        }
+    }
 }
 
-// Configure Spotless for the root project
+plugins {
+    id("com.diffplug.spotless") version "8.1.0"
+    id("ekbatan.module-conventions") apply false
+    id("ekbatan.smt-conventions") apply false
+    id("ekbatan.native-test-conventions") apply false
+    id("org.jreleaser") version "1.24.0"
+}
+
 spotless {
-    
-    // Configure Java formatting
     java {
         target("**/*.java")
-        
-        // Apply Palantir Java Format
         palantirJavaFormat("2.81.0")
     }
-    
-    // Configure format for miscellaneous files
     format("misc") {
         target("*.md", ".gitignore", ".gitattributes", "*.yaml", "*.yml", "*.json")
-        
-        // Define the formatting rules
         trimTrailingWhitespace()
-        leadingTabsToSpaces(4) // or tabs(1)
+        leadingTabsToSpaces(4)
         endWithNewline()
     }
-    
 }
 
 allprojects {
-    group = "io.ekbatan"
-    version = "0.0.1-SNAPSHOT"
-    
-    apply(plugin = "checkstyle")
-    
-    configure<CheckstyleExtension> {
-        configFile = rootProject.file("config/checkstyle/checkstyle.xml")
-        toolVersion = "10.12.5"  // Updated to support modern Java features
-        isIgnoreFailures = false
-        isShowViolations = true
-        // Enable HTML reports for better diagnostics
-        reportsDir = layout.buildDirectory.dir("reports/checkstyle").get().asFile
-    }
+    // Single groupId across the repo. Coordinate uniqueness comes from each project's name,
+    // which `settings.gradle.kts` flattens from the full path. Publishable modules override
+    // the published artifactId via `ekbatanPublishing.artifactId` in the publishing plugin.
+    //
+    // The Maven groupId (`io.github.zyraz-io`) intentionally differs from the Java package
+    // names in the source tree (`io.ekbatan.*`) — Maven Central's namespace is reverse-DNS of
+    // the GitHub org, but Java packages don't need to match the groupId. Many libraries
+    // (picocli, lombok, ...) ship this way.
+    group = "io.github.zyraz-io"
 
     repositories {
         mavenCentral()
     }
-
-    tasks.withType<Test> {
-        useJUnitPlatform()
-    }
 }
 
 subprojects {
-    apply(plugin = "java-library")
-    apply(plugin = "com.diffplug.spotless")
-    
-    // Add annotation processor for non-annotation-processor modules.
-    // SMT modules opt out — they're standalone Kafka Connect plugins and don't use AutoBuilder.
-    val skipAnnotationProcessor = project.name == "ekbatan-annotation-processor"
-            || project.path.startsWith(":ekbatan-events:streaming:debezium-smt")
-    if (!skipAnnotationProcessor) {
-        dependencies {
-            annotationProcessor(project(":ekbatan-annotation-processor"))
-            implementation(project(":ekbatan-annotation-processor"))
-        }
-    }
-    
-    // Configure Spotless for each subproject
-    configure<com.diffplug.gradle.spotless.SpotlessExtension> {
-        // Configure Kotlin Gradle scripts
-        kotlinGradle {
-            target("*.gradle.kts")
-            ktlint()
-            trimTrailingWhitespace()
-            leadingTabsToSpaces(4)
-            endWithNewline()
-        }
-        
-        // Configure format for miscellaneous files
-        format("misc") {
-            target("*.md", ".gitignore", ".gitattributes", "*.yaml", "*.yml", "*.json")
-            trimTrailingWhitespace()
-            leadingTabsToSpaces(4)
-            endWithNewline()
-        }
+    val isSmt = project.path.startsWith(":ekbatan-events-streaming-debezium-smt")
+    val skipNative = project.path == ":ekbatan-annotation-processor"
+            || isSmt
+            || project.path == ":ekbatan-di-quarkus-runtime"
+            || project.path == ":ekbatan-di-quarkus-deployment"
+            || project.path == ":ekbatan-integration-tests-di-quarkus"
+
+    if (isSmt) {
+        apply(plugin = "ekbatan.smt-conventions")
+    } else {
+        apply(plugin = "ekbatan.module-conventions")
     }
 
-    dependencies {
-
-        testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
-        testImplementation("org.junit.jupiter:junit-jupiter:${project.property("junitJupiterVersion")}")
-        testRuntimeOnly("org.junit.platform:junit-platform-launcher:${project.property("junitPlatformLauncherVersion")}")
-
-        testImplementation("io.mockk:mockk:${project.property("mockkVersion")}")
-        testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
-    }
-    
-    // Configure Java compilation. SMT modules target Java 21 (Kafka Connect runtime).
-    val javaTarget = if (project.path.startsWith(":ekbatan-events:streaming:debezium-smt")) "21" else "25"
-    tasks.withType<JavaCompile> {
-        sourceCompatibility = javaTarget
-        targetCompatibility = javaTarget
-        if (javaTarget == "21") {
-            options.release.set(21)
-        }
-        // Enable incremental compilation for better build performance
-        options.isIncremental = true
-        // Enable all warnings
-        options.isWarnings = true
-        // Enable deprecation warnings
-        options.isDeprecation = true
-        // Enable unchecked warnings
-        options.compilerArgs.add("-Xlint:unchecked")
-        // Enable deprecation warnings
-        options.compilerArgs.add("-Xlint:deprecation")
-    }
-
-    
-    // GraalVM Native Build Tools — gives every Java module a `nativeTest` task that compiles
-    // JUnit 5 tests as a native image and executes them. JVM `clean build` is unchanged.
-    //
-    // Skip modules where native testing doesn't apply:
-    //   - ekbatan-annotation-processor: build-time only, no runtime artifact
-    //   - ekbatan-events:streaming:debezium-smt*: Java 21 (Kafka Connect runtime)
-    //   - ekbatan-di:quarkus:{runtime,deployment}: Quarkus has its own native machinery
-    //   - ekbatan-integration-tests:di:quarkus: validated via @QuarkusIntegrationTest /
-    //     quarkusIntTest task, not the GraalVM Build Tools nativeTest path
-    val skipNative = project.name == "ekbatan-annotation-processor"
-            || project.path.startsWith(":ekbatan-events:streaming:debezium-smt")
-            || project.path == ":ekbatan-di:quarkus:runtime"
-            || project.path == ":ekbatan-di:quarkus:deployment"
-            || project.path == ":ekbatan-integration-tests:di:quarkus"
     if (!skipNative) {
-        apply(plugin = "org.graalvm.buildtools.native")
-        // ekbatan-native is the publishable module that hosts the GraalVM-side helpers
-        // every native build of an Ekbatan-using project needs (Jackson3RecordsFeature,
-        // KafkaClientsFeature, TestcontainersDockerJavaFeature, AvroSpecificRecordFeature,
-        // FlywayHelper, NativeImageFlywayResourceProvider). Wire it onto every module's
-        // test classpath so the Features auto-load for any module's `nativeTest` — without
-        // each module having to remember the dependency. The conditional guards against
-        // ekbatan-native trying to depend on itself.
-        if (project.path != ":ekbatan-native") {
-            dependencies.add("testImplementation", project(":ekbatan-native"))
+        apply(plugin = "ekbatan.native-test-conventions")
+    }
+}
+
+// =====================================================================================
+// JReleaser — orchestrates the release flow:
+//   1. Maven Central via Central Portal (deploy.maven.mavenCentral.sonatype) — the 15
+//      publishable jars + their sources/javadoc jars + POMs are staged from
+//      build/staging-deploy/ (populated by `./gradlew publish`), signed with GPG, and
+//      uploaded to Sonatype's staging area. `active = RELEASE` means stage-and-confirm:
+//      JReleaser uploads but doesn't auto-publish — log into central.sonatype.com and
+//      click "Publish" (or "Drop" if something's wrong) once you've verified.
+//   2. GitHub Releases (release.github) — creates a tagged release with the two SMT
+//      shadow jars attached as assets. Independent of the Maven Central path.
+//
+// Secrets pulled from env vars (set in GitHub Actions repo secrets, or ~/.jreleaser/
+// config.toml for local releases):
+//   JRELEASER_MAVENCENTRAL_USERNAME, JRELEASER_MAVENCENTRAL_PASSWORD — Sonatype user
+//     token (generated in the Central Portal UI, not your account login)
+//   JRELEASER_GPG_PUBLIC_KEY, JRELEASER_GPG_SECRET_KEY, JRELEASER_GPG_PASSPHRASE —
+//     ASCII-armored exports of `gpg --armor --export[-secret-keys] <KEY_ID>`
+//   JRELEASER_GITHUB_TOKEN — auto-provided in GitHub Actions; for local releases use
+//     a personal access token with `repo` scope.
+//
+// Validate locally without uploading anything:
+//   ./gradlew jreleaserConfig    # parses + reports the resolved config
+//   ./gradlew jreleaserAssemble  # builds release artifacts to build/jreleaser/
+// Full release (signs + uploads + creates GH release):
+//   ./gradlew publish && ./gradlew jreleaserFullRelease
+// =====================================================================================
+jreleaser {
+    project {
+        name.set("ekbatan")
+        description.set(
+            "Java persistence and action framework with a first-class transactional outbox — an alternative to Hibernate, Spring Data, and JPA when the outbox pattern matters.",
+        )
+        longDescription.set(
+            """
+            Ekbatan is a Java persistence and action framework, an alternative to Hibernate,
+            Spring Data, JPA, MyBatis, and similar stacks. Its central idea: in most business
+            applications, you don't just want to save data — you want to save what happened
+            alongside the data itself, atomically, so the database always tells a complete and
+            consistent story.
+
+            The transactional outbox is a first-class concept, not an afterthought. Actions stage
+            domain changes on an ActionPlan; the ActionExecutor commits the domain rows AND the
+            corresponding events to the eventlog in a single transaction per shard. There's no
+            second table to remember to write to, no dual-write problem, no event loss — the
+            outbox is built into every action by construction. Tail the eventlog with Debezium /
+            CDC, or poll it and forward to Kafka / Pulsar / any message broker, and you have
+            reliable event-driven architecture without the usual outbox plumbing burden.
+
+            Other features: per-shard transactional execution, optimistic locking on every
+            update, sharding strategies (single-DB or embedded-bits UUID), distributed jobs
+            backed by db-scheduler, and drop-in DI integrations for Spring Boot, Quarkus, and
+            Micronaut.
+            """
+                .trimIndent(),
+        )
+        authors.set(listOf("Hossein Bakhtiari Ziabari"))
+        license.set("Apache-2.0")
+        inceptionYear.set("2026")
+        copyright.set("2026 Hossein Bakhtiari Ziabari")
+        links {
+            homepage.set("https://github.com/zyraz-io/ekbatan")
+            license.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+            documentation.set("https://github.com/zyraz-io/ekbatan#readme")
+            bugTracker.set("https://github.com/zyraz-io/ekbatan/issues")
+            vcsBrowser.set("https://github.com/zyraz-io/ekbatan")
         }
-        val javaToolchains = extensions.getByType<JavaToolchainService>()
-        configure<org.graalvm.buildtools.gradle.dsl.GraalVMExtension> {
-            // GraalVMExtension.toolchainDetection defaults to FALSE in the plugin, which
-            // routes the runtime-args provider for `nativeTest` through the env-var
-            // fallback (GRAALVM_HOME / JAVA_HOME) instead of the configured toolchain —
-            // even though the compile task uses the toolchain (it has its own
-            // BuildNativeImageTask.disableToolchainDetection convention(false)).
-            // Forcing this to true makes both paths consistently use the toolchain.
-            toolchainDetection.set(true)
-            // Route native-image tasks to a GraalVM JDK 25 install; normal compileJava/test
-            // continue using whatever JDK runs Gradle. JvmVendorSpec.GRAAL_VM matches the
-            // Community Edition installer ID (GraalVM CE writes IMPLEMENTOR="GraalVM
-            // Community"); for Oracle GraalVM, switch to JvmVendorSpec.ORACLE.
-            binaries.all {
-                javaLauncher.set(javaToolchains.launcherFor {
-                    languageVersion.set(JavaLanguageVersion.of(25))
-                    vendor.set(JvmVendorSpec.GRAAL_VM)
-                })
-                // Bundle classpath resources that integration-test wiring needs at runtime
-                // but native-image otherwise wouldn't include:
-                //   - Flyway migrations (`db/migration/V*.sql`) — Flyway scans the classpath
-                //     by glob; without these bundled the migrations silently apply zero
-                //     scripts and tests fail with "relation does not exist".
-                //   - Testcontainers init scripts (`*_init.sql`) — referenced by
-                //     `withInitScript()` calls in the MariaDB/MySQL test setups.
-                // The Flyway RMR (org.flywaydb:flyway-core) only bundles its own
-                // version.txt, not user migrations — that responsibility is per-app.
-                resources.includedPatterns.add("db/migration/.*\\.sql")
-                resources.includedPatterns.add(".*_init\\.sql")
+        languages {
+            java {
+                groupId.set("io.github.zyraz-io")
+                version.set("25")
+                multiProject.set(true)
             }
-            // Test binaries don't need runtime perf — they need to pass and exit. -Ob
-            // (quick build) trades runtime optimisation for ~30–50% faster native-image
-            // compilation, the dominant cost of the nativeTest sweep. Production
-            // binaries (`main`) keep full optimisation.
-            binaries.named("test") {
-                quickBuild.set(true)
-            }
-            // metadataRepository is a sub-extension on GraalVMExtension; reach it via
-            // the ExtensionAware cast since the typed DSL helper isn't available here.
-            (this as org.gradle.api.plugins.ExtensionAware)
-                .extensions
-                .configure<org.graalvm.buildtools.gradle.dsl.GraalVMReachabilityMetadataRepositoryExtension>(
-                    "metadataRepository"
-                ) {
-                    enabled.set(true)
-                    version.set("1.0.0")
-                }
         }
     }
 
-    // Make build depend on spotlessApply to ensure code is formatted before building
-    tasks.named("build") {
-        // Ensure formatting is applied before compilation
-        dependsOn("spotlessApply")
-        // Optional: Fail the build if there are formatting violations
-        // dependsOn("spotlessCheck")
+    signing {
+        active.set(org.jreleaser.model.Active.ALWAYS)
+        // `armored` / `verify` / `mode` moved under signing.pgp { } in JReleaser 1.24.
+        // MEMORY mode (the default) reads the key material from the JRELEASER_GPG_* env vars
+        // directly — no GPG keyring file needed on the runner.
+        pgp {
+            armored.set(true)
+            verify.set(true)
+        }
     }
-    
-    // Optional: Add a task to check formatting without applying it
-    tasks.register("checkFormat") {
-        group = "verification"
-        description = "Check code formatting without applying changes"
-        dependsOn("spotlessCheck")
+
+    release {
+        github {
+            repoOwner.set("zyraz-io")
+            name.set("ekbatan")
+            tagName.set("v{{projectVersion}}")
+            releaseName.set("Ekbatan {{projectVersion}}")
+            draft.set(false)
+            // Allow re-runs to replace an existing GitHub Release for the same tag — natural for
+            // stage-and-confirm flows where a release may be staged, dropped on Sonatype, and
+            // re-staged before final publish. Maven Central immutability is enforced separately.
+            overwrite.set(true)
+            skipTag.set(false)
+            changelog {
+                formatted.set(org.jreleaser.model.Active.ALWAYS)
+                preset.set("conventional-commits")
+                contributors {
+                    enabled.set(false)
+                }
+            }
+        }
+    }
+
+    // The two Debezium SMT shadow jars ride along with the GitHub Release as drop-in
+    // assets for Kafka Connect operators. Not published to Maven Central. The
+    // `{{projectVersion}}` template pins to the exact version being released — a literal `*`
+    // would attach any stale jars left in build/libs/ from a previous version.
+    files {
+        glob {
+            pattern.set(
+                "ekbatan-events/streaming/debezium-smt/avro/build/libs/ekbatan-debezium-smt-avro-{{projectVersion}}.jar",
+            )
+        }
+        glob {
+            pattern.set(
+                "ekbatan-events/streaming/debezium-smt/protobuf/build/libs/ekbatan-debezium-smt-protobuf-{{projectVersion}}.jar",
+            )
+        }
+    }
+
+    deploy {
+        maven {
+            mavenCentral {
+                create("sonatype") {
+                    active.set(org.jreleaser.model.Active.RELEASE)
+                    url.set("https://central.sonatype.com/api/v1/publisher")
+                    stagingRepository("build/staging-deploy")
+                    applyMavenCentralRules.set(true)
+                    namespace.set("io.github.zyraz-io")
+                    // Stage-and-confirm: this leaves the deployment in Sonatype's validation
+                    // window. Verify on central.sonatype.com, then click Publish (or Drop).
+                }
+            }
+        }
     }
 }

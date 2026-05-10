@@ -9,12 +9,16 @@ public interface ModelId<T extends Comparable<T>> {
 
     /**
      * Returns the ID value.
+     *
+     * @return the wrapped identifier value.
      */
     T getId();
 
     /**
-     * Returns the string representation of the ID.
-     * Default implementation returns the string representation of the ID.
+     * Returns the string representation of the ID. Default implementation returns
+     * {@code String.valueOf(getId())}.
+     *
+     * @return the string form of the wrapped value.
      */
     default String stringValue() {
         return String.valueOf(getId());

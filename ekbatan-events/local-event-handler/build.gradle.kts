@@ -1,9 +1,12 @@
 plugins {
     `java-library`
+    id("ekbatan.publishing")
 }
 
-group = "io.ekbatan.events.localeventhandler"
-version = "0.0.1-SNAPSHOT"
+ekbatanPublishing {
+    artifactId.set("ekbatan-local-event-handler")
+    description.set("In-process EventHandler dispatch and polling job for Ekbatan outbox events.")
+}
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25

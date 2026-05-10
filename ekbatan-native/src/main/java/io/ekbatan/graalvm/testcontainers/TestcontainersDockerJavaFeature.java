@@ -37,6 +37,9 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  */
 public final class TestcontainersDockerJavaFeature implements Feature {
 
+    /** Required by GraalVM's native-image SPI; instantiated reflectively when registered via {@code META-INF/native-image}. */
+    public TestcontainersDockerJavaFeature() {}
+
     /**
      * Scan roots — packages where Jackson 2 actually walks docker-java types: the API
      * command interfaces, the API model (response) types, and the core CmdImpl classes.

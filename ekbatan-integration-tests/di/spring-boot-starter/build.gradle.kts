@@ -10,9 +10,6 @@ plugins {
     id("org.springframework.boot") version "4.0.6"
 }
 
-group = "io.ekbatan.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
@@ -52,8 +49,8 @@ extensions.configure<org.graalvm.buildtools.gradle.dsl.GraalVMExtension> {
 dependencies {
     // Pulls in widget domain + jOOQ-generated tables + Flyway migrations + the Ekbatan core /
     // local-event-handler / distributed-jobs jars.
-    implementation(project(":ekbatan-integration-tests:di:shared"))
-    implementation(project(":ekbatan-di:spring:starter"))
+    implementation(project(":ekbatan-integration-tests-di-shared"))
+    implementation(project(":ekbatan-di-spring-starter"))
 
     // Test
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))

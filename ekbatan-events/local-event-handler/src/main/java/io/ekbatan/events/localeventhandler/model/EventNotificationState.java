@@ -16,8 +16,15 @@ package io.ekbatan.events.localeventhandler.model;
  * are never picked up again.
  */
 public enum EventNotificationState {
+    /** Initial state; row is awaiting its first delivery attempt. */
     PENDING,
+
+    /** Terminal; the handler returned normally. */
     SUCCEEDED,
+
+    /** Transient; the handler threw and the row is scheduled for retry within the cap. */
     FAILED,
+
+    /** Terminal; retention window elapsed without success. */
     EXPIRED
 }

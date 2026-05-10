@@ -120,6 +120,13 @@ public final class EventNotificationRepository {
     private final Field<ObjectNode> actionParamsField;
     private final Field<ObjectNode> payloadField;
 
+    /**
+     * Constructs the repository against a database registry. Dialect-specific jOOQ field
+     * descriptors are chosen at construction time based on the default transaction manager's
+     * dialect, so per-row reads/writes pay no dialect-detection cost.
+     *
+     * @param databaseRegistry the registry of per-shard connection pools / transaction managers.
+     */
     public EventNotificationRepository(DatabaseRegistry databaseRegistry) {
         this.databaseRegistry = Validate.notNull(databaseRegistry, "databaseRegistry cannot be null");
         final var defaultTm = databaseRegistry.defaultTransactionManager();
@@ -202,6 +209,9 @@ public final class EventNotificationRepository {
      * already been processed (and have notification rows on primary). Letting the database
      * skip the duplicate rows is cheaper and clearer than catching the constraint violation
      * application-side.
+     *
+     * @param notifications the notification rows to insert.
+     * @param shard the shard the rows live on.
      */
     public void addAllNoResult(Collection<EventNotification> notifications, ShardIdentifier shard) {
         if (notifications.isEmpty()) return;
@@ -257,6 +267,11 @@ public final class EventNotificationRepository {
      * {@code next_retry_at <= now}), ordered by {@code next_retry_at} ascending. Each row
      * is fully self-contained — the dispatch job invokes the handler from this alone with
      * no further DB reads.
+     *
+     * @param shard the shard to read from.
+     * @param limit max rows to return.
+     * @param now wall-clock cutoff for {@code next_retry_at}.
+     * @return the matching notification rows, in chronological order.
      */
     public List<EventNotification> findDue(ShardIdentifier shard, int limit, Instant now) {
         return readonlyDb(shard)
@@ -312,6 +327,10 @@ public final class EventNotificationRepository {
     /**
      * Mark a set of notifications as SUCCEEDED, incrementing {@code attempts} by one for each
      * row in SQL. Empty input is a no-op.
+     *
+     * @param ids the notification ids to mark.
+     * @param now the timestamp to record as {@code updated_date}.
+     * @param shard the shard the rows live on.
      */
     public void markSucceededAll(Collection<UUID> ids, Instant now, ShardIdentifier shard) {
         if (ids.isEmpty()) return;
@@ -329,6 +348,11 @@ public final class EventNotificationRepository {
      * incrementing {@code attempts} by one for each row in SQL. Caller buckets by the rows'
      * existing {@code attempts} so each bucket can use a single resolved retry timestamp.
      * Empty input is a no-op.
+     *
+     * @param ids the notification ids to mark.
+     * @param nextRetryAt the resolved next-retry timestamp for the bucket.
+     * @param now the timestamp to record as {@code updated_date}.
+     * @param shard the shard the rows live on.
      */
     public void markFailedBucket(Collection<UUID> ids, Instant nextRetryAt, Instant now, ShardIdentifier shard) {
         if (ids.isEmpty()) return;
@@ -345,6 +369,10 @@ public final class EventNotificationRepository {
     /**
      * Mark notifications as EXPIRED via the pre-flight cap check. {@code attempts} is left
      * unchanged because the handler was never invoked for these rows. Empty input is a no-op.
+     *
+     * @param ids the notification ids to mark.
+     * @param now the timestamp to record as {@code updated_date}.
+     * @param shard the shard the rows live on.
      */
     public void markExpiredAllPreflight(Collection<UUID> ids, Instant now, ShardIdentifier shard) {
         if (ids.isEmpty()) return;
@@ -360,6 +388,10 @@ public final class EventNotificationRepository {
      * Mark notifications as EXPIRED after a failed handler invocation whose proposed retry
      * would have landed past the retention deadline. {@code attempts} is incremented by one
      * in SQL. Empty input is a no-op.
+     *
+     * @param ids the notification ids to mark.
+     * @param now the timestamp to record as {@code updated_date}.
+     * @param shard the shard the rows live on.
      */
     public void markExpiredAllPostFailure(Collection<UUID> ids, Instant now, ShardIdentifier shard) {
         if (ids.isEmpty()) return;

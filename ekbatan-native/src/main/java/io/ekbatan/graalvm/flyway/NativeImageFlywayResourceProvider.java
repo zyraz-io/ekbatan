@@ -39,13 +39,20 @@ public final class NativeImageFlywayResourceProvider implements ResourceProvider
     private final Charset encoding;
     private final Location[] locations;
 
+    /**
+     * Constructs a provider bound to the Flyway configuration's effective locations + classloader.
+     *
+     * @param locations the Flyway {@link Location}s being scanned (typically from {@code cfg.getLocations()}).
+     * @param classLoader the classloader to read resources through; native image's image-classloader at runtime.
+     * @param encoding the migration-file character encoding (Flyway default is UTF-8).
+     */
     public NativeImageFlywayResourceProvider(Location[] locations, ClassLoader classLoader, Charset encoding) {
         this.locations = locations;
         this.classLoader = classLoader;
         this.encoding = encoding;
     }
 
-    /** Returns true when the current process is running as a GraalVM native image. */
+    /** {@return true when the current process is running as a GraalVM native image} */
     public static boolean inNativeImage() {
         return System.getProperty("org.graalvm.nativeimage.imagecode") != null;
     }
@@ -60,10 +67,14 @@ public final class NativeImageFlywayResourceProvider implements ResourceProvider
         try (FileSystem fs = FileSystems.newFileSystem(URI.create("resource:/"), Map.of())) {
             List<LoadableResource> out = new ArrayList<>();
             for (Location loc : locations) {
-                if (!loc.isClassPath()) {
+                // Flyway 11.x deprecated the type-check methods (isClassPath / isFileSystem / etc.)
+                // in favor of a single prefix string; the canonical classpath prefix is "classpath:".
+                if (!"classpath:".equals(loc.getPrefix())) {
                     continue;
                 }
-                Path root = fs.getPath("/", loc.getPath());
+                // getRootPath() is the 11.x replacement for getPath() — always a real path component,
+                // never a wildcard expression.
+                Path root = fs.getPath("/", loc.getRootPath());
                 if (!Files.isDirectory(root)) {
                     continue;
                 }

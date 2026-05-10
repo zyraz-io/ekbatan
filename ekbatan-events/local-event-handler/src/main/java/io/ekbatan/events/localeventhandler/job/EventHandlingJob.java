@@ -146,7 +146,10 @@ public final class EventHandlingJob extends DistributedJob {
 
     /**
      * One round: launch one virtual-thread fork per shard, each draining a single batch.
-     * Wait for all forks. Returns whether any fork processed notifications.
+     * Wait for all forks.
+     *
+     * @return {@code true} if any shard processed at least one notification in this round.
+     * @throws InterruptedException if the calling thread is interrupted while waiting for forks.
      */
     public boolean drainOneRound() throws InterruptedException {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -308,10 +311,12 @@ public final class EventHandlingJob extends DistributedJob {
                 || Thread.currentThread().isInterrupted();
     }
 
+    /** {@return a fresh builder for {@link EventHandlingJob}} */
     public static Builder eventHandlingJob() {
         return new Builder();
     }
 
+    /** Fluent builder for {@link EventHandlingJob}. Obtain via {@link #eventHandlingJob()}. */
     public static final class Builder {
         private String name = DEFAULT_NAME;
         private Duration pollDelay = DEFAULT_POLL_DELAY;
@@ -325,6 +330,12 @@ public final class EventHandlingJob extends DistributedJob {
 
         private Builder() {}
 
+        /**
+         * Sets the db-scheduler task name.
+         *
+         * @param name db-scheduler task name (must be cluster-unique).
+         * @return this builder, for chaining.
+         */
         public Builder name(String name) {
             this.name = name;
             return this;
@@ -334,12 +345,21 @@ public final class EventHandlingJob extends DistributedJob {
          * The duration governs both how long {@code execute()} sleeps between rounds when a
          * round produced no work, and (by way of {@link FixedDelay}) how long db-scheduler
          * waits before re-running {@code execute()} if it ever returns. Default 1 second.
+         *
+         * @param pollDelay the polling delay.
+         * @return this builder, for chaining.
          */
         public Builder pollDelay(Duration pollDelay) {
             this.pollDelay = pollDelay;
             return this;
         }
 
+        /**
+         * Sets the per-round batch size.
+         *
+         * @param batchSize max notifications read per shard per round.
+         * @return this builder, for chaining.
+         */
         public Builder batchSize(int batchSize) {
             this.batchSize = batchSize;
             return this;
@@ -348,6 +368,9 @@ public final class EventHandlingJob extends DistributedJob {
         /**
          * Upper bound on the exponential-backoff retry delay. The curve doubles from 30s and
          * is capped at this value. Default: 5 minutes.
+         *
+         * @param maxBackoffCap the cap on retry delay.
+         * @return this builder, for chaining.
          */
         public Builder maxBackoffCap(Duration maxBackoffCap) {
             this.maxBackoffCap = maxBackoffCap;
@@ -357,17 +380,32 @@ public final class EventHandlingJob extends DistributedJob {
         /**
          * How long after {@code event_date} the dispatch job will keep retrying a row before
          * giving up and transitioning it to EXPIRED. Default: 7 days.
+         *
+         * @param retentionWindow the retention window.
+         * @return this builder, for chaining.
          */
         public Builder retentionWindow(Duration retentionWindow) {
             this.retentionWindow = retentionWindow;
             return this;
         }
 
+        /**
+         * Sets the database registry.
+         *
+         * @param databaseRegistry the per-shard connection pools / transaction managers.
+         * @return this builder, for chaining.
+         */
         public Builder databaseRegistry(DatabaseRegistry databaseRegistry) {
             this.databaseRegistry = databaseRegistry;
             return this;
         }
 
+        /**
+         * Sets the event handler registry.
+         *
+         * @param eventHandlerRegistry the registry of handlers used to dispatch notifications.
+         * @return this builder, for chaining.
+         */
         public Builder eventHandlerRegistry(EventHandlerRegistry eventHandlerRegistry) {
             this.eventHandlerRegistry = eventHandlerRegistry;
             return this;
@@ -378,17 +416,27 @@ public final class EventHandlingJob extends DistributedJob {
          * {@code payload} into the handler's typed event class. The same mapper used by the
          * persister at write time should normally be passed here so round-tripping just
          * works.
+         *
+         * @param objectMapper the Jackson mapper.
+         * @return this builder, for chaining.
          */
         public Builder objectMapper(ObjectMapper objectMapper) {
             this.objectMapper = objectMapper;
             return this;
         }
 
+        /**
+         * Sets the clock.
+         *
+         * @param clock the system clock used for retention/backoff timestamps.
+         * @return this builder, for chaining.
+         */
         public Builder clock(Clock clock) {
             this.clock = clock;
             return this;
         }
 
+        /** {@return a configured {@link EventHandlingJob}} */
         public EventHandlingJob build() {
             return new EventHandlingJob(this);
         }

@@ -30,6 +30,9 @@ import org.springframework.core.type.filter.AnnotationTypeFilter;
 public final class EkbatanStereotypeBeanRegistrar
         implements ImportBeanDefinitionRegistrar, BeanFactoryAware, EnvironmentAware {
 
+    /** Required by Spring; instantiated reflectively when imported via {@code @Import(EkbatanStereotypeBeanRegistrar.class)}. */
+    public EkbatanStereotypeBeanRegistrar() {}
+
     private static final List<Class<? extends Annotation>> SINGLETON_STEREOTYPES =
             List.of(EkbatanRepository.class, EkbatanEventHandler.class, EkbatanDistributedJob.class);
 

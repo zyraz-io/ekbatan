@@ -6,7 +6,18 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
+/**
+ * jOOQ converter mapping SQL {@code JSON} (MySQL / MariaDB) to Jackson 3's
+ * {@link ObjectNode}. Use for object-typed JSON columns; for array-typed columns use
+ * {@link JSONArrayNodeConverter}.
+ *
+ * <p>For Postgres {@code JSONB} columns, use {@link JSONBObjectNodeConverter} instead — the
+ * jOOQ wrapper type differs.
+ */
 public class JSONObjectNodeConverter implements Converter<JSON, ObjectNode> {
+
+    /** Constructs the converter; jOOQ instantiates it reflectively when wired through {@code forcedTypes}. */
+    public JSONObjectNodeConverter() {}
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 

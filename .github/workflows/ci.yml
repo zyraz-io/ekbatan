@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Manual "Run workflow" button in the Actions UI (and `gh workflow run ci.yml`). The dropdown
+  # lists branches; for re-running CI on a specific PR, use the per-run "Re-run" button instead.
+  workflow_dispatch:
+
+# Cancel in-progress runs when a new commit is pushed to the same branch / PR.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & test (Java 25, Ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Integration tests need Docker (testcontainers spins up Postgres / MariaDB / MySQL /
+    # Redis / Kafka). GitHub-hosted ubuntu runners ship with Docker pre-installed and
+    # running, so no extra setup needed.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # Cache Gradle wrapper + dependencies + build cache. Saves ~2-3 min per build.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: clean build
+        run: ./gradlew clean build --stacktrace
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/reports/checkstyle/**
+            **/build/test-results/**
+          retention-days: 7

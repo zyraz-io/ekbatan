@@ -3,9 +3,6 @@ plugins {
     id("io.quarkus") version "3.34.6"
 }
 
-group = "io.ekbatan.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
@@ -25,9 +22,9 @@ repositories {
 configurations.all {
     resolutionStrategy.dependencySubstitution {
         substitute(module("io.ekbatan:ekbatan-di-quarkus-runtime"))
-            .using(project(":ekbatan-di:quarkus:runtime"))
+            .using(project(":ekbatan-di-quarkus-runtime"))
         substitute(module("io.ekbatan:ekbatan-di-quarkus-deployment"))
-            .using(project(":ekbatan-di:quarkus:deployment"))
+            .using(project(":ekbatan-di-quarkus-deployment"))
     }
 }
 
@@ -47,17 +44,16 @@ dependencies {
     // Spring Boot and Micronaut consumers don't have a split classloader, so they inherit
     // `:di:shared`'s full transitive graph as-is — these excludes are scoped to the Quarkus
     // consumer only.
-    implementation(project(":ekbatan-integration-tests:di:shared")) {
-        exclude(group = "io.ekbatan.core", module = "ekbatan-core")
-        exclude(group = "io.ekbatan", module = "bootstrap")
-        exclude(group = "io.ekbatan", module = "annotations")
-        exclude(group = "io.ekbatan.events.localeventhandler", module = "local-event-handler")
-        exclude(group = "io.ekbatan.distributedjobs", module = "ekbatan-distributed-jobs")
+    implementation(project(":ekbatan-integration-tests-di-shared")) {
+        exclude(group = "io.github.zyraz-io", module = "ekbatan-core")
+        exclude(group = "io.github.zyraz-io", module = "ekbatan-di-annotations")
+        exclude(group = "io.github.zyraz-io", module = "ekbatan-events-local-event-handler")
+        exclude(group = "io.github.zyraz-io", module = "ekbatan-distributed-jobs")
     }
     // All Ekbatan internal modules + jOOQ + Jackson + JDBC etc. come transitively via this
     // jar's `api()` graph (the extension is the single source of truth for those deps; the
     // `:di:shared` excludes above prevent the user-side path from re-introducing them).
-    implementation(project(":ekbatan-di:quarkus:runtime"))
+    implementation(project(":ekbatan-di-quarkus-runtime"))
 
     // REST surface for the native integration test. @QuarkusIntegrationTest runs the packaged
     // binary out-of-process, so @Inject can't bridge to the test JVM — the test must drive

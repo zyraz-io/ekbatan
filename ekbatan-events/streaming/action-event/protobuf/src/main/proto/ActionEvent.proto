@@ -19,4 +19,5 @@ message ActionEvent {
   optional string event_type = 10;
   optional bytes payload = 11;
   int64 event_date = 12;
+  bool delivered = 13;
 }

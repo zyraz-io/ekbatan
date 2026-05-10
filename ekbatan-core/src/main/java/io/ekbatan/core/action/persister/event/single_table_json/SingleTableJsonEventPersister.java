@@ -17,6 +17,18 @@ import org.apache.commons.lang3.Validate;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
+/**
+ * Default {@link EventPersister}: writes every model event (and a sentinel row for actions
+ * that emit none) into a single {@code eventlog.events} table with JSON payload. Action
+ * params are also stored as JSON on every emitted row, so a single eventlog row carries the
+ * full audit trail for its action.
+ *
+ * <p>This is the simplest event-storage shape — one table per shard, schema-less payloads
+ * via JSON — and matches the default Flyway migration scripts. Applications that want
+ * separate {@code action_events} / {@code model_events} tables, or non-JSON payloads, replace
+ * this with their own {@link EventPersister} implementation passed to
+ * {@link io.ekbatan.core.action.ActionExecutor.Builder#eventPersister(EventPersister)}.
+ */
 public class SingleTableJsonEventPersister implements EventPersister {
 
     private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
@@ -24,6 +36,12 @@ public class SingleTableJsonEventPersister implements EventPersister {
     private final EventEntityRepository eventRepository;
     private final ObjectMapper objectMapper;
 
+    /**
+     * Constructs the persister.
+     *
+     * @param databaseRegistry the registry of per-shard connection pools / transaction managers.
+     * @param objectMapper the Jackson mapper used to serialize event payloads to JSON.
+     */
     public SingleTableJsonEventPersister(DatabaseRegistry databaseRegistry, ObjectMapper objectMapper) {
         Validate.notNull(databaseRegistry, "databaseRegistry cannot be null");
         this.eventRepository = new EventEntityRepository(databaseRegistry);

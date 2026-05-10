@@ -17,9 +17,35 @@ import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.util.List;
 
+/**
+ * Quarkus runtime CDI producer class for Ekbatan's distributed job scheduler. Discovered at
+ * deployment time only when {@code JobRegistry} is present at runtime (see
+ * {@code EkbatanProcessor.registerDistributedJobsProducers}); produces the
+ * {@link JobRegistry} and its dedicated {@code ekbatanJobsConnectionProvider}.
+ *
+ * <p>Requires a {@code jobsConfig} {@link io.ekbatan.core.config.DataSourceConfig} under the
+ * default shard's member — db-scheduler holds its own connection pool separate from the
+ * main {@code DatabaseRegistry} to isolate job polling from application traffic.
+ *
+ * <p>Wired into the Quarkus lifecycle via {@link StartupEvent} / {@link ShutdownEvent}
+ * observers — the scheduler thread starts when the app starts and shuts down cleanly when
+ * the app shuts down.
+ */
 @Singleton
 public class EkbatanDistributedJobsConfiguration {
 
+    /** Required by CDI; the container instantiates this bean class to invoke its producer methods. */
+    public EkbatanDistributedJobsConfiguration() {}
+
+    /**
+     * Produces the dedicated {@link ConnectionProvider} used by the job scheduler. Kept separate
+     * from the main {@link io.ekbatan.core.shard.DatabaseRegistry} pools so job polling load can't
+     * starve application traffic (or vice versa).
+     *
+     * @param shardingConfig the sharding configuration — the jobs datasource is read from the
+     *     default shard's member under {@code configs.jobsConfig}.
+     * @return a Hikari-backed provider; closed by {@link #closeJobsConnectionProvider}.
+     */
     @Produces
     @Singleton
     @Named("ekbatanJobsConnectionProvider")
@@ -39,11 +65,28 @@ public class EkbatanDistributedJobsConfiguration {
         return ConnectionProvider.hikariConnectionProvider(jobsConfig);
     }
 
+    /**
+     * CDI disposer for {@link #ekbatanJobsConnectionProvider} — closes the dedicated Hikari pool
+     * for the job scheduler at shutdown.
+     *
+     * @param provider the provider being disposed.
+     */
     public void closeJobsConnectionProvider(
             @Disposes @Named("ekbatanJobsConnectionProvider") ConnectionProvider provider) {
         provider.close();
     }
 
+    /**
+     * Builds the {@link JobRegistry} from every {@code @EkbatanDistributedJob}-annotated bean,
+     * applying the application's {@code ekbatan.jobs.*} tuning (poll interval, heartbeat,
+     * shutdown grace period). Scheduler start/stop is wired separately via the
+     * {@link StartupEvent} / {@link ShutdownEvent} observers below.
+     *
+     * @param jobsConnectionProvider the dedicated provider produced by {@link #ekbatanJobsConnectionProvider}.
+     * @param config the Ekbatan runtime configuration (reads {@code ekbatan.jobs.*}).
+     * @param jobs the application's distributed-job beans, injected via Arc {@code @All}.
+     * @return the registry whose scheduler is started in {@link #onStartup}.
+     */
     @Produces
     @Singleton
     public JobRegistry ekbatanJobRegistry(

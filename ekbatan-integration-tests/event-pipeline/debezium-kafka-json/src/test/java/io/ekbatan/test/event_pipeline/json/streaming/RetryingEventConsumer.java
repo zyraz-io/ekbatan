@@ -140,7 +140,10 @@ public class RetryingEventConsumer implements AutoCloseable {
                         ? json.get("event_type").asString()
                         : null,
                 payload,
-                parseTimestamp(json.get("event_date")));
+                parseTimestamp(json.get("event_date")),
+                json.has("delivered")
+                        && !json.get("delivered").isNull()
+                        && json.get("delivered").asBoolean());
     }
 
     private Instant parseTimestamp(tools.jackson.databind.JsonNode node) {

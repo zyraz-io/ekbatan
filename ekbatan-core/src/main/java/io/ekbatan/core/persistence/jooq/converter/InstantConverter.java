@@ -5,7 +5,20 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import org.jooq.Converter;
 
+/**
+ * jOOQ converter mapping SQL {@code TIMESTAMP} (without time zone) to {@link Instant},
+ * treating stored values as UTC. The framework's domain types use {@link Instant} everywhere
+ * for timestamp fields ({@code createdDate}, {@code updatedDate}, etc.); this converter is
+ * the bridge for any column generated as {@code TIMESTAMP} rather than {@code TIMESTAMPTZ}.
+ *
+ * <p>Wire-up: register via jOOQ codegen's {@code forcedTypes} block — see the integration-test
+ * modules' {@code build.gradle.kts} for an example.
+ */
 public class InstantConverter implements Converter<LocalDateTime, Instant> {
+
+    /** Constructs the converter; jOOQ instantiates it reflectively when wired through {@code forcedTypes}. */
+    public InstantConverter() {}
+
     @Override
     public Instant from(LocalDateTime databaseObject) {
         if (databaseObject == null) {

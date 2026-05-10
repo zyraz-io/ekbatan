@@ -3,9 +3,6 @@ plugins {
     id("io.micronaut.library") version "4.6.1"
 }
 
-group = "io.ekbatan.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
@@ -21,14 +18,14 @@ micronaut {
 
 dependencies {
     // Widget domain + jOOQ-generated tables + Flyway migrations + Ekbatan core/events/jobs.
-    implementation(project(":ekbatan-integration-tests:di:shared"))
-    implementation(project(":ekbatan-di:micronaut"))
+    implementation(project(":ekbatan-integration-tests-di-shared"))
+    implementation(project(":ekbatan-di-micronaut"))
 
     // Same jar on the AP path: the EkbatanStereotypeVisitor needs to be visible to
     // micronaut-inject-java when the di:shared module's @EkbatanAction classes are compiled.
     // Without this, the user-side annotations don't lift to @Singleton and Micronaut treats the
     // classes as plain non-beans.
-    annotationProcessor(project(":ekbatan-di:micronaut"))
+    annotationProcessor(project(":ekbatan-di-micronaut"))
 
     // Test
     testImplementation("io.micronaut.test:micronaut-test-junit5")

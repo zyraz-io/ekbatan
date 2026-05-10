@@ -7,9 +7,6 @@ plugins {
     id("dev.monosoul.jooq-docker") version "8.0.9"
 }
 
-group = "io.ekbatan.core.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
@@ -93,7 +90,7 @@ dependencies {
     testImplementation("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:${project.property("junitPlatformLauncherVersion")}")
 
-    testImplementation(testFixtures(project(":ekbatan-integration-tests:core-repo:shared")))
+    testImplementation(testFixtures(project(":ekbatan-integration-tests-core-repo-shared")))
     testImplementation("org.testcontainers:testcontainers:${project.property("testcontainersVersion")}")
     testImplementation("org.testcontainers:testcontainers-mysql:${project.property("testcontainersVersion")}")
 

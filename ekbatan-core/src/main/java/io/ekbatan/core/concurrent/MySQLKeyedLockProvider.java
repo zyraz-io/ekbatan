@@ -192,21 +192,30 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
 
     private record MySQLPayload(String userKey, String hashedKey, Connection connection) {}
 
+    /** Fluent builder for {@link MySQLKeyedLockProvider}. Obtain via {@link #mySQLKeyedLockProvider()}. */
     public static final class Builder {
 
         private ConnectionProvider connectionProvider;
 
         private Builder() {}
 
+        /** {@return a fresh builder for {@link MySQLKeyedLockProvider}} */
         public static Builder mySQLKeyedLockProvider() {
             return new Builder();
         }
 
+        /**
+         * Sets the database connection provider.
+         *
+         * @param connectionProvider the provider whose pool the locks will run on.
+         * @return this builder, for chaining.
+         */
         public Builder connectionProvider(ConnectionProvider connectionProvider) {
             this.connectionProvider = connectionProvider;
             return this;
         }
 
+        /** {@return a configured {@link MySQLKeyedLockProvider}} */
         public MySQLKeyedLockProvider build() {
             return new MySQLKeyedLockProvider(this);
         }

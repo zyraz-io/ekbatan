@@ -9,8 +9,8 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  * GraalVM Native Image {@link Feature} that registers Apache Kafka client classes for
  * reflective {@code Class.forName} lookup at runtime — required because every
  * {@code KafkaConsumer} / {@code KafkaProducer} / {@code AdminClient} construction walks
- * its {@link org.apache.kafka.common.config.ConfigDef ConfigDef} and validates each
- * config key whose default is a class name by calling {@code Class.forName} on it.
+ * its {@code ConfigDef} and validates each config key whose default is a class name by
+ * calling {@code Class.forName} on it.
  *
  * <p><b>Why</b>: the upstream Kafka client RMR
  * ({@code oracle/graalvm-reachability-metadata}, latest metadata-version 3.5.1) is years
@@ -27,6 +27,9 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  * native binaries that don't talk to Kafka pay nothing.
  */
 public final class KafkaClientsFeature implements Feature {
+
+    /** Required by GraalVM's native-image SPI; instantiated reflectively when registered via {@code META-INF/native-image}. */
+    public KafkaClientsFeature() {}
 
     /**
      * Scan roots — only the namespaces where Kafka 4.x ConfigDef defaults can name a class:

@@ -16,17 +16,29 @@ import org.apache.commons.lang3.Validate;
  */
 public class ActionRegistry {
 
+    /** Immutable map from action class to its singleton instance; populated at startup, read by {@code ActionExecutor}. */
     public final Map<Class<? extends Action<?, ?>>, Action<?, ?>> actions;
 
     private ActionRegistry(Builder builder) {
         this.actions = builder.actions.build();
     }
 
+    /**
+     * Resolves the singleton instance for an action class.
+     *
+     * @param actionClass the action class to look up.
+     * @param <P> the action's parameter type.
+     * @param <R> the action's result type.
+     * @param <A> the concrete action type.
+     * @return the registered instance.
+     * @throws NullPointerException if no instance is registered for {@code actionClass}.
+     */
     @SuppressWarnings("unchecked")
     public <P, R, A extends Action<P, R>> A get(Class<A> actionClass) {
         return (A) Validate.notNull(actions.get(actionClass), "No action registered for class");
     }
 
+    /** Fluent builder for {@link ActionRegistry}. Obtain via {@link #actionRegistry()}. */
     public static final class Builder {
 
         private final ImmutableMap.Builder<Class<? extends Action<?, ?>>, Action<?, ?>> actions =
@@ -34,10 +46,21 @@ public class ActionRegistry {
 
         private Builder() {}
 
+        /** {@return a fresh builder for {@link ActionRegistry}} */
         public static Builder actionRegistry() {
             return new Builder();
         }
 
+        /**
+         * Registers a single action instance against its class.
+         *
+         * @param actionClass the action class (used as the lookup key).
+         * @param action the singleton instance.
+         * @param <P> the action's parameter type.
+         * @param <R> the action's result type.
+         * @param <A> the concrete action type.
+         * @return this builder, for chaining.
+         */
         public <P, R, A extends Action<P, R>> Builder withAction(Class<A> actionClass, A action) {
             Validate.notNull(actionClass, "actionClass cannot be null");
             Validate.notNull(action, "action cannot be null");
@@ -45,6 +68,12 @@ public class ActionRegistry {
             return this;
         }
 
+        /**
+         * Registers a batch of action instances; each is keyed by its concrete runtime class.
+         *
+         * @param actions the action instances; their {@code getClass()} provides the registry key.
+         * @return this builder, for chaining.
+         */
         @SuppressWarnings({"unchecked", "rawtypes"})
         public Builder withActions(Collection<? extends Action<?, ?>> actions) {
             Validate.notNull(actions, "actions cannot be null");
@@ -55,6 +84,7 @@ public class ActionRegistry {
             return this;
         }
 
+        /** {@return a built {@link ActionRegistry}} */
         public ActionRegistry build() {
             return new ActionRegistry(this);
         }

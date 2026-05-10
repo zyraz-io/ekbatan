@@ -21,9 +21,6 @@ plugins {
     id("dev.monosoul.jooq-docker") version "8.0.9"
 }
 
-group = "io.ekbatan.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
@@ -65,8 +62,8 @@ tasks {
 
 dependencies {
     api(project(":ekbatan-core"))
-    api(project(":ekbatan-di:annotations"))
-    api(project(":ekbatan-events:local-event-handler"))
+    api(project(":ekbatan-di-annotations"))
+    api(project(":ekbatan-events-local-event-handler"))
     api(project(":ekbatan-distributed-jobs"))
 
     // Micronaut compile-time bean processing — runs the EkbatanStereotypeVisitor at *this*
@@ -77,7 +74,7 @@ dependencies {
     // not classpath dependencies). Inert for Spring and Quarkus consumers — they don't read
     // Micronaut's BeanDefinitionReference files.
     annotationProcessor("io.micronaut:micronaut-inject-java:${project.property("micronautVersion")}")
-    annotationProcessor(project(":ekbatan-di:micronaut"))
+    annotationProcessor(project(":ekbatan-di-micronaut"))
     compileOnly("io.micronaut:micronaut-inject:${project.property("micronautVersion")}")
 
     api("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")

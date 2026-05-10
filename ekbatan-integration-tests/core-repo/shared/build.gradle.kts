@@ -8,9 +8,6 @@ plugins {
     id("dev.monosoul.jooq-docker") version "8.0.9"
 }
 
-group = "io.ekbatan.core.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25

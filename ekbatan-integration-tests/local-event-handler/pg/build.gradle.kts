@@ -6,9 +6,6 @@ plugins {
     id("dev.monosoul.jooq-docker") version "8.0.9"
 }
 
-group = "io.ekbatan.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
@@ -49,7 +46,7 @@ tasks {
 dependencies {
     implementation(project(":ekbatan-core"))
     implementation(project(":ekbatan-distributed-jobs"))
-    implementation(project(":ekbatan-events:local-event-handler"))
+    implementation(project(":ekbatan-events-local-event-handler"))
 
     implementation("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
     implementation("org.jooq:jooq-meta")
@@ -63,7 +60,7 @@ dependencies {
 
     implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
 
-    testImplementation(testFixtures(project(":ekbatan-integration-tests:local-event-handler:shared")))
+    testImplementation(testFixtures(project(":ekbatan-integration-tests-local-event-handler-shared")))
     testImplementation(testFixtures(project(":ekbatan-core")))
 
     testImplementation("org.testcontainers:testcontainers-postgresql:${project.property("testcontainersVersion")}")

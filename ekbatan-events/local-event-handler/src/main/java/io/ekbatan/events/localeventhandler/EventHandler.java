@@ -21,10 +21,12 @@ public interface EventHandler<E extends ModelEvent<?>> {
      * Cluster-stable identifier for this handler. Stored in
      * {@code event_notifications.handler_name}; renaming a deployed handler effectively
      * makes it a new handler (existing rows for the old name will eventually expire).
+     *
+     * @return the handler's stable name.
      */
     String name();
 
-    /** The {@link ModelEvent} subtype this handler subscribes to. */
+    /** {@return the {@link ModelEvent} subtype this handler subscribes to} */
     Class<E> eventType();
 
     /**
@@ -34,6 +36,9 @@ public interface EventHandler<E extends ModelEvent<?>> {
      * failure and schedule a retry, subject to the {@code maxBackoffCap} backoff and the
      * {@code retentionWindow} cap (after which the row is transitioned to {@code EXPIRED}
      * and never invoked again).
+     *
+     * @param envelope the delivery's typed payload plus its surrounding action context.
+     * @throws Exception any exception is treated as a failed delivery and triggers a retry.
      */
     void handle(EventEnvelope<E> envelope) throws Exception;
 }

@@ -18,7 +18,10 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public final class ShardedUUID implements ShardAwareId {
 
+    /** Number of bits the shard group is encoded into. */
     public static final int GROUP_BITS = 8;
+
+    /** Number of bits the shard member is encoded into. */
     public static final int MEMBER_BITS = 6;
 
     private static final int SHARD_BITS = GROUP_BITS + MEMBER_BITS;
@@ -30,14 +33,28 @@ public final class ShardedUUID implements ShardAwareId {
         this.value = value;
     }
 
+    /** {@return the underlying {@link UUID} value} */
     public UUID value() {
         return value;
     }
 
+    /**
+     * Wraps an arbitrary UUID (typically read back from storage) without re-checking that the
+     * shard bits are valid.
+     *
+     * @param uuid the UUID to wrap.
+     * @return a {@code ShardedUUID} backed by {@code uuid}.
+     */
     public static ShardedUUID from(UUID uuid) {
         return new ShardedUUID(uuid);
     }
 
+    /**
+     * Generates a fresh UUID v7 with the given shard encoded in its rand_b region.
+     *
+     * @param shard the shard to encode.
+     * @return a fresh sharded UUID.
+     */
     public static ShardedUUID generate(ShardIdentifier shard) {
         long timestamp = System.currentTimeMillis();
 
@@ -70,6 +87,8 @@ public final class ShardedUUID implements ShardAwareId {
 
     /**
      * Extracts the millisecond Unix timestamp encoded in the UUID v7 MSB.
+     *
+     * @return the encoded timestamp as an {@link Instant}.
      */
     public Instant instant() {
         long timestampMs = value.getMostSignificantBits() >>> 16;

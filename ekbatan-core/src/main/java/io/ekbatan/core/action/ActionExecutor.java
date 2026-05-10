@@ -28,6 +28,51 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.databind.ObjectMapper;
 
+/**
+ * Executes {@link Action}s atomically against the configured shards. The framework's main
+ * entry point — typical application code calls
+ * {@code actionExecutor.execute(principal, MyAction.class, params)} and never touches an
+ * {@code Action} directly.
+ *
+ * <h2>What "atomically" means</h2>
+ *
+ * <p>Each call: opens a fresh {@link ActionPlan} bound via {@code ScopedValue}, invokes
+ * {@code Action.perform(...)} (which stages additions, updates, and events on the plan),
+ * groups the staged changes by shard via each repository's
+ * {@link io.ekbatan.core.shard.ShardingStrategy}, and writes everything in
+ * {@link io.ekbatan.core.persistence.TransactionManager#inTransactionChecked} per shard. If
+ * any per-shard transaction fails, that shard rolls back. Within a single shard the domain
+ * rows and the corresponding {@code action_event} rows are committed in the same transaction
+ * — so the outbox is always consistent with the data it describes.
+ *
+ * <h2>Cross-shard behaviour</h2>
+ *
+ * <p>By default an action that touches more than one shard is rejected with
+ * {@link io.ekbatan.core.shard.CrossShardException}. Set
+ * {@link ExecutionConfiguration#allowCrossShard} to {@code true} to opt in to per-shard
+ * commits (each shard commits independently — there is no 2PC). The framework logs and
+ * traces the cross-shard count and shard set when this happens.
+ *
+ * <h2>Retries</h2>
+ *
+ * <p>Each {@code execute(...)} call is wrapped in a {@link Retry} driver keyed on the
+ * configured {@link RetryConfig}s. The default {@link ExecutionConfiguration} retries
+ * {@link io.ekbatan.core.repository.exception.StaleRecordException} once after 100ms — enough
+ * to absorb a transient optimistic-lock conflict without hiding a deeper problem. A retry
+ * builds a brand-new {@code ActionPlan} so each attempt is logically independent.
+ *
+ * <h2>Tracing</h2>
+ *
+ * <p>Every execution emits an {@code ekbatan.action.execute} OpenTelemetry span with nested
+ * {@code ekbatan.action.perform} and {@code ekbatan.action.persist} spans, tagged with action
+ * name, principal, outcome, and (when relevant) the cross-shard flag and shard set.
+ *
+ * <h2>EventPersister</h2>
+ *
+ * <p>{@link #eventPersister} is exposed as a {@code public final} field so applications that
+ * want to write events outside of an action (e.g. a backfill job replaying historical state)
+ * can reuse the configured persister rather than building one ad-hoc.
+ */
 public class ActionExecutor {
 
     private static final Logger LOG = LoggerFactory.getLogger(ActionExecutor.class);
@@ -37,7 +82,9 @@ public class ActionExecutor {
     private final DatabaseRegistry databaseRegistry;
     private final ActionRegistry actionRegistry;
     private final RepositoryRegistry repositoryRegistry;
+    /** The event persister installed in this executor; exposed so tests can verify its identity. */
     public final EventPersister eventPersister;
+
     private final ChangePersister changePersister;
     private final Clock clock;
     private final ExecutionConfiguration defaultExecutionConfiguration;
@@ -60,11 +107,39 @@ public class ActionExecutor {
                 Validate.notNull(builder.defaultExecutionConfiguration, "defaultExecutionConfiguration is required");
     }
 
+    /**
+     * Executes an action with the configured default {@link ExecutionConfiguration}. The
+     * action's plan and any emitted events are committed in a single per-shard transaction
+     * after {@code perform} returns.
+     *
+     * @param principal the caller principal (may be null).
+     * @param actionClass the action class to dispatch.
+     * @param params typed input for the action.
+     * @param <P> the action's parameter type.
+     * @param <R> the action's result type.
+     * @param <A> the concrete action type.
+     * @return the action's typed result.
+     * @throws Exception thrown by the action's {@code perform}; the plan is rolled back.
+     */
     public <P, R, A extends Action<P, R>> R execute(Principal principal, Class<A> actionClass, P params)
             throws Exception {
         return execute(principal, actionClass, params, defaultExecutionConfiguration);
     }
 
+    /**
+     * Executes an action with an explicit per-call {@link ExecutionConfiguration} (retry policy,
+     * cross-shard allowance, etc.).
+     *
+     * @param principal the caller principal (may be null).
+     * @param actionClass the action class to dispatch.
+     * @param params typed input for the action.
+     * @param executionConfiguration per-call execution policy.
+     * @param <P> the action's parameter type.
+     * @param <R> the action's result type.
+     * @param <A> the concrete action type.
+     * @return the action's typed result.
+     * @throws Exception thrown by the action's {@code perform}; the plan is rolled back.
+     */
     public <P, R, A extends Action<P, R>> R execute(
             Principal principal, Class<A> actionClass, P params, ExecutionConfiguration executionConfiguration)
             throws Exception {
@@ -245,6 +320,7 @@ public class ActionExecutor {
         }
     }
 
+    /** Fluent builder for {@link ActionExecutor}. Obtain via {@link #actionExecutor()}. */
     public static final class Builder {
         private String namespace;
         private DatabaseRegistry databaseRegistry;
@@ -258,50 +334,101 @@ public class ActionExecutor {
 
         private Builder() {}
 
+        /**
+         * Sets the namespace recorded on every persisted event. Required.
+         *
+         * @param namespace logical namespace string.
+         * @return this builder, for chaining.
+         */
         public Builder namespace(String namespace) {
             this.namespace = namespace;
             return this;
         }
 
+        /** {@return a fresh builder for {@link ActionExecutor}} */
         public static Builder actionExecutor() {
             return new Builder();
         }
 
+        /**
+         * Sets the database registry. Required.
+         *
+         * @param databaseRegistry the registry of per-shard pools / transaction managers.
+         * @return this builder, for chaining.
+         */
         public Builder databaseRegistry(DatabaseRegistry databaseRegistry) {
             this.databaseRegistry = databaseRegistry;
             return this;
         }
 
+        /**
+         * Sets the Jackson mapper used to serialize event payloads. Required.
+         *
+         * @param objectMapper a configured Jackson {@link ObjectMapper}.
+         * @return this builder, for chaining.
+         */
         public Builder objectMapper(ObjectMapper objectMapper) {
             this.objectMapper = objectMapper;
             return this;
         }
 
+        /**
+         * Sets the repository registry. Required.
+         *
+         * @param repositoryRegistry the registry of {@code @EkbatanRepository}s.
+         * @return this builder, for chaining.
+         */
         public Builder repositoryRegistry(RepositoryRegistry repositoryRegistry) {
             this.repositoryRegistry = repositoryRegistry;
             return this;
         }
 
+        /**
+         * Sets the action registry. Required.
+         *
+         * @param actionRegistry the registry of {@code @EkbatanAction}s.
+         * @return this builder, for chaining.
+         */
         public Builder actionRegistry(ActionRegistry actionRegistry) {
             this.actionRegistry = actionRegistry;
             return this;
         }
 
+        /**
+         * Overrides the default {@link EventPersister} (single-table JSON). Useful for callers
+         * that need to encrypt payloads or write to a custom table layout.
+         *
+         * @param eventPersister a custom persister; pass null to keep the default.
+         * @return this builder, for chaining.
+         */
         public Builder eventPersister(EventPersister eventPersister) {
             this.eventPersister = eventPersister;
             return this;
         }
 
+        /**
+         * Sets the clock used for event timestamps. Defaults to {@link Clock#systemUTC()}.
+         *
+         * @param clock the clock.
+         * @return this builder, for chaining.
+         */
         public Builder clock(Clock clock) {
             this.clock = clock;
             return this;
         }
 
+        /**
+         * Sets the default per-call execution configuration (retry policy, cross-shard policy).
+         *
+         * @param defaultExecutionConfiguration the default configuration.
+         * @return this builder, for chaining.
+         */
         public Builder defaultExecutionConfiguration(ExecutionConfiguration defaultExecutionConfiguration) {
             this.defaultExecutionConfiguration = defaultExecutionConfiguration;
             return this;
         }
 
+        /** {@return a configured {@link ActionExecutor}; throws if required fields are unset} */
         public ActionExecutor build() {
             return new ActionExecutor(this);
         }

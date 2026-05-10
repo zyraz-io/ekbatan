@@ -59,10 +59,12 @@ public final class JobRegistry {
         LOG.info("JobRegistry stopped");
     }
 
+    /** {@return a fresh builder for {@link JobRegistry}} */
     public static Builder jobRegistry() {
         return new Builder();
     }
 
+    /** Fluent builder for {@link JobRegistry}. Obtain via {@link #jobRegistry()}. */
     public static final class Builder {
 
         private ConnectionProvider connectionProvider;
@@ -75,27 +77,61 @@ public final class JobRegistry {
 
         private Builder() {}
 
+        /**
+         * Sets the database connection provider that db-scheduler will poll. Required. Should
+         * typically wrap a <em>dedicated</em> pool isolated from application traffic.
+         *
+         * @param cp the provider; caller retains ownership of the underlying pool.
+         * @return this builder, for chaining.
+         */
         public Builder connectionProvider(ConnectionProvider cp) {
             this.connectionProvider = cp;
             return this;
         }
 
+        /**
+         * Adds a single job to the registry. Equivalent to {@code withJobs(List.of(job))}.
+         *
+         * @param job the job to schedule.
+         * @return this builder, for chaining.
+         */
         public Builder withJob(DistributedJob job) {
             this.jobs.add(job);
             return this;
         }
 
+        /**
+         * Adds a batch of jobs to the registry. Job {@code name()}s must be unique within the
+         * resulting registry — duplicates fail {@link #build()}.
+         *
+         * @param jobs the jobs to schedule; must not be null.
+         * @return this builder, for chaining.
+         */
         public Builder withJobs(Collection<? extends DistributedJob> jobs) {
             Validate.notNull(jobs, "jobs cannot be null");
             this.jobs.addAll(jobs);
             return this;
         }
 
+        /**
+         * Sets db-scheduler's polling interval. Default is db-scheduler's
+         * {@code DEFAULT_POLLING_INTERVAL}.
+         *
+         * @param d the polling interval.
+         * @return this builder, for chaining.
+         */
         public Builder pollInterval(Duration d) {
             this.pollInterval = d;
             return this;
         }
 
+        /**
+         * Sets db-scheduler's heartbeat interval. Heartbeats let other instances detect a crashed
+         * worker; default is 10 seconds.
+         *
+         * @param d the heartbeat interval.
+         * @return this builder, for chaining.
+         */
         public Builder heartbeatInterval(Duration d) {
             this.heartbeatInterval = d;
             return this;
@@ -104,12 +140,22 @@ public final class JobRegistry {
         /**
          * Maximum time {@link #stop()} will wait for in-flight executions to finish before
          * forcing termination. db-scheduler's default is 30 min — useful to lower in tests.
+         *
+         * @param d the max wait duration at shutdown.
+         * @return this builder, for chaining.
          */
         public Builder shutdownMaxWait(Duration d) {
             this.shutdownMaxWait = d;
             return this;
         }
 
+        /**
+         * Whether to install a JVM shutdown hook that calls {@link #stop()}. Default true; pass
+         * {@code false} when the host application (Spring / Quarkus / Micronaut) owns shutdown.
+         *
+         * @param enabled true to install the JVM shutdown hook.
+         * @return this builder, for chaining.
+         */
         public Builder registerShutdownHook(boolean enabled) {
             this.registerShutdownHook = enabled;
             return this;
@@ -121,12 +167,16 @@ public final class JobRegistry {
          * strategy). Applied <em>last</em> in {@link #build()}, so anything set here wins
          * over Ekbatan's defaults. Use sparingly — overriding {@code executorService} or
          * {@code threads} defeats the framework's threading model.
+         *
+         * @param customizer a callback that mutates the underlying {@link SchedulerBuilder}.
+         * @return this builder, for chaining.
          */
         public Builder customizeScheduler(Consumer<SchedulerBuilder> customizer) {
             this.schedulerCustomizer = customizer;
             return this;
         }
 
+        /** {@return a configured {@link JobRegistry}; throws if required fields are unset or job names collide} */
         public JobRegistry build() {
             Validate.notNull(connectionProvider, "connectionProvider is required");
             Validate.notEmpty(jobs, "at least one DistributedJob must be registered");

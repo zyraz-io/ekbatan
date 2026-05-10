@@ -3,9 +3,6 @@ plugins {
     id("com.gradleup.shadow") version "9.4.1"
 }
 
-group = "io.ekbatan.events.streaming.debeziumsmt"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
@@ -35,6 +32,7 @@ tasks.withType<Test> {
 }
 
 tasks.shadowJar {
+    archiveBaseName.set("ekbatan-debezium-smt-protobuf")
     archiveClassifier.set("")
     mergeServiceFiles()
     relocate("com.google.protobuf", "io.ekbatan.shaded.protobuf")

@@ -1,9 +1,12 @@
 plugins {
     `java-library`
+    id("ekbatan.publishing")
 }
 
-group = "io.ekbatan.distributedjobs"
-version = "0.0.1-SNAPSHOT"
+ekbatanPublishing {
+    artifactId.set("ekbatan-distributed-jobs")
+    description.set("Distributed job scheduler (db-scheduler-backed) for Ekbatan.")
+}
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25

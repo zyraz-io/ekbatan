@@ -30,6 +30,9 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  */
 public final class AvroSpecificRecordFeature implements Feature {
 
+    /** Required by GraalVM's native-image SPI; instantiated reflectively when registered via {@code META-INF/native-image}. */
+    public AvroSpecificRecordFeature() {}
+
     private static final String SCAN_PACKAGES_PROPERTY = "io.ekbatan.graalvm.avro.scan.packages";
     private static final String DEFAULT_SCAN_PACKAGES = "io.ekbatan";
 

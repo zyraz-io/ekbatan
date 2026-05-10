@@ -24,14 +24,29 @@ import org.slf4j.LoggerFactory;
  * <p>Same thread + same key acquires never contend with each other (sequential by thread). The
  * only contention is between a thread re-entering / closing and the watchdog firing on a
  * different (virtual) thread, arbitrated by CAS on the counter.
+ *
+ * @param <LOCK_PAYLOAD> backend-specific payload type carried inside each {@link Lease} (e.g. a
+ *     Redisson {@code RLock} for the Redis provider, a {@code Connection} for the PostgreSQL
+ *     advisory-lock provider). The holder is otherwise oblivious to the backend.
  */
 public final class KeyedReentrantHolder<LOCK_PAYLOAD> {
 
     private static final Logger LOG = LoggerFactory.getLogger(KeyedReentrantHolder.class);
     private static final int RELEASED = -1;
 
+    /**
+     * Callback invoked by the holder when the outermost lease closes or the watchdog fires —
+     * the backend-specific code that actually releases the underlying lock.
+     *
+     * @param <LOCK_PAYLOAD> the backend-specific payload type.
+     */
     @FunctionalInterface
     public interface ReleaseCallback<LOCK_PAYLOAD> {
+        /**
+         * Releases the underlying backend lock.
+         *
+         * @param payload the backend payload registered with the holder at acquire time.
+         */
         void release(LOCK_PAYLOAD payload);
     }
 
@@ -40,6 +55,11 @@ public final class KeyedReentrantHolder<LOCK_PAYLOAD> {
     private final ConcurrentMap<EntryKey, Holding> map = new ConcurrentHashMap<>();
     private final String watchdogThreadName;
 
+    /**
+     * Constructs the holder.
+     *
+     * @param watchdogThreadName name given to the virtual threads that fire the per-lease watchdogs.
+     */
     public KeyedReentrantHolder(String watchdogThreadName) {
         this.watchdogThreadName = watchdogThreadName;
     }
@@ -48,6 +68,9 @@ public final class KeyedReentrantHolder<LOCK_PAYLOAD> {
      * Returns a fresh re-entry {@link Lease} (counter incremented) if the current thread already
      * holds {@code userKey}, else {@link Optional#empty()}. A stale entry left behind by a
      * watchdog is cleaned up in passing.
+     *
+     * @param userKey the lock key to re-enter on.
+     * @return a fresh re-entrant {@link Lease}, or empty if the current thread isn't already holding {@code userKey}.
      */
     public Optional<Lease> tryReenter(String userKey) {
         var rkey = new EntryKey(Thread.currentThread().threadId(), userKey);
@@ -68,6 +91,12 @@ public final class KeyedReentrantHolder<LOCK_PAYLOAD> {
      * for the same key on the same thread, so that no other holding for
      * {@code (currentThread, userKey)} exists. The same {@link ReleaseCallback} is invoked both
      * when the watchdog fires and when the outermost lease is closed.
+     *
+     * @param userKey the lock key being held.
+     * @param payload the backend-specific payload associated with the hold.
+     * @param maxHold maximum hold time before the watchdog force-releases.
+     * @param lockReleaseCallback the callback to invoke to release the backend lock.
+     * @return the outermost {@link Lease} for the new hold.
      */
     public Lease register(
             String userKey, LOCK_PAYLOAD payload, Duration maxHold, ReleaseCallback<LOCK_PAYLOAD> lockReleaseCallback) {

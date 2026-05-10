@@ -40,6 +40,9 @@ import org.springframework.util.ClassUtils;
  */
 public class EkbatanActionsAotProcessor implements BeanFactoryInitializationAotProcessor {
 
+    /** Required by Spring's AOT SPI; instantiated reflectively when registered in {@code META-INF/spring/aot.factories}. */
+    public EkbatanActionsAotProcessor() {}
+
     @Override
     public BeanFactoryInitializationAotContribution processAheadOfTime(ConfigurableListableBeanFactory beanFactory) {
         Set<Class<? extends Action<?, ?>>> actionClasses = scanActionClasses(beanFactory);
@@ -92,7 +95,9 @@ public class EkbatanActionsAotProcessor implements BeanFactoryInitializationAotP
                         cls,
                         MemberCategory.INVOKE_DECLARED_CONSTRUCTORS,
                         MemberCategory.INVOKE_DECLARED_METHODS,
-                        MemberCategory.DECLARED_FIELDS);
+                        // Spring 7 renamed DECLARED_FIELDS → ACCESS_DECLARED_FIELDS to distinguish
+                        // "reflective access" (read/write) from "introspection" (metadata).
+                        MemberCategory.ACCESS_DECLARED_FIELDS);
             }
 
             // Generate a private static method on the AOT-generated bean factory initializer

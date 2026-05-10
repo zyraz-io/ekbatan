@@ -6,9 +6,6 @@ plugins {
     id("dev.monosoul.jooq-docker") version "8.0.9"
 }
 
-group = "io.ekbatan.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
@@ -48,7 +45,7 @@ tasks {
 
 dependencies {
     api(project(":ekbatan-core"))
-    api(project(":ekbatan-events:streaming:action-event:json"))
+    api(project(":ekbatan-events-streaming-action-event-json"))
     api("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
     implementation("org.jooq:jooq-meta")
     implementation("org.jooq:jooq-codegen")

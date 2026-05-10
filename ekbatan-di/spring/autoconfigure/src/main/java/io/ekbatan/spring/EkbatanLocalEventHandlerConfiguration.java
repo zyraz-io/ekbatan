@@ -15,11 +15,32 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import tools.jackson.databind.ObjectMapper;
 
+/**
+ * Spring Boot auto-configuration for Ekbatan's in-process event handler dispatch. Activates
+ * only when both conditions hold: {@code EventHandlerRegistry} is on the classpath (the
+ * {@code ekbatan-local-event-handler} dependency is present), and the application defines at
+ * least one {@code @EkbatanEventHandler} bean.
+ *
+ * <p>Produces an {@link EventHandlerRegistry} from the discovered {@code EventHandler} beans
+ * plus an {@link EventFanoutJob} / {@link EventHandlingJob} pair that polls the outbox and
+ * delivers events to handlers. Set {@code ekbatan.local-event-handler.handling.enabled=true}
+ * to activate the handling job (the fanout job is always active when the registry is built).
+ */
 @AutoConfiguration(after = EkbatanCoreConfiguration.class)
 @ConditionalOnClass(EventHandlerRegistry.class)
 @ConditionalOnBean(EventHandler.class)
 public class EkbatanLocalEventHandlerConfiguration {
 
+    /** Required by Spring; the container instantiates this auto-configuration class to invoke its {@code @Bean} methods. */
+    public EkbatanLocalEventHandlerConfiguration() {}
+
+    /**
+     * Bundles every {@code @EkbatanEventHandler}-annotated bean discovered by Spring into a
+     * single {@link EventHandlerRegistry} used by the fanout + handling jobs.
+     *
+     * @param handlers the application's event-handler beans, injected by Spring.
+     * @return the registry consulted during fanout to materialize per-handler notification rows.
+     */
     @Bean
     @ConditionalOnMissingBean
     public EventHandlerRegistry ekbatanEventHandlerRegistry(List<EventHandler<?>> handlers) {
@@ -28,6 +49,17 @@ public class EkbatanLocalEventHandlerConfiguration {
                 .build();
     }
 
+    /**
+     * Produces the fanout job that copies newly-committed events from the eventlog into
+     * per-handler {@code event_notifications} rows. Tuning comes from
+     * {@code ekbatan.local-event-handler.fanout-*}.
+     *
+     * @param databaseRegistry the per-shard connection pools.
+     * @param handlerRegistry the registry of event handlers.
+     * @param properties the Ekbatan runtime configuration (reads {@code ekbatan.local-event-handler.*}).
+     * @param clock the system clock used for fanout cursor timestamps.
+     * @return the fanout job, scheduled by Spring once started.
+     */
     @Bean
     @ConditionalOnMissingBean
     public EventFanoutJob ekbatanEventFanoutJob(
@@ -45,9 +77,21 @@ public class EkbatanLocalEventHandlerConfiguration {
         return builder.build();
     }
 
-    // EventHandlingJob is opt-in: deployments consuming event_notifications via an external
-    // pipeline (e.g. Kafka) keep their @EkbatanEventHandler beans without booting an in-process
-    // consumer.
+    /**
+     * Produces the in-process handling job that drains {@code event_notifications} rows and
+     * invokes the registered handlers. Opt-in via
+     * {@code ekbatan.local-event-handler.handling.enabled=true} because deployments that drain
+     * notifications via an external pipeline (e.g. Kafka) should keep their
+     * {@code @EkbatanEventHandler} beans for serialization-only purposes without booting an
+     * in-process consumer.
+     *
+     * @param databaseRegistry the per-shard connection pools.
+     * @param handlerRegistry the registry of event handlers.
+     * @param objectMapper the Jackson mapper used to deserialize event payloads before dispatch.
+     * @param properties the Ekbatan runtime configuration (reads {@code ekbatan.local-event-handler.*}).
+     * @param clock the system clock used for retention windows and backoff timestamps.
+     * @return the handling job, scheduled by Spring once started.
+     */
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "ekbatan.local-event-handler.handling", name = "enabled", havingValue = "true")

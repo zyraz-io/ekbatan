@@ -14,16 +14,21 @@ import com.github.kagkarlsson.scheduler.task.schedule.Schedule;
  */
 public abstract class DistributedJob {
 
-    /** Cluster-wide unique identifier for this job; persisted in the {@code scheduled_tasks} table. */
+    /** No-arg constructor for subclasses; instantiated by your DI framework or by the JobRegistry builder. */
+    protected DistributedJob() {}
+
+    /** {@return cluster-wide unique identifier for this job; persisted in the {@code scheduled_tasks} table} */
     public abstract String name();
 
-    /** When the job should run next, computed by db-scheduler from the previous execution. */
+    /** {@return when the job should run next; computed by db-scheduler from the previous execution} */
     public abstract Schedule schedule();
 
     /**
      * The actual work; runs on a worker thread of the local {@link JobRegistry}. Throwing an
      * exception is treated as a failed execution by db-scheduler — {@code consecutive_failures}
      * is incremented on the task row and the next run is rescheduled per the {@link Schedule}.
+     *
+     * @param ctx the db-scheduler execution context carrying timing + retry metadata.
      */
     public abstract void execute(ExecutionContext ctx);
 }

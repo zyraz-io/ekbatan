@@ -30,6 +30,10 @@ public final class Backoff {
     /**
      * Returns the delay before the next retry given the current attempt count and a cap.
      * Both arguments must be positive.
+     *
+     * @param attempts the count of attempts so far (the first failure passes {@code 1}).
+     * @param cap an upper bound on the returned delay; the exponential curve plateaus here.
+     * @return the next-attempt delay, capped at {@code cap}.
      */
     public static Duration delay(int attempts, Duration cap) {
         if (attempts < 1) {

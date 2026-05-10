@@ -29,9 +29,28 @@ import javax.lang.model.type.DeclaredType;
 import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 
+/**
+ * Annotation processor for {@code @AutoBuilder}. For each annotated class that extends
+ * {@code Model} or {@code Entity}, generates a {@code *Builder} class that extends the
+ * framework's base builder with field setters matching the annotated class's fields, plus
+ * a static factory method matching the class name in camelCase.
+ *
+ * <p>The processor reads the annotated class's fields, generates a sibling builder class
+ * via JavaPoet, and writes it back into the user's compile output. Without this AP, users
+ * would have to hand-write builders that thread the base framework's required fields
+ * ({@code id}, {@code state}, {@code version}, {@code createdDate}/{@code updatedDate} for
+ * Models) through their own builder hierarchies.
+ *
+ * <p>Wire-up: add {@code annotationProcessor("io.ekbatan:ekbatan-annotation-processor:<v>")}
+ * to your module's Gradle dependencies. The Spring Boot / Quarkus / Micronaut samples all
+ * include this on their starter pages.
+ */
 @SupportedAnnotationTypes("io.ekbatan.core.processor.AutoBuilder")
 @SupportedSourceVersion(SourceVersion.RELEASE_25)
 public class AutoBuilderProcessor extends AbstractProcessor {
+
+    /** Required by the Java {@code javax.annotation.processing} SPI; instantiated reflectively by {@code javac}. */
+    public AutoBuilderProcessor() {}
 
     private static final String MODEL_PACKAGE = "io.ekbatan.core.domain";
     private static final String MODEL_CLASS = "Model";

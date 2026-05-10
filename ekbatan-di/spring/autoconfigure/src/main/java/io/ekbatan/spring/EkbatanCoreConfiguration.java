@@ -35,17 +35,45 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
+/**
+ * Spring Boot auto-configuration for Ekbatan's core surface: binds {@code ekbatan.sharding.*}
+ * config to {@link ShardingConfig}, wires the {@link DatabaseRegistry} (and its underlying
+ * {@code TransactionManager}s and Hikari pools), and produces the {@link ActionRegistry} /
+ * {@link RepositoryRegistry} / {@link ActionExecutor} chain.
+ *
+ * <p>{@link EkbatanStereotypeBeanRegistrar} (imported here) scans the application's auto-
+ * configuration packages for {@code @EkbatanAction} / {@code @EkbatanRepository} / etc.
+ * stereotypes and registers them as Spring beans so they reach the registries above without
+ * manual wiring.
+ *
+ * <p>Every bean is {@code @ConditionalOnMissingBean} — users can override any one piece by
+ * declaring their own. This is the canonical Spring Boot starter idiom.
+ */
 @AutoConfiguration
 @EnableConfigurationProperties(EkbatanProperties.class)
 @Import(EkbatanStereotypeBeanRegistrar.class)
 public class EkbatanCoreConfiguration {
 
+    /** Required by Spring; the container instantiates this auto-configuration class to invoke its {@code @Bean} methods. */
+    public EkbatanCoreConfiguration() {}
+
+    /** {@return the Ekbatan-specific Jackson module that maps the framework's builder-based config types} */
     @Bean
     @ConditionalOnMissingBean
     public EkbatanConfigJacksonModule ekbatanConfigJacksonModule() {
         return new EkbatanConfigJacksonModule();
     }
 
+    /**
+     * Binds the {@code ekbatan.sharding} subtree from Spring's {@link Environment} via the
+     * Jackson hybrid path: Spring's {@link Binder} reconstructs the nested tree from flat
+     * keys, then a private {@link JsonMapper} (with the Ekbatan mix-in module) deserializes
+     * it into {@link ShardingConfig}.
+     *
+     * @param environment Spring's environment, source of the {@code ekbatan.sharding.*} keys.
+     * @param module the Ekbatan Jackson module produced by {@link #ekbatanConfigJacksonModule}.
+     * @return the parsed {@link ShardingConfig} for the running application.
+     */
     @Bean
     @ConditionalOnMissingBean
     public ShardingConfig ekbatanShardingConfig(Environment environment, EkbatanConfigJacksonModule module) {
@@ -67,18 +95,32 @@ public class EkbatanCoreConfiguration {
         return mapper.convertValue(normalized, ShardingConfig.class);
     }
 
+    /**
+     * Builds the {@link DatabaseRegistry} that owns connection pools for every shard member.
+     *
+     * @param shardingConfig the sharding topology resolved from configuration.
+     * @return a registry that opens pools eagerly; closed automatically by Spring at shutdown.
+     */
     @Bean
     @ConditionalOnMissingBean
     public DatabaseRegistry ekbatanDatabaseRegistry(ShardingConfig shardingConfig) {
         return DatabaseRegistry.fromConfig(shardingConfig);
     }
 
+    /** {@return the framework's default UTC {@link Clock}; override with your own {@code @Bean Clock} for tests} */
     @Bean
     @ConditionalOnMissingBean
     public Clock ekbatanClock() {
         return Clock.systemUTC();
     }
 
+    /**
+     * Collects every {@code @EkbatanRepository}-annotated bean discovered by
+     * {@link EkbatanStereotypeBeanRegistrar} and bundles them into a single {@link RepositoryRegistry}.
+     *
+     * @param repositories the application's repository beans, injected by Spring.
+     * @return the registry consulted by actions and tests for repository lookup.
+     */
     @Bean
     @ConditionalOnMissingBean
     public RepositoryRegistry ekbatanRepositoryRegistry(List<AbstractRepository<?, ?, ?, ?>> repositories) {
@@ -87,6 +129,19 @@ public class EkbatanCoreConfiguration {
                 .build();
     }
 
+    /**
+     * Builds the {@link ActionRegistry} from {@code @EkbatanAction}-annotated classes. Action
+     * instances are framework-private singletons constructed via
+     * {@link AutowireCapableBeanFactory#createBean(Class)} (not registered as Spring beans
+     * directly) because per-call mutable state on {@code Action.plan} is bound via a
+     * {@code ScopedValue} so a single instance is safely shared across concurrent
+     * {@code execute(...)} calls.
+     *
+     * @param beanFactory the bean factory used to discover the AOT-collected or runtime-scanned action classes.
+     * @param environment Spring's environment for the runtime-scan path.
+     * @param autowireBeanFactory used to instantiate each action class with its dependencies wired.
+     * @return the registry consulted by the {@link ActionExecutor} during dispatch.
+     */
     @Bean
     @ConditionalOnMissingBean
     public ActionRegistry ekbatanActionRegistry(
@@ -103,6 +158,21 @@ public class EkbatanCoreConfiguration {
         return ActionRegistry.Builder.actionRegistry().withActions(actions).build();
     }
 
+    /**
+     * Wires the central {@link ActionExecutor} from its required collaborators. If the
+     * application defines its own {@link EventPersister} bean (e.g. one that encrypts payloads
+     * or uses a custom table layout), it's injected here; otherwise the builder falls back to
+     * its built-in single-table JSON default.
+     *
+     * @param properties the Ekbatan runtime configuration (namespace, jobs, local event handler).
+     * @param databaseRegistry per-shard connection pools.
+     * @param actionRegistry the registry of {@code @EkbatanAction} classes.
+     * @param repositoryRegistry the registry of {@code @EkbatanRepository} beans.
+     * @param objectMapper the Jackson mapper used for event payload serialization.
+     * @param clock the system clock used for event timestamps.
+     * @param eventPersisterProvider an Spring {@link ObjectProvider} that may resolve a user-supplied event persister.
+     * @return the configured {@link ActionExecutor}.
+     */
     @Bean
     @ConditionalOnMissingBean
     public ActionExecutor ekbatanActionExecutor(

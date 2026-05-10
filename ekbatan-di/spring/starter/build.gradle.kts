@@ -1,5 +1,11 @@
 plugins {
     `java-library`
+    id("ekbatan.publishing")
+}
+
+ekbatanPublishing {
+    artifactId.set("ekbatan-spring-boot-starter")
+    description.set("Spring Boot starter for Ekbatan — single-dep entry point for Spring Boot apps.")
 }
 
 java {
@@ -14,7 +20,7 @@ java {
  * No source — convention, not code.
  */
 dependencies {
-    api(project(":ekbatan-di:spring:autoconfigure"))
-    api(project(":ekbatan-di:annotations"))
+    api(project(":ekbatan-di-spring-autoconfigure"))
+    api(project(":ekbatan-di-annotations"))
     api("org.springframework.boot:spring-boot-starter:${project.property("springBootVersion")}")
 }

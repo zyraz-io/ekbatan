@@ -27,12 +27,17 @@ public final class EkbatanActionsHolder {
 
     private EkbatanActionsHolder() {}
 
-    /** Called by the AOT-generated initializer (or directly in tests). */
+    /**
+     * Called by the AOT-generated initializer (or directly in tests) to populate the holder
+     * with the discovered action classes.
+     *
+     * @param classes the {@code @EkbatanAction} classes discovered at AOT processing time.
+     */
     public static void set(Class<?>... classes) {
         actions = Collections.unmodifiableSet(new LinkedHashSet<>(java.util.Arrays.asList(classes)));
     }
 
-    /** Returns the AOT-discovered action classes, or an empty set if none. */
+    /** {@return the AOT-discovered action classes, or an empty set if none} */
     public static Set<Class<?>> get() {
         return actions;
     }

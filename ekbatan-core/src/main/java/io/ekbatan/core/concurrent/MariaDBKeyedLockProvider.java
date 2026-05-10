@@ -190,21 +190,30 @@ public final class MariaDBKeyedLockProvider implements KeyedLockProvider {
 
     private record MariaDBPayload(String userKey, String hashedKey, Connection connection) {}
 
+    /** Fluent builder for {@link MariaDBKeyedLockProvider}. Obtain via {@link #mariaDBKeyedLockProvider()}. */
     public static final class Builder {
 
         private ConnectionProvider connectionProvider;
 
         private Builder() {}
 
+        /** {@return a fresh builder for {@link MariaDBKeyedLockProvider}} */
         public static Builder mariaDBKeyedLockProvider() {
             return new Builder();
         }
 
+        /**
+         * Sets the database connection provider.
+         *
+         * @param connectionProvider the provider whose pool the locks will run on.
+         * @return this builder, for chaining.
+         */
         public Builder connectionProvider(ConnectionProvider connectionProvider) {
             this.connectionProvider = connectionProvider;
             return this;
         }
 
+        /** {@return a configured {@link MariaDBKeyedLockProvider}} */
         public MariaDBKeyedLockProvider build() {
             return new MariaDBKeyedLockProvider(this);
         }

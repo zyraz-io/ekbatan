@@ -2,9 +2,6 @@ plugins {
     id("java")
 }
 
-group = "io.ekbatan.test"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
@@ -15,7 +12,7 @@ repositories {
 }
 
 dependencies {
-    testImplementation(project(":ekbatan-integration-tests:event-pipeline:common"))
+    testImplementation(project(":ekbatan-integration-tests-event-pipeline-common"))
 
     testImplementation(testFixtures(project(":ekbatan-core")))
     testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")

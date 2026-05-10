@@ -3,9 +3,6 @@ plugins {
     id("com.gradleup.shadow") version "9.4.1"
 }
 
-group = "io.ekbatan.events.streaming.debeziumsmt"
-version = "0.0.1-SNAPSHOT"
-
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
@@ -35,6 +32,7 @@ tasks.withType<Test> {
 
 // Shadow produces the fat JAR (all runtime deps bundled) that Kafka Connect loads as a plugin.
 tasks.shadowJar {
+    archiveBaseName.set("ekbatan-debezium-smt-avro")
     archiveClassifier.set("") // primary artifact (no "-all" suffix)
     mergeServiceFiles() // concatenate META-INF/services/* from all deps so ServiceLoader still finds everything
     // Relocate bundled libs into a unique package so our plugin's classloader can never clash
@@ -52,7 +50,7 @@ tasks.assemble {
     dependsOn(tasks.shadowJar)
 }
 
-// Make consumers of this project (via `project(":ekbatan-events:streaming:debezium-smt:avro")`) receive the
+// Make consumers of this project (via `project(":ekbatan-events-streaming-debezium-smt-avro")`) receive the
 // shadow jar rather than the disabled thin jar.
 configurations {
     runtimeElements {

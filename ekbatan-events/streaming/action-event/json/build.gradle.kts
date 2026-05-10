@@ -1,9 +1,12 @@
 plugins {
     `java-library`
+    id("ekbatan.publishing")
 }
 
-group = "io.ekbatan.events.streaming.actionevent.json"
-version = "0.0.1-SNAPSHOT"
+ekbatanPublishing {
+    artifactId.set("ekbatan-action-event-json")
+    description.set("JSON wire-format ActionEvent (Kafka consumer-side deserialization for Ekbatan outbox).")
+}
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25

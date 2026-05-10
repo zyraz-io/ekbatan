@@ -1,11 +1,14 @@
 plugins {
     `java-library`
     `java-test-fixtures`
-    `maven-publish`
+    id("ekbatan.publishing")
 }
 
-group = "io.ekbatan.core"
-version = "0.0.1-SNAPSHOT"
+ekbatanPublishing {
+    artifactId.set("ekbatan-core")
+    description.set("Core action/repository/persister framework for Ekbatan.")
+}
+
 java.sourceCompatibility = JavaVersion.VERSION_25
 java {
     toolchain {
@@ -94,20 +97,4 @@ tasks.named<Test>("test") {
         excludeTags("tracing")
     }
     finalizedBy("tracingTest")
-}
-
-publishing {
-    publications {
-        create<MavenPublication>("mavenJava") {
-            from(components["java"])
-            versionMapping {
-                usage("java-api") {
-                    fromResolutionOf("runtimeClasspath")
-                }
-                usage("java-runtime") {
-                    fromResolutionResult()
-                }
-            }
-        }
-    }
 }

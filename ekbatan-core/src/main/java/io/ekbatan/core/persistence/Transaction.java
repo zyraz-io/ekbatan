@@ -12,6 +12,7 @@ class Transaction {
     private final Connection connection;
     private final boolean initialAutoCommit;
     private final DSLContext dslContext;
+    private boolean dirty = false;
 
     private static final Logger log = LoggerFactory.getLogger(Transaction.class);
 
@@ -56,8 +57,23 @@ class Transaction {
                 }
             }
         } catch (SQLException e) {
-            log.warn("Failed to rollback and reset auto-commit", e);
+            // The connection is in unknown state: either rollback itself failed (transaction may
+            // still be pending) or the autocommit reset failed (subsequent users would inherit the
+            // wrong setting). Mark dirty so the caller evicts instead of returning to the pool —
+            // otherwise Hikari's setAutoCommit(true) reset on return would implicitly commit a
+            // partially-rolled-back transaction.
+            log.warn("Failed to rollback and reset auto-commit; connection will be evicted", e);
+            this.dirty = true;
         }
+    }
+
+    /**
+     * Returns {@code true} when an internal SQL operation (rollback or autocommit reset) raised an
+     * exception, leaving the underlying connection in unknown state. The caller should evict the
+     * connection from the pool rather than returning it.
+     */
+    public boolean isDirty() {
+        return dirty;
     }
 
     public Connection connection() {

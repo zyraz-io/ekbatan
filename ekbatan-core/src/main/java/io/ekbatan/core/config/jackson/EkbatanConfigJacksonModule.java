@@ -23,6 +23,7 @@ import tools.jackson.databind.module.SimpleModule;
  */
 public final class EkbatanConfigJacksonModule extends SimpleModule {
 
+    /** Registers the mix-ins that map Ekbatan's builder-based config types to Jackson. */
     public EkbatanConfigJacksonModule() {
         super("ekbatan-config");
 

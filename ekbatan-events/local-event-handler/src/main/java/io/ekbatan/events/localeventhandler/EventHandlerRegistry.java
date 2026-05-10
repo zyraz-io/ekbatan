@@ -39,6 +39,7 @@ public final class EventHandlerRegistry {
         this.namesByEventType = Collections.unmodifiableMap(namesByEventType);
     }
 
+    /** {@return a fresh builder for {@link EventHandlerRegistry}} */
     public static Builder eventHandlerRegistry() {
         return new Builder();
     }
@@ -46,6 +47,9 @@ public final class EventHandlerRegistry {
     /**
      * Framework hook used by {@code EventFanoutJob}: the cluster-stable names of every
      * handler subscribed to {@code eventTypeSimpleName}. Empty list if none.
+     *
+     * @param eventTypeSimpleName the event subtype's simple class name.
+     * @return the handler names subscribed to that event type.
      */
     public List<String> subscribersFor(String eventTypeSimpleName) {
         return namesByEventType.getOrDefault(eventTypeSimpleName, List.of());
@@ -55,11 +59,15 @@ public final class EventHandlerRegistry {
      * Framework hook used by {@code EventHandlingJob}: the handler instance registered
      * under {@code handlerName}, or {@code null} if no such handler is registered (e.g.
      * a notification row exists for a handler that has since been removed from the code).
+     *
+     * @param handlerName the cluster-stable handler name from {@code event_notifications}.
+     * @return the matching handler instance, or {@code null}.
      */
     public EventHandler<?> handlerFor(String handlerName) {
         return handlersByName.get(handlerName);
     }
 
+    /** Fluent builder for {@link EventHandlerRegistry}. Obtain via {@link #eventHandlerRegistry()}. */
     public static final class Builder {
 
         private final Map<String, EventHandler<?>> handlersByName = new HashMap<>();
@@ -67,6 +75,12 @@ public final class EventHandlerRegistry {
 
         private Builder() {}
 
+        /**
+         * Registers a single handler.
+         *
+         * @param handler the handler to register.
+         * @return this builder, for chaining.
+         */
         public Builder withHandler(EventHandler<? extends ModelEvent<?>> handler) {
             Validate.notNull(handler, "handler cannot be null");
             final var name = Validate.notBlank(handler.name(), "handler.name() cannot be blank");
@@ -83,12 +97,19 @@ public final class EventHandlerRegistry {
             return this;
         }
 
+        /**
+         * Registers a batch of handlers.
+         *
+         * @param handlers the handlers to register.
+         * @return this builder, for chaining.
+         */
         public Builder withHandlers(Collection<? extends EventHandler<?>> handlers) {
             Validate.notNull(handlers, "handlers cannot be null");
             handlers.forEach(this::withHandler);
             return this;
         }
 
+        /** {@return a configured {@link EventHandlerRegistry}} */
         public EventHandlerRegistry build() {
             return new EventHandlerRegistry(this);
         }

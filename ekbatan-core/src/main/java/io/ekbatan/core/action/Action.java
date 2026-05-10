@@ -43,10 +43,16 @@ import java.time.Clock;
  */
 public abstract class Action<PARAM, RESULT> {
 
+    /** The clock used for any time-derived values inside {@link #perform}; injected for testability. */
     public final Clock clock;
 
     private static final ScopedValue<ActionPlan> CURRENT_PLAN = ScopedValue.newInstance();
 
+    /**
+     * Constructor for action subclasses; invoked by the host DI container.
+     *
+     * @param clock the system clock used for any time-derived values inside {@link #perform}.
+     */
     protected Action(Clock clock) {
         this.clock = clock;
     }
@@ -57,7 +63,8 @@ public abstract class Action<PARAM, RESULT> {
      * on. Do not call {@code plan()} from any thread spawned inside {@code perform()} — the
      * scoped binding belongs to the invoking thread.
      *
-     * @throws IllegalStateException if called outside an active execution scope
+     * @return the per-execution {@link ActionPlan} bound to this thread.
+     * @throws IllegalStateException if called outside an active execution scope.
      */
     protected final ActionPlan plan() {
         if (!CURRENT_PLAN.isBound()) {
@@ -71,10 +78,26 @@ public abstract class Action<PARAM, RESULT> {
      * Framework hook — invokes {@link #perform} with the given {@link ActionPlan} bound as the
      * scoped per-call state. Only {@code ActionExecutor} (production) and {@code ActionSpec}
      * (tests) call this.
+     *
+     * @param plan the per-execution plan accumulator.
+     * @param principal the caller principal forwarded to {@link #perform}.
+     * @param params the action's typed input.
+     * @return the action's typed result.
+     * @throws Exception any exception thrown from {@link #perform} propagates unchanged.
      */
     public final RESULT runIn(ActionPlan plan, Principal principal, PARAM params) throws Exception {
         return ScopedValue.where(CURRENT_PLAN, plan).call(() -> perform(principal, params));
     }
 
+    /**
+     * The action's business logic; subclasses implement this. Stages persistence changes via
+     * {@link #plan()}.{@code add(...)} / {@code update(...)}; the executor commits them in a
+     * single per-shard transaction after {@code perform} returns.
+     *
+     * @param principal the caller principal.
+     * @param params the action's typed input.
+     * @return the action's typed result.
+     * @throws Exception thrown to abort the action and roll back the plan.
+     */
     protected abstract RESULT perform(Principal principal, PARAM params) throws Exception;
 }

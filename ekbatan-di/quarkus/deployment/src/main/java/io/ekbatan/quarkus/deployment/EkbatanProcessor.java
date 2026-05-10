@@ -23,7 +23,26 @@ import java.util.List;
 import org.jboss.jandex.AnnotationTarget;
 import org.jboss.jandex.DotName;
 
+/**
+ * Quarkus extension deployment processor for Ekbatan. Runs at Quarkus build time (jar / test
+ * bootstrap) and registers the runtime {@code @Factory}-equivalent producer classes plus
+ * every user-supplied {@code @EkbatanAction} / {@code @EkbatanRepository} /
+ * {@code @EkbatanEventHandler} / {@code @EkbatanDistributedJob} bean discovered through the
+ * Jandex index.
+ *
+ * <p>This is the canonical Quarkus extension entry point — Quarkus locates it via the
+ * {@code META-INF/quarkus-extension.yaml} metadata in the runtime jar. Application authors
+ * never reference {@code EkbatanProcessor} directly; they get its effects by depending on
+ * {@code ekbatan-quarkus} and letting Quarkus's deployment phase do the rest.
+ *
+ * <p>The optional Ekbatan modules ({@code local-event-handler} and {@code distributed-jobs})
+ * are gated via {@link QuarkusClassLoader#isClassPresentAtRuntime(String)} so users who
+ * exclude those jars from their Quarkus app classpath don't pay for the producer classes.
+ */
 public class EkbatanProcessor {
+
+    /** Required by Quarkus; the build engine instantiates this processor to invoke its {@code @BuildStep} methods. */
+    public EkbatanProcessor() {}
 
     private static final String FEATURE = "ekbatan";
 

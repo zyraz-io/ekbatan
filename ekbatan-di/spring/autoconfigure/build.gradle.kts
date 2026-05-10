@@ -1,5 +1,11 @@
 plugins {
     `java-library`
+    id("ekbatan.publishing")
+}
+
+ekbatanPublishing {
+    artifactId.set("ekbatan-spring-boot-autoconfigure")
+    description.set("Spring Boot auto-configuration for Ekbatan.")
 }
 
 java {
@@ -9,11 +15,13 @@ java {
 
 dependencies {
     api(project(":ekbatan-core"))
-    api(project(":ekbatan-di:annotations"))
+    api(project(":ekbatan-di-annotations"))
 
-    // Auto-config classes are @ConditionalOnClass-gated on these modules.
-    compileOnly(project(":ekbatan-events:local-event-handler"))
-    compileOnly(project(":ekbatan-distributed-jobs"))
+    // Bundled by default — matches Quarkus and Micronaut so all three DI flavors give the same
+    // out-of-box experience. The @ConditionalOnClass / @ConditionalOnBean gates in the auto-
+    // config classes remain as defensive guards for users who manually exclude these modules.
+    api(project(":ekbatan-events-local-event-handler"))
+    api(project(":ekbatan-distributed-jobs"))
 
     api("org.springframework.boot:spring-boot-autoconfigure:${project.property("springBootVersion")}")
     api("org.springframework.boot:spring-boot:${project.property("springBootVersion")}")
@@ -26,8 +34,6 @@ dependencies {
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor:${project.property("springBootVersion")}")
     compileOnly("org.springframework.boot:spring-boot-configuration-processor:${project.property("springBootVersion")}")
 
-    testImplementation(project(":ekbatan-events:local-event-handler"))
-    testImplementation(project(":ekbatan-distributed-jobs"))
     testImplementation("org.springframework.boot:spring-boot-test:${project.property("springBootVersion")}")
     testImplementation("org.springframework:spring-test")
     testImplementation("org.mockito:mockito-core:${project.property("mockitoVersion")}")

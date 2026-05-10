@@ -27,6 +27,9 @@ import java.util.Set;
  */
 public class EkbatanStereotypeVisitor implements TypeElementVisitor<Object, Object> {
 
+    /** Required by Micronaut; instantiated reflectively when loaded via the {@code TypeElementVisitor} SPI. */
+    public EkbatanStereotypeVisitor() {}
+
     private static final Set<String> STEREOTYPES = Set.of(
             "io.ekbatan.di.EkbatanAction",
             "io.ekbatan.di.EkbatanRepository",

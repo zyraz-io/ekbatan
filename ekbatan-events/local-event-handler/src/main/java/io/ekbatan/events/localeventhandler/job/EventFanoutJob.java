@@ -110,7 +110,10 @@ public final class EventFanoutJob extends DistributedJob {
 
     /**
      * One round: launch one virtual-thread fork per shard, each draining a single batch.
-     * Wait for all forks. Returns whether any fork processed events.
+     * Wait for all forks.
+     *
+     * @return {@code true} if any shard processed at least one event in this round.
+     * @throws InterruptedException if the calling thread is interrupted while waiting for forks.
      */
     public boolean drainOneRound() throws InterruptedException {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -184,10 +187,12 @@ public final class EventFanoutJob extends DistributedJob {
                 || Thread.currentThread().isInterrupted();
     }
 
+    /** {@return a fresh builder for {@link EventFanoutJob}} */
     public static Builder eventFanoutJob() {
         return new Builder();
     }
 
+    /** Fluent builder for {@link EventFanoutJob}. Obtain via {@link #eventFanoutJob()}. */
     public static final class Builder {
         private String name = DEFAULT_NAME;
         private Duration pollDelay = DEFAULT_POLL_DELAY;
@@ -198,6 +203,12 @@ public final class EventFanoutJob extends DistributedJob {
 
         private Builder() {}
 
+        /**
+         * Sets the db-scheduler task name.
+         *
+         * @param name db-scheduler task name (must be cluster-unique).
+         * @return this builder, for chaining.
+         */
         public Builder name(String name) {
             this.name = name;
             return this;
@@ -207,32 +218,60 @@ public final class EventFanoutJob extends DistributedJob {
          * The duration governs both how long {@code execute()} sleeps between rounds when a
          * round produced no work, and (by way of {@link FixedDelay}) how long db-scheduler
          * waits before re-running {@code execute()} if it ever returns. Default 1 second.
+         *
+         * @param pollDelay the polling delay.
+         * @return this builder, for chaining.
          */
         public Builder pollDelay(Duration pollDelay) {
             this.pollDelay = pollDelay;
             return this;
         }
 
+        /**
+         * Sets the per-round batch size.
+         *
+         * @param batchSize max rows the fanout reads per shard per round.
+         * @return this builder, for chaining.
+         */
         public Builder batchSize(int batchSize) {
             this.batchSize = batchSize;
             return this;
         }
 
+        /**
+         * Sets the database registry.
+         *
+         * @param databaseRegistry the per-shard connection pools / transaction managers.
+         * @return this builder, for chaining.
+         */
         public Builder databaseRegistry(DatabaseRegistry databaseRegistry) {
             this.databaseRegistry = databaseRegistry;
             return this;
         }
 
+        /**
+         * Sets the event handler registry.
+         *
+         * @param eventHandlerRegistry the registry of handlers used to learn subscriptions.
+         * @return this builder, for chaining.
+         */
         public Builder eventHandlerRegistry(EventHandlerRegistry eventHandlerRegistry) {
             this.eventHandlerRegistry = eventHandlerRegistry;
             return this;
         }
 
+        /**
+         * Sets the clock.
+         *
+         * @param clock the system clock used for fanout-cursor timestamps.
+         * @return this builder, for chaining.
+         */
         public Builder clock(Clock clock) {
             this.clock = clock;
             return this;
         }
 
+        /** {@return a configured {@link EventFanoutJob}} */
         public EventFanoutJob build() {
             return new EventFanoutJob(this);
         }

@@ -21,7 +21,7 @@ import java.util.Optional;
  * <h2>Reentrancy</h2>
  *
  * <p>All built-in implementations are <b>reentrant per {@code (thread, key)} pair</b>. The same
- * thread can call {@link #acquire(Object, Duration)} or {@link #tryAcquire(Object, Duration,
+ * thread can call {@link #acquire(String, Duration)} or {@link #tryAcquire(String, Duration,
  * Duration)} on a key it already holds without blocking; the call returns a fresh {@link Lease}
  * instance and increments an internal hold counter. The underlying backend lock is released only
  * when the <em>outermost</em> lease is closed (or the watchdog fires — see below). Each
@@ -65,7 +65,10 @@ public interface KeyedLockProvider extends AutoCloseable {
      * is ignored on re-entry; the original outermost watchdog continues to govern the hold
      * limit. See {@link KeyedLockProvider} class docs for the full reentrancy contract.
      *
-     * @throws InterruptedException if the calling thread is interrupted while waiting
+     * @param key the lock key.
+     * @param maxHold maximum time the lock can be held before the watchdog force-releases it.
+     * @return a {@link Lease} held until {@link Lease#close()} or {@code maxHold} elapses.
+     * @throws InterruptedException if the calling thread is interrupted while waiting.
      */
     Lease acquire(String key, Duration maxHold) throws InterruptedException;
 
@@ -80,7 +83,11 @@ public interface KeyedLockProvider extends AutoCloseable {
      * watchdog continues to govern the hold limit. See {@link KeyedLockProvider} class docs for
      * the full reentrancy contract.
      *
-     * @throws InterruptedException if the calling thread is interrupted while waiting
+     * @param key the lock key.
+     * @param maxWait maximum time to wait for the lock; pass {@link Duration#ZERO} for non-blocking.
+     * @param maxHold maximum time the lock can be held before the watchdog force-releases it.
+     * @return a {@link Lease}, or {@link Optional#empty()} if the wait elapsed.
+     * @throws InterruptedException if the calling thread is interrupted while waiting.
      */
     Optional<Lease> tryAcquire(String key, Duration maxWait, Duration maxHold) throws InterruptedException;
 
@@ -91,8 +98,8 @@ public interface KeyedLockProvider extends AutoCloseable {
     /**
      * A handle to an acquired lock. Closing releases the lock; closing is idempotent.
      *
-     * <p>Each call to {@link KeyedLockProvider#acquire(Object, Duration)} (or
-     * {@link KeyedLockProvider#tryAcquire(Object, Duration, Duration)}) returns its own
+     * <p>Each call to {@link KeyedLockProvider#acquire(String, Duration)} (or
+     * {@link KeyedLockProvider#tryAcquire(String, Duration, Duration)}) returns its own
      * {@code Lease} instance — including re-entries by the same thread on the same key. Each
      * lease must be closed exactly once. The underlying backend lock is released when the
      * outermost lease in the nested chain is closed, or when the {@code maxHold} watchdog
@@ -105,6 +112,8 @@ public interface KeyedLockProvider extends AutoCloseable {
          * the {@code maxHold} watchdog has fired (force-releasing the underlying backend lock),
          * or — for inner re-entrant leases — after the watchdog has expired even if the inner
          * lease has not been closed yet.
+         *
+         * @return {@code true} if the lease still holds the lock, {@code false} otherwise.
          */
         boolean isHeld();
 

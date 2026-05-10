@@ -1,9 +1,12 @@
 plugins {
     `java-library`
+    id("ekbatan.publishing")
 }
 
-group = "io.ekbatan.keyedlock.redis"
-version = "0.0.1-SNAPSHOT"
+ekbatanPublishing {
+    artifactId.set("ekbatan-keyed-lock-redis")
+    description.set("Redisson-backed KeyedLockProvider implementation for Ekbatan.")
+}
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25

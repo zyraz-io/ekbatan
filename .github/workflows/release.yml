@@ -1,0 +1,102 @@
+name: Release
+
+# Fires on tag push matching `v*` (e.g., v0.0.1, v0.1.0, v1.0.0-rc.1).
+# Also supports manual triggers via workflow_dispatch — useful for re-running a failed
+# release without re-pushing the tag (the tag itself is idempotent).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to re-release (e.g. v0.0.1)."
+        required: true
+
+jobs:
+  release:
+    name: Release to Maven Central + GitHub Releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    # JReleaser needs write access to the repository (to create the GitHub Release and
+    # push release assets). GITHUB_TOKEN with these scopes is auto-provided.
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # On tag push, github.ref is the tag and ${{ inputs.tag }} is empty → use the tag.
+          # On workflow_dispatch with `tag` input, check out that tag explicitly so re-running
+          # a failed release picks up the right commit even when dispatched from main.
+          ref: ${{ inputs.tag || github.ref }}
+          # Fetch full history so JReleaser's conventional-commits changelog generator can
+          # walk the commit graph back to the previous tag.
+          fetch-depth: 0
+
+      - name: Verify gradle.properties version matches tag
+        # Catches three real mistakes:
+        #   1. Push `v0.0.1` but the tagged commit's gradle.properties says `version=0.0.2-SNAPSHOT`
+        #   2. Bump gradle.properties to 0.0.2 then tag the bump commit as v0.0.1 by mistake
+        #   3. Dispatch with tag=v0.0.1 on a commit where gradle.properties says something else
+        # In each case, JReleaser would silently use gradle.properties's version and tag the
+        # release with the wrong label. Fail loudly before any upload happens.
+        run: |
+          TAG_REF="${{ inputs.tag || github.ref }}"
+          TAG_NAME="${TAG_REF#refs/tags/}"
+          EXPECTED_VERSION="${TAG_NAME#v}"
+          ACTUAL_VERSION=$(grep '^version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          if [[ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
+            echo "::error::Tag/version mismatch — tag is '$TAG_NAME' (expects version '$EXPECTED_VERSION'), gradle.properties says '$ACTUAL_VERSION'."
+            exit 1
+          fi
+          echo "OK: tag=$TAG_NAME matches gradle.properties version=$ACTUAL_VERSION"
+
+      - name: Set up JDK 25 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: clean build
+        run: ./gradlew clean build --stacktrace
+
+      - name: Publish to local staging-deploy
+        run: ./gradlew publish --stacktrace
+        # Populates build/staging-deploy/ with all 15 publishable modules' jars +
+        # sources + javadoc + POM. JReleaser picks this up in the next step.
+
+      - name: Run JReleaser (sign + upload to Sonatype staging + create GitHub Release)
+        run: ./gradlew jreleaserFullRelease --stacktrace
+        env:
+          # Maven Central credentials (Central Portal User Token, not your account
+          # login — generate in the Portal UI under "View Account → Generate User Token").
+          JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.MAVENCENTRAL_USERNAME }}
+          JRELEASER_MAVENCENTRAL_PASSWORD: ${{ secrets.MAVENCENTRAL_PASSWORD }}
+
+          # GPG key material for artifact signing. Generate with:
+          #   gpg --armor --export <KEY_ID>
+          #   gpg --armor --export-secret-keys <KEY_ID>
+          # Paste the full output (including ----BEGIN/END---- markers) into the secret.
+          JRELEASER_GPG_PUBLIC_KEY: ${{ secrets.GPG_PUBLIC_KEY }}
+          JRELEASER_GPG_SECRET_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          JRELEASER_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+          # GitHub Release creation. The auto-provided GITHUB_TOKEN works.
+          JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload JReleaser logs
+        # Always upload — useful for debugging staging failures even on success.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jreleaser-logs
+          path: |
+            build/jreleaser/trace.log
+            build/jreleaser/output.properties
+          retention-days: 30

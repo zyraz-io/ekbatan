@@ -67,6 +67,11 @@ public final class EventEnvelope<E extends ModelEvent<?>> {
         this.eventDate = Validate.notNull(builder.eventDate, "eventDate cannot be null");
     }
 
+    /**
+     * Fluent builder for {@link EventEnvelope}. Obtain via {@link #eventEnvelope()}.
+     *
+     * @param <E> the {@link ModelEvent} subtype.
+     */
     public static final class Builder<E extends ModelEvent<?>> {
 
         private E event;
@@ -83,65 +88,138 @@ public final class EventEnvelope<E extends ModelEvent<?>> {
 
         private Builder() {}
 
+        /**
+         * Creates a fresh builder.
+         *
+         * @param <T> the event type the resulting envelope will carry.
+         * @return a fresh builder.
+         */
         public static <T extends ModelEvent<?>> Builder<T> eventEnvelope() {
             return new Builder<>();
         }
 
+        /**
+         * Sets the typed event payload.
+         *
+         * @param event the typed event payload.
+         * @return this builder, for chaining.
+         */
         public Builder<E> event(E event) {
             this.event = event;
             return this;
         }
 
+        /**
+         * Sets the source event id.
+         *
+         * @param eventId stable per-event identifier.
+         * @return this builder, for chaining.
+         */
         public Builder<E> eventId(UUID eventId) {
             this.eventId = eventId;
             return this;
         }
 
+        /**
+         * Sets the namespace.
+         *
+         * @param namespace logical namespace from the producing executor.
+         * @return this builder, for chaining.
+         */
         public Builder<E> namespace(String namespace) {
             this.namespace = namespace;
             return this;
         }
 
+        /**
+         * Sets the producing action's id.
+         *
+         * @param actionId identifier of the producing action invocation.
+         * @return this builder, for chaining.
+         */
         public Builder<E> actionId(UUID actionId) {
             this.actionId = actionId;
             return this;
         }
 
+        /**
+         * Sets the producing action's class name.
+         *
+         * @param actionName simple class name of the producing action.
+         * @return this builder, for chaining.
+         */
         public Builder<E> actionName(String actionName) {
             this.actionName = actionName;
             return this;
         }
 
+        /**
+         * Sets the producing action's serialized parameters.
+         *
+         * @param actionParams serialized action parameters.
+         * @return this builder, for chaining.
+         */
         public Builder<E> actionParams(ObjectNode actionParams) {
             this.actionParams = actionParams;
             return this;
         }
 
+        /**
+         * Sets when the producing action's perform() began.
+         *
+         * @param startedDate the action's start instant.
+         * @return this builder, for chaining.
+         */
         public Builder<E> startedDate(Instant startedDate) {
             this.startedDate = startedDate;
             return this;
         }
 
+        /**
+         * Sets when the producing action's persist phase committed.
+         *
+         * @param completionDate the action's completion instant.
+         * @return this builder, for chaining.
+         */
         public Builder<E> completionDate(Instant completionDate) {
             this.completionDate = completionDate;
             return this;
         }
 
+        /**
+         * Sets the affected model's primary identifier.
+         *
+         * @param modelId primary identifier of the affected model (nullable).
+         * @return this builder, for chaining.
+         */
         public Builder<E> modelId(String modelId) {
             this.modelId = modelId;
             return this;
         }
 
+        /**
+         * Sets the affected model's simple class name.
+         *
+         * @param modelType simple class name of the affected model (nullable).
+         * @return this builder, for chaining.
+         */
         public Builder<E> modelType(String modelType) {
             this.modelType = modelType;
             return this;
         }
 
+        /**
+         * Sets the event's own timestamp.
+         *
+         * @param eventDate the event's own timestamp.
+         * @return this builder, for chaining.
+         */
         public Builder<E> eventDate(Instant eventDate) {
             this.eventDate = eventDate;
             return this;
         }
 
+        /** {@return a configured {@link EventEnvelope}; throws if any required field is null} */
         public EventEnvelope<E> build() {
             return new EventEnvelope<>(this);
         }
