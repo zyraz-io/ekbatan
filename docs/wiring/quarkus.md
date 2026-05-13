@@ -8,14 +8,14 @@ For the equivalent in plain Java with no DI container, see [wiring/without-di.md
 
 ### 1. The extension dependency
 
-> ⚠️ **Coming soon** — Maven Central coordinates land once the framework is published. For now, `./gradlew publishToMavenLocal` and consume from your local cache.
-
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.ekbatan:ekbatan-di-quarkus:<version>")
+    implementation("io.github.zyraz-io:ekbatan-quarkus:<version>")
 }
 ```
+
+(Published on Maven Central under groupId `io.github.zyraz-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
 
 That one runtime artifact transitively pulls in `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, and the `@Ekbatan*` annotation jar. Quarkus resolves the matching deployment module automatically at build time. Add `ekbatan-keyed-lock-redis` separately if you want the Redis-backed lock provider.
 

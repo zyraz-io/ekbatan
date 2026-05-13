@@ -2,6 +2,10 @@
 
 **A Java persistence framework with the outbox pattern built in - easy to do and hassle-free.**
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.zyraz-io/ekbatan-core?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.zyraz-io/ekbatan-core)
+[![Java 25+](https://img.shields.io/badge/Java-25%2B-orange)](https://openjdk.org/projects/jdk/25/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue)](https://www.apache.org/licenses/LICENSE-2.0)
+
 The **outbox pattern** stores domain events alongside state in the same atomic database transaction - both writes land together, or neither does - making the database the single source of truth for both. Downstream tools like Debezium can later publish those events to Kafka, Pulsar, or any other broker, without the dual-write trap.
 
 Ekbatan is a Java library you embed in your application - Spring, Quarkus, Micronaut, or plain Java. It does **not** replace your full-stack framework; it replaces the persistence layer where Spring Data, Hibernate, JPA, or hand-rolled JDBC usually live.
@@ -109,7 +113,7 @@ Putting these five together, every action follows the same two-phase lifecycle:
                               ▼
    ┌─── Phase 1 - Action.perform()  (no DB transaction yet) ────┐
    │                                                            │
-   │   1. Read from repositories   (primary or readonly DB)     │
+   │   1. Read from repositories                                │
    │   2. Build new immutable Models / Entities                 │
    │   3. Attach Events to the Models                           │
    │   4. Stage them on the ActionPlan:                         │
@@ -123,13 +127,11 @@ Putting these five together, every action follows the same two-phase lifecycle:
                               ▼
    ┌─── Phase 2 - Executor.persistChanges()  (one atomic TX) ───┐
    │                                                            │
-   │   1. Group plan changes by ShardIdentifier                 │
-   │   2. TransactionManager.inTransaction(shard, () -> {       │
-   │        Repository.addAll / updateAll  →  domain rows       │
-   │        EventPersister.persistActionEvents  →  outbox rows  │
-   │        commit  ─or─  rollback                              │
-   │      });                                                   │
-   │   3. On StaleRecordException → retry whole action          │
+   │   TransactionManager.inTransaction(() -> {                 │
+   │     Repository.addAll / updateAll  →  domain rows          │
+   │     EventPersister.persistActionEvents  →  outbox rows     │
+   │     commit  ─or─  rollback                                 │
+   │   });                                                      │
    │                                                            │
    │   All writes land together, or none at all.                │
    └────────────────────────────────────────────────────────────┘
@@ -290,11 +292,93 @@ public class WalletMoneyDepositedEventHandler implements EventHandler<WalletMone
 
 ---
 
-## Install
+## Add to your project
 
-> ⚠️ **Coming soon** - Ekbatan is being prepared for publication on Maven Central. Once published, this section will list the Gradle and Maven coordinates for each module.
->
-> In the meantime, you can clone this repository and run `./gradlew publishToMavenLocal` to consume the artifacts from your local Maven cache.
+Ekbatan is published on [Maven Central](https://central.sonatype.com/namespace/io.github.zyraz-io) under groupId `io.github.zyraz-io`.
+
+### Gradle (Kotlin DSL)
+
+**Spring Boot:**
+
+```kotlin
+dependencies {
+    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.1")
+}
+```
+
+**Quarkus:**
+
+```kotlin
+dependencies {
+    implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.1")
+}
+```
+
+**Micronaut** — the `annotationProcessor` line is required (without it, Micronaut won't generate `BeanDefinition`s for `@Ekbatan*` classes):
+
+```kotlin
+dependencies {
+    implementation("io.github.zyraz-io:ekbatan-micronaut:0.0.1")
+    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.1")
+    annotationProcessor("io.micronaut:micronaut-inject-java")
+}
+```
+
+**Plain Java (no DI container)** — the integration jars above pull most of these transitively; here every optional module is spelled out:
+
+```kotlin
+dependencies {
+    // ── Required ────────────────────────────────────────────────────────────
+    implementation("io.github.zyraz-io:ekbatan-core:0.0.1")
+
+    // ── Optional capabilities ───────────────────────────────────────────────
+
+    // @AutoBuilder code generation — generates *Builder classes for Models/Entities
+    // (skip if you'd rather write the builders by hand)
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.1")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.1")
+
+    // In-process event handlers (fanout + handling jobs over the eventlog)
+    implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.0.1")
+
+    // Distributed background jobs (db-scheduler facade; cluster-exclusive scheduling)
+    implementation("io.github.zyraz-io:ekbatan-distributed-jobs:0.0.1")
+
+    // Redis-backed distributed KeyedLockProvider (Redisson under the hood)
+    implementation("io.github.zyraz-io:ekbatan-keyed-lock-redis:0.0.1")
+
+    // GraalVM native-image Features (auto-loaded; include only if you build native binaries)
+    implementation("io.github.zyraz-io:ekbatan-native:0.0.1")
+
+    // ── Wire-format DTOs (only for Kafka consumer apps reading from the eventlog) ──
+    // Pick the one matching your Kafka serializer; not needed in the producer app itself.
+    implementation("io.github.zyraz-io:ekbatan-action-event-json:0.0.1")
+    implementation("io.github.zyraz-io:ekbatan-action-event-avro:0.0.1")
+    implementation("io.github.zyraz-io:ekbatan-action-event-protobuf:0.0.1")
+}
+```
+
+### Maven
+
+Substitute the artifactId for your stack — `ekbatan-spring-boot-starter`, `ekbatan-quarkus`, `ekbatan-micronaut`, or `ekbatan-core`:
+
+```xml
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-spring-boot-starter</artifactId>
+    <version>0.0.1</version>
+</dependency>
+```
+
+### Optional add-ons for the framework-integration paths
+
+The Spring Boot / Quarkus / Micronaut starters pull `ekbatan-core`, the annotation processor, the local event handler, and distributed jobs transitively. You only add optional modules explicitly:
+
+- `io.github.zyraz-io:ekbatan-keyed-lock-redis:0.0.1` — Redis-backed distributed lock provider
+- `io.github.zyraz-io:ekbatan-native:0.0.1` — GraalVM native-image Features (when building native binaries)
+- `io.github.zyraz-io:ekbatan-action-event-{json,avro,protobuf}:0.0.1` — wire-format DTOs for Kafka consumer apps
+
+Per-stack setup details: [Spring Boot](docs/wiring/spring.md) · [Quarkus](docs/wiring/quarkus.md) · [Micronaut](docs/wiring/micronaut.md) · [Plain Java](docs/wiring/without-di.md).
 
 ---
 

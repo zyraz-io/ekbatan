@@ -8,14 +8,14 @@ For the equivalent in plain Java with no DI container, see [wiring/without-di.md
 
 ### 1. The starter dependency
 
-> ⚠️ **Coming soon** — Maven Central coordinates land once the framework is published. For now, `./gradlew publishToMavenLocal` and consume from your local cache.
-
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.ekbatan:ekbatan-di-spring-boot-starter:<version>")
+    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:<version>")
 }
 ```
+
+(Published on Maven Central under groupId `io.github.zyraz-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
 
 That single dependency transitively pulls in `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, and the `@Ekbatan*` annotation jar. Add `ekbatan-keyed-lock-redis` separately if you want the Redis-backed lock provider.
 

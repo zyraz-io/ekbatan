@@ -195,13 +195,19 @@ jreleaser {
         maven {
             mavenCentral {
                 create("sonatype") {
+                    // `active = RELEASE` is a CONDITION on when the deployer runs (non-SNAPSHOT
+                    // versions only); it does NOT control auto-publish vs stage. The publish-mode
+                    // knob is `stage` (below) — UPLOAD = stage-and-confirm, PUBLISH/FULL = auto.
                     active.set(org.jreleaser.model.Active.RELEASE)
                     url.set("https://central.sonatype.com/api/v1/publisher")
                     stagingRepository("build/staging-deploy")
                     applyMavenCentralRules.set(true)
                     namespace.set("io.github.zyraz-io")
-                    // Stage-and-confirm: this leaves the deployment in Sonatype's validation
-                    // window. Verify on central.sonatype.com, then click Publish (or Drop).
+                    // Stage-and-confirm: upload signed artifacts to Sonatype's validation window
+                    // and STOP there. Verify on central.sonatype.com → Deployments, then click
+                    // Publish (or Drop). Switch to PUBLISH (or FULL) once we trust the pipeline
+                    // and want releases to auto-publish without a human click.
+                    stage.set(org.jreleaser.model.api.deploy.maven.MavenCentralMavenDeployer.Stage.UPLOAD)
                 }
             }
         }

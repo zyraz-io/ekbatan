@@ -996,3 +996,15 @@ void retry_recovers_after_transient_failure() throws Exception {
 3. Add `DummyRepository` implementation with dialect-specific converters
 4. Create test runner extending `BaseRepositoryTest`
 5. Handle dialect differences in `AbstractRepository` if needed
+
+## Release & Publishing
+
+Ekbatan is published on Maven Central under groupId `io.github.zyraz-io`. Note that Maven groupId and Java package names are deliberately not aligned — source imports remain `io.ekbatan.*` while the published coordinate is `io.github.zyraz-io:*`. This split is normal practice (Picocli ships as `info.picocli` with `picocli.*` packages, Lombok as `org.projectlombok` with `lombok.*`).
+
+Full release procedure — one-time Sonatype/GPG setup, per-release workflow, troubleshooting, GPG keyring recovery — lives in [RELEASE.md](./RELEASE.md). Load-bearing facts for agents working in the codebase:
+
+- **15 modules are published** (anything applying the `ekbatan.publishing` Gradle convention plugin). The 2 Debezium SMT shadow jars ship via GitHub Releases only, not Maven Central. Adding the `ekbatan.publishing` plugin to a new module makes it part of the published surface.
+- **Tag-driven releases**. Pushing `vX.Y.Z` to `main` fires `.github/workflows/release.yml` → builds → JReleaser signs every artifact and uploads to Sonatype's validation window → **stops there**. A human verifies on `central.sonatype.com` and clicks Publish (or Drop). Controlled by `stage.set(UPLOAD)` in `build.gradle.kts`'s `jreleaser` block; switching to `Stage.FULL` would re-enable auto-publish.
+- **Coordinates are permanent**. Once `<groupId>:<artifactId>:<version>` lands on Maven Central it cannot be removed, modified, or overwritten. Public API changes in a published module are visible to every downstream consumer at that exact coordinate forever — treat each release as final.
+- **Pre-push hook**. `.githooks/pre-push` (opt in via `git config core.hooksPath .githooks`) blocks `vX.Y.Z` tag pushes when `gradle.properties` `version` at the tagged commit doesn't match. The release workflow re-checks the same condition as a safety net (`Verify gradle.properties version matches tag` step).
+- **GPG signing material lives in 3 GitHub Actions secrets** (`GPG_PUBLIC_KEY` / `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE`) plus the Sonatype User Token in 2 more (`MAVENCENTRAL_USERNAME` / `MAVENCENTRAL_PASSWORD`). They are NOT in the repo. JReleaser reads them via `JRELEASER_*` env vars set in `release.yml`.

@@ -8,16 +8,16 @@ For the equivalent in plain Java with no DI container, see [wiring/without-di.md
 
 ### 1. The integration jar + annotation processor
 
-> ⚠️ **Coming soon** — Maven Central coordinates land once the framework is published. For now, `./gradlew publishToMavenLocal` and consume from your local cache.
-
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.ekbatan:ekbatan-di-micronaut:<version>")
-    annotationProcessor("io.ekbatan:ekbatan-di-micronaut:<version>")
+    implementation("io.github.zyraz-io:ekbatan-micronaut:<version>")
+    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:<version>")
     annotationProcessor("io.micronaut:micronaut-inject-java")
 }
 ```
+
+(Published on Maven Central under groupId `io.github.zyraz-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
 
 The `annotationProcessor` line is **required** — without it, the `EkbatanStereotypeVisitor` doesn't run during your compile, so your `@Ekbatan*` classes never get lifted to `@Singleton` and Micronaut produces no `BeanDefinition`s for them.
 
