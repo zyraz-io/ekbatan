@@ -37,9 +37,14 @@ tasks.named("javadoc") {
 quarkusExtension {
     // Under flat project paths, the plugin's default "sibling project named `deployment`"
     // lookup doesn't apply — the deployment project lives at a top-level path. Tell the
-    // plugin both the project path and the Maven coordinate explicitly.
+    // plugin both the project path and the Maven coordinate explicitly. The artifactId here
+    // must match the published artifactId of the deployment module (`ekbatan-quarkus-deployment`,
+    // set via `ekbatanPublishing.artifactId` in the deployment module's build.gradle.kts), NOT
+    // the flat Gradle project name (`ekbatan-di-quarkus-deployment`) — otherwise the runtime
+    // jar's META-INF/quarkus-extension.properties advertises a coordinate Maven Central doesn't
+    // host, and downstream Quarkus apps fail to resolve the deployment companion at build time.
     deploymentModule.set(":ekbatan-di-quarkus-deployment")
-    deploymentArtifact.set("${project.group}:ekbatan-di-quarkus-deployment:${project.version}")
+    deploymentArtifact.set("${project.group}:ekbatan-quarkus-deployment:${project.version}")
 }
 
 dependencies {

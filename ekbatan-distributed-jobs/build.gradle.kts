@@ -30,4 +30,10 @@ dependencies {
     compileOnly("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
 
     implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
+
+    // JobRegistryBuilderTest uses a real Hikari pool with a bogus postgresql URL as its
+    // ConnectionProvider fixture. Hikari calls Class.forName on the driver during validation
+    // before the test's expected IllegalArgumentException is thrown, so the driver class must
+    // be on the test classpath.
+    testImplementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
 }

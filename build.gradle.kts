@@ -21,6 +21,10 @@ plugins {
 spotless {
     java {
         target("**/*.java")
+        // ekbatan-examples/* are independent Gradle builds with their own settings.gradle.kts
+        // and their own (simpler) formatting conventions. Don't impose Palantir on them from
+        // here — the root glob would otherwise reach across the build boundary.
+        targetExclude("ekbatan-examples/**/*.java")
         palantirJavaFormat("2.81.0")
     }
     format("misc") {

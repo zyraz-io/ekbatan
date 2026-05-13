@@ -46,6 +46,7 @@ dependencies {
     implementation(project(":ekbatan-core"))
 
     implementation("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
+    implementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
     jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
 
     // Add explicit dependency on the JOOQ API

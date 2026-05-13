@@ -174,4 +174,6 @@ For broader native-image considerations (Jackson 3 record reflection, jOOQ, JDBC
 - [Listen-to-yourself: in-process event handlers](../events/local-event-handler.md) — what `@EkbatanEventHandler` consumes
 - [Distributed background jobs](../jobs/distributed-jobs.md) — what `@EkbatanDistributedJob` schedules
 - [GraalVM native-image](../runtime/native-image.md) — Spring AOT specifics
-- The runnable reference: [`ekbatan-integration-tests/di/spring-boot-starter`](../../ekbatan-integration-tests/di/spring-boot-starter)
+- Runnable references:
+  - [`ekbatan-integration-tests/di/spring-boot-starter`](../../ekbatan-integration-tests/di/spring-boot-starter) — the framework's own smoke test for the Spring Boot integration.
+  - [`ekbatan-examples/spring-boot-wallet-rest`](../../ekbatan-examples/spring-boot-wallet-rest) — a standalone Spring Boot app that uses Ekbatan as a Maven Central dependency, with a Wallet `Model`, a Notification `Entity`, three Actions, an `EventHandler` that runs listen-to-yourself, REST endpoints, and a Testcontainers integration test. Closer to what you'd actually write in your own service.

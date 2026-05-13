@@ -27,8 +27,14 @@ dependencies {
     api("org.jooq:jooq-meta:${project.property("jooqVersion")}")
     api("org.jooq:jooq-codegen:${project.property("jooqVersion")}")
 
-    // PostgreSQL JDBC driver
-    implementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
+    // PostgreSQL JDBC driver — testImplementation only. ekbatan-core itself doesn't reference
+    // Postgres APIs; downstream apps bring their own JDBC driver matching their dialect. Pinning
+    // it as `implementation` here would force every MariaDB/MySQL consumer to also inherit
+    // Postgres on their runtime classpath, which clutters the artifact graph and (more sharply)
+    // trips GraalVM native-image with NoClassDefFoundError on Postgres's SSPI/JNA stack when the
+    // reachability-metadata repo registers those classes against a classpath that doesn't have
+    // JNA. Test fixtures still need the driver for the integration-test runners.
+    testImplementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
     implementation("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
     implementation("org.apache.commons:commons-collections4:${project.property("commonsCollections4Version")}")
     implementation("com.google.guava:guava:${project.property("guavaVersion")}")

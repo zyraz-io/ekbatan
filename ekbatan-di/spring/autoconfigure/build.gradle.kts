@@ -38,4 +38,9 @@ dependencies {
     testImplementation("org.springframework:spring-test")
     testImplementation("org.mockito:mockito-core:${project.property("mockitoVersion")}")
     testImplementation("org.springframework.boot:spring-boot-jackson:${project.property("springBootVersion")}")
+
+    // EkbatanDistributedJobsConfigurationTest builds a real Hikari pool with a bogus postgresql
+    // URL to drive the @ConditionalOnBean wiring path; Hikari calls DriverManager.getDriver(...)
+    // during pool init and fails fast if the driver class isn't on the test classpath.
+    testImplementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
 }
