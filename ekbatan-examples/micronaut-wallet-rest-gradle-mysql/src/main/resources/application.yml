@@ -1,0 +1,55 @@
+micronaut:
+  application:
+    name: micronaut-wallet-rest-gradle-mysql
+
+ekbatan:
+  namespace: example.wallet.gradle-mysql-micronaut
+  sharding:
+    defaultShard:
+      group: 0
+      member: 0
+    groups:
+      - group: 0
+        name: default
+        members:
+          - member: 0
+            name: default
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                username: wallet
+                password: wallet
+                driverClassName: com.mysql.cj.jdbc.Driver
+                maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                username: wallet
+                password: wallet
+                driverClassName: com.mysql.cj.jdbc.Driver
+                maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                username: wallet
+                password: wallet
+                driverClassName: com.mysql.cj.jdbc.Driver
+                # Lock pool: sized for max concurrent held leases (each lease pins one connection
+                # until release). Leak detection off — locks may be legitimately held for a while.
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
+  local-event-handler:
+    handling:
+      enabled: true
+
+# micronaut-flyway: runs migrations on application startup. The datasource it binds to is
+# `flyway.datasources.default` — coords here are pulled from `ekbatan.sharding.*` via
+# property expressions (single source of truth). `EkbatanShardFlywayCustomizer` additionally
+# overrides the dataSource programmatically inside `FluentConfiguration.customize(...)` —
+# symmetric with the Quarkus wallet's customizer, and a single place to extend Flyway
+# behaviour later (locations, callbacks, etc.) without touching YAML.
+flyway:
+  datasources:
+    default:
+      enabled: true
+      url: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl}
+      user: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username}
+      password: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password}

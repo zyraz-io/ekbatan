@@ -131,7 +131,7 @@ CREATE INDEX priority_execution_time_idx ON scheduled_tasks (priority desc, exec
 | `created_date` | `TIMESTAMP NOT NULL` | Set once on insert |
 | `updated_date` | `TIMESTAMP NOT NULL` | Bumped on every update alongside `version` |
 
-A minimal example (from `ekbatan-examples/spring-boot-wallet-rest`):
+A minimal example (from `ekbatan-examples/spring-boot-wallet-rest-gradle-pg`):
 
 ```sql
 CREATE TABLE wallets (
@@ -150,7 +150,7 @@ CREATE INDEX idx_wallets_owner_id ON wallets(owner_id);
 
 ## jOOQ codegen
 
-The Postgres codegen block — paste into your module's `build.gradle.kts`. The plugin's default container is Postgres, so no `jooq { withContainer { … } }` block is needed. Full reference: [JOOQ codegen → PostgreSQL](jooq-codegen.md#postgresql).
+The Postgres codegen block — paste into your module's `build.gradle.kts`. The plugin's default container is Postgres, so no `jooq { withContainer { … } }` block is needed. Full reference: [JOOQ codegen on Gradle → PostgreSQL](../gradle/jooq-codegen.md#postgresql). **On Maven?** See [JOOQ codegen on Maven → PostgreSQL](../maven/jooq-codegen.md#postgresql) — the same output via the fabric8 + flyway-maven + jooq-codegen-maven chain.
 
 ```kotlin
 tasks {
@@ -196,8 +196,10 @@ tasks {
 - [Multi-database](multi-database.md) — cross-dialect background, the column-type cheatsheet, init scripts, repository field-definition pattern
 - [Outbox schema](outbox-schema.md) — the logical shape of `eventlog.events` and what each column means
 - [Repositories on JOOQ](repositories.md) — how `AbstractRepository` consumes the generated classes
-- [JOOQ codegen](jooq-codegen.md) — the full `build.gradle.kts` reference for all dialects
+- [JOOQ codegen](jooq-codegen.md) — what codegen generates, the converters, per-dialect modeling rationale
+- [JOOQ codegen on Gradle](../gradle/jooq-codegen.md) — the full `build.gradle.kts` reference for all dialects
+- [JOOQ codegen on Maven](../maven/jooq-codegen.md) — the equivalent `pom.xml` plugin chain
 - [Keyed locks](keyed-locks.md) — Postgres `pg_advisory_lock`-backed pessimistic locking
-- Worked example: [`ekbatan-examples/spring-boot-wallet-rest`](../../ekbatan-examples/spring-boot-wallet-rest)
+- Worked example: [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-pg)
 
 ← Back to [Database](README.md) · [docs index](../README.md)

@@ -1,0 +1,396 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.example</groupId>
+    <artifactId>quarkus-wallet-rest-maven-mariadb</artifactId>
+    <version>0.0.3-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>quarkus-wallet-rest-maven-mariadb</name>
+    <description>Quarkus + MariaDB wallet example demonstrating Ekbatan with Maven (MariaDB dialect of the Maven Quarkus triple).</description>
+
+    <properties>
+        <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
+
+        <jooq.version>3.20.10</jooq.version>
+
+        <ekbatan.version>0.0.3</ekbatan.version>
+        <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
+        <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
+        <quarkus.platform.version>3.34.6</quarkus.platform.version>
+
+        <!-- Hyphenated property names — avoid the `flyway.*` / `jooq.*` namespace, which the
+             respective Maven plugins scan and reject for unrecognized keys. -->
+        <flyway-version>12.0.0</flyway-version>
+        <mariadb-driver-version>3.5.7</mariadb-driver-version>
+
+        <fabric8-docker-plugin-version>0.48.1</fabric8-docker-plugin-version>
+        <flyway-maven-plugin-version>12.0.0</flyway-maven-plugin-version>
+        <jooq-codegen-maven-plugin-version>3.20.10</jooq-codegen-maven-plugin-version>
+
+        <testcontainers.version>2.0.5</testcontainers.version>
+
+        <!-- Single source of truth for the codegen-time database. We connect as root so V0000's
+             CREATE DATABASE eventlog succeeds — the runtime / test containers use a less-
+             privileged `wallet` user with a mariadb_init.sql GRANT, but the codegen container
+             is throwaway and root is simpler. -->
+        <codegen.db.port>13306</codegen.db.port>
+        <codegen.db.name>wallet</codegen.db.name>
+        <codegen.db.user>root</codegen.db.user>
+        <codegen.db.password>root</codegen.db.password>
+        <codegen.db.url>jdbc:mariadb://localhost:${codegen.db.port}/${codegen.db.name}</codegen.db.url>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>maven-local-fallback</id>
+            <url>file://${user.home}/.m2/repository</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>true</enabled></snapshots>
+        </repository>
+        <repository>
+            <id>central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </repository>
+    </repositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>${quarkus.platform.artifact-id}</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- ── Ekbatan ───────────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-quarkus</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-annotation-processor</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.20.0</version>
+        </dependency>
+
+        <!-- ── Quarkus REST ──────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest-jackson</artifactId>
+        </dependency>
+        <!-- ── Flyway via Quarkus's official extension ──────────────────────────── -->
+        <!-- Migrations run at app startup driven by `quarkus.flyway.migrate-at-start=true`
+             against the datasource overridden by `EkbatanShardFlywayCustomizer` (CDI bean). -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-flyway</artifactId>
+        </dependency>
+        <!-- Database-specific Flyway plugin pulled in alongside the extension. Version is
+             BOM-managed (Quarkus pins 12.0.0). -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+        <!-- JDBC driver: quarkus-jdbc-mariadb pulls in the driver JAR and registers
+             the driver class reflectively. quarkus-flyway opens its own short-lived pool
+             against this driver to run migrations at startup; ekbatan's pool runs separately. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jdbc-mariadb</artifactId>
+        </dependency>
+
+        <!-- ── MariaDB ───────────────────────────────────────────────────────────── -->
+        <!-- Driver is compile-scoped (not runtime) because Quarkus' build-step augmentation
+             processes the driver classes during `generate-code`. -->
+        <dependency>
+            <groupId>org.mariadb.jdbc</groupId>
+            <artifactId>mariadb-java-client</artifactId>
+            <version>${mariadb-driver-version}</version>
+        </dependency>
+
+        <!-- ── Tests ─────────────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.27.6</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.3.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Testcontainers 2.x dropped commons-codec from its transitive closure (1.x carried it
+             via httpclient). MariaDBContainer.start() still calls into URL/socket helpers that
+             reach for `org.apache.commons.codec.Charsets`, so add it back explicitly here for
+             tests. -->
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.18.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-mariadb</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                    <parameters>true</parameters>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.github.zyraz-io</groupId>
+                            <artifactId>ekbatan-annotation-processor</artifactId>
+                            <version>${ekbatan.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build</goal>
+                            <goal>generate-code</goal>
+                            <goal>generate-code-tests</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>2.46.1</version>
+                <configuration>
+                    <java>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                        </includes>
+                        <palantirJavaFormat>
+                            <version>2.81.0</version>
+                        </palantirJavaFormat>
+                    </java>
+                    <formats>
+                        <format>
+                            <includes>
+                                <include>*.md</include>
+                                <include>.gitignore</include>
+                                <include>.gitattributes</include>
+                                <include>*.yaml</include>
+                                <include>*.yml</include>
+                                <include>*.json</include>
+                                <include>*.properties</include>
+                            </includes>
+                            <trimTrailingWhitespace/>
+                            <endWithNewline/>
+                            <indent>
+                                <spaces>true</spaces>
+                                <spacesPerTab>4</spacesPerTab>
+                            </indent>
+                        </format>
+                    </formats>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- ════════════════════════════════════════════════════════════════════════════
+                 jOOQ codegen chain (MariaDB flavour). Dialect deltas vs. PG:
+                   - mariadb:11.8 + MARIADB_* env vars
+                   - flyway-mysql (handles MariaDB)
+                   - jdbc:mariadb:// + root user
+                   - (?i:DATETIME|TIMESTAMP) + (?i:JSON) forced types
+                   - NO UUID forced type — MariaDB 10.7+ has a native UUID type
+                 ════════════════════════════════════════════════════════════════════════════ -->
+
+            <plugin>
+                <groupId>io.fabric8</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>${fabric8-docker-plugin-version}</version>
+                <configuration>
+                    <images>
+                        <image>
+                            <name>mariadb:11.8</name>
+                            <alias>mariadb-codegen</alias>
+                            <run>
+                                <ports>
+                                    <port>${codegen.db.port}:3306</port>
+                                </ports>
+                                <env>
+                                    <MARIADB_ROOT_PASSWORD>${codegen.db.password}</MARIADB_ROOT_PASSWORD>
+                                    <MARIADB_DATABASE>${codegen.db.name}</MARIADB_DATABASE>
+                                    <TZ>UTC</TZ>
+                                </env>
+                                <wait>
+                                    <log>(?s)ready for connections.*ready for connections</log>
+                                    <time>60000</time>
+                                </wait>
+                            </run>
+                        </image>
+                    </images>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>start-codegen-mariadb</id>
+                        <phase>initialize</phase>
+                        <goals><goal>start</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>stop-codegen-mariadb</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>stop</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <version>${flyway-maven-plugin-version}</version>
+                <configuration>
+                    <url>${codegen.db.url}</url>
+                    <user>${codegen.db.user}</user>
+                    <password>${codegen.db.password}</password>
+                    <schemas>
+                        <schema>wallet</schema>
+                        <schema>eventlog</schema>
+                    </schemas>
+                    <locations>
+                        <location>filesystem:src/main/resources/db/migration</location>
+                    </locations>
+                    <placeholderReplacement>false</placeholderReplacement>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.flywaydb</groupId>
+                        <artifactId>flyway-mysql</artifactId>
+                        <version>${flyway-version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>codegen-migrate</id>
+                        <phase>initialize</phase>
+                        <goals><goal>migrate</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.jooq</groupId>
+                <artifactId>jooq-codegen-maven</artifactId>
+                <version>${jooq-codegen-maven-plugin-version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.mariadb.jdbc</groupId>
+                        <artifactId>mariadb-java-client</artifactId>
+                        <version>${mariadb-driver-version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>jooq-codegen</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>generate</goal></goals>
+                        <configuration>
+                            <jdbc>
+                                <driver>org.mariadb.jdbc.Driver</driver>
+                                <url>${codegen.db.url}</url>
+                                <user>${codegen.db.user}</user>
+                                <password>${codegen.db.password}</password>
+                            </jdbc>
+                            <generator>
+                                <database>
+                                    <name>org.jooq.meta.mariadb.MariaDBDatabase</name>
+                                    <includes>.*</includes>
+                                    <excludes>flyway_schema_history|scheduled_tasks</excludes>
+                                    <inputSchema>wallet</inputSchema>
+                                    <outputSchemaToDefault>true</outputSchemaToDefault>
+                                    <forcedTypes>
+                                        <forcedType>
+                                            <userType>java.time.Instant</userType>
+                                            <converter>io.ekbatan.core.persistence.jooq.converter.InstantConverter</converter>
+                                            <includeTypes>(?i:DATETIME|TIMESTAMP)</includeTypes>
+                                            <includeExpression>.*</includeExpression>
+                                        </forcedType>
+                                        <forcedType>
+                                            <userType>tools.jackson.databind.node.ObjectNode</userType>
+                                            <converter>io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter</converter>
+                                            <includeTypes>(?i:JSON)</includeTypes>
+                                            <includeExpression>.*</includeExpression>
+                                        </forcedType>
+                                    </forcedTypes>
+                                </database>
+                                <target>
+                                    <packageName>io.example.wallet.generated.jooq</packageName>
+                                    <directory>${project.build.directory}/generated-sources/jooq</directory>
+                                </target>
+                            </generator>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

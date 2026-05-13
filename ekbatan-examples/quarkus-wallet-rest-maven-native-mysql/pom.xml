@@ -1,0 +1,470 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.example</groupId>
+    <artifactId>quarkus-wallet-rest-maven-native-mysql</artifactId>
+    <version>0.0.3-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>quarkus-wallet-rest-maven-native-mysql</name>
+    <description>Quarkus + MySQL wallet example demonstrating Ekbatan with Maven (MySQL dialect of the Maven Quarkus triple).</description>
+
+    <properties>
+        <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
+
+        <jooq.version>3.20.10</jooq.version>
+
+        <ekbatan.version>0.0.3</ekbatan.version>
+        <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
+        <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
+        <quarkus.platform.version>3.34.6</quarkus.platform.version>
+
+        <flyway-version>12.0.0</flyway-version>
+        <mysql-connector-version>9.4.0</mysql-connector-version>
+
+        <fabric8-docker-plugin-version>0.48.1</fabric8-docker-plugin-version>
+        <flyway-maven-plugin-version>12.0.0</flyway-maven-plugin-version>
+        <jooq-codegen-maven-plugin-version>3.20.10</jooq-codegen-maven-plugin-version>
+
+        <testcontainers.version>2.0.5</testcontainers.version>
+
+        <!-- Single source of truth for the codegen-time database. -->
+        <codegen.db.port>13307</codegen.db.port>
+        <codegen.db.name>wallet</codegen.db.name>
+        <codegen.db.user>root</codegen.db.user>
+        <codegen.db.password>root</codegen.db.password>
+        <codegen.db.url>jdbc:mysql://localhost:${codegen.db.port}/${codegen.db.name}?serverTimezone=UTC</codegen.db.url>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>maven-local-fallback</id>
+            <url>file://${user.home}/.m2/repository</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>true</enabled></snapshots>
+        </repository>
+        <repository>
+            <id>central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </repository>
+    </repositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>${quarkus.platform.artifact-id}</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- ── Ekbatan ───────────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-quarkus</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-annotation-processor</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+
+        <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
+             Flyway resource provider, etc.) that auto-apply when native-image runs. Also provides
+             FlywayHelper — see FlywayConfiguration. -->
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-native</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.20.0</version>
+        </dependency>
+
+        <!-- ── Quarkus REST ──────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest-jackson</artifactId>
+        </dependency>
+        <!-- ── Flyway via Quarkus's official extension ──────────────────────────── -->
+        <!-- Migrations run at app startup driven by `quarkus.flyway.migrate-at-start=true`
+             against the `quarkus.datasource.*` config (see application.properties). The
+             extension carries native-image reachability metadata for Flyway 12.0.0 and
+             handles the substrate-VM classpath scanning Flyway can't do on its own — no
+             FlywayHelper or NativeImageFlywayResourceProvider needed in user code. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-flyway</artifactId>
+        </dependency>
+        <!-- Database-specific Flyway plugin pulled in alongside the extension. Version is
+             BOM-managed (Quarkus pins 12.0.0). -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+
+        <!-- ── MySQL ─────────────────────────────────────────────────────────────── -->
+        <!-- Driver is compile-scoped (not runtime) because Quarkus' build-step augmentation
+             processes the driver classes during `generate-code`. -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>${mysql-connector-version}</version>
+        </dependency>        <!-- quarkus-jdbc-mysql registers the JDBC driver class for reflective Class.forName lookup
+             in native image. The driver JAR itself is already pulled in below; this Quarkus
+             extension only adds the native-image hint plumbing (a build step that calls
+             RuntimeReflection.register on the driver) — no behavioural change in JVM. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jdbc-mysql</artifactId>
+        </dependency>
+
+
+
+        <!-- ── Tests ─────────────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.27.6</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.3.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Testcontainers 2.x dropped commons-codec from its transitive closure (1.x carried it
+             via httpclient). *Container.start() still calls into helpers that reach for
+             `org.apache.commons.codec.Charsets`, so add it back explicitly here for tests. -->
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.18.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-mysql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                    <parameters>true</parameters>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.github.zyraz-io</groupId>
+                            <artifactId>ekbatan-annotation-processor</artifactId>
+                            <version>${ekbatan.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- Exclude *IT.java from surefire-test — those are @QuarkusIntegrationTest classes
+                 designed to run via failsafe against the packaged binary, NOT in-process via
+                 @QuarkusTest. Without this exclude, surefire tries to deploy the IT class as a
+                 regular Quarkus test, and Quarkus Arc crashes during bean discovery with
+                 IndexOutOfBoundsException because the deployment path differs between
+                 @QuarkusTest and @QuarkusIntegrationTest. -->
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Skip surefire-test in native-suffixed projects entirely. The JVM-mode
+                         @QuarkusTest (WalletResourceIntegrationTest) is already covered by the
+                         sibling non-native project; running it here adds zero coverage AND
+                         crashes Quarkus Arc with IndexOutOfBoundsException because ekbatan-native
+                         is on this project's test classpath (Maven doesn't have Gradle's
+                         integrationTest source-set isolation). The native-only IT class
+                         (WalletResourceNativeIT, @QuarkusIntegrationTest) runs via failsafe
+                         in the `native` profile and exercises the native binary directly. -->
+                    <skipTests>true</skipTests>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build</goal>
+                            <goal>generate-code</goal>
+                            <goal>generate-code-tests</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>2.46.1</version>
+                <configuration>
+                    <java>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                        </includes>
+                        <palantirJavaFormat>
+                            <version>2.81.0</version>
+                        </palantirJavaFormat>
+                    </java>
+                    <formats>
+                        <format>
+                            <includes>
+                                <include>*.md</include>
+                                <include>.gitignore</include>
+                                <include>.gitattributes</include>
+                                <include>*.yaml</include>
+                                <include>*.yml</include>
+                                <include>*.json</include>
+                                <include>*.properties</include>
+                            </includes>
+                            <trimTrailingWhitespace/>
+                            <endWithNewline/>
+                            <indent>
+                                <spaces>true</spaces>
+                                <spacesPerTab>4</spacesPerTab>
+                            </indent>
+                        </format>
+                    </formats>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- ════════════════════════════════════════════════════════════════════════════
+                 jOOQ codegen chain (MySQL flavour). Same as MariaDB sibling plus a third
+                 <forcedType> for CHAR(36) → UUID via UuidStringConverter (MySQL has no native
+                 UUID type — every UUID column is stored as CHAR(36) CHARACTER SET ascii).
+                 ════════════════════════════════════════════════════════════════════════════ -->
+
+            <plugin>
+                <groupId>io.fabric8</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>${fabric8-docker-plugin-version}</version>
+                <configuration>
+                    <images>
+                        <image>
+                            <name>mysql:9.4.0</name>
+                            <alias>mysql-codegen</alias>
+                            <run>
+                                <ports>
+                                    <port>${codegen.db.port}:3306</port>
+                                </ports>
+                                <env>
+                                    <MYSQL_ROOT_PASSWORD>${codegen.db.password}</MYSQL_ROOT_PASSWORD>
+                                    <MYSQL_DATABASE>${codegen.db.name}</MYSQL_DATABASE>
+                                    <TZ>UTC</TZ>
+                                </env>
+                                <wait>
+                                    <log>ready for connections.*port: 3306</log>
+                                    <time>90000</time>
+                                </wait>
+                            </run>
+                        </image>
+                    </images>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>start-codegen-mysql</id>
+                        <phase>initialize</phase>
+                        <goals><goal>start</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>stop-codegen-mysql</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>stop</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <version>${flyway-maven-plugin-version}</version>
+                <configuration>
+                    <url>${codegen.db.url}</url>
+                    <user>${codegen.db.user}</user>
+                    <password>${codegen.db.password}</password>
+                    <schemas>
+                        <schema>wallet</schema>
+                        <schema>eventlog</schema>
+                    </schemas>
+                    <locations>
+                        <location>filesystem:src/main/resources/db/migration</location>
+                    </locations>
+                    <placeholderReplacement>false</placeholderReplacement>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.flywaydb</groupId>
+                        <artifactId>flyway-mysql</artifactId>
+                        <version>${flyway-version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>codegen-migrate</id>
+                        <phase>initialize</phase>
+                        <goals><goal>migrate</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.jooq</groupId>
+                <artifactId>jooq-codegen-maven</artifactId>
+                <version>${jooq-codegen-maven-plugin-version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.mysql</groupId>
+                        <artifactId>mysql-connector-j</artifactId>
+                        <version>${mysql-connector-version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>jooq-codegen</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>generate</goal></goals>
+                        <configuration>
+                            <jdbc>
+                                <driver>com.mysql.cj.jdbc.Driver</driver>
+                                <url>${codegen.db.url}</url>
+                                <user>${codegen.db.user}</user>
+                                <password>${codegen.db.password}</password>
+                            </jdbc>
+                            <generator>
+                                <database>
+                                    <name>org.jooq.meta.mysql.MySQLDatabase</name>
+                                    <includes>.*</includes>
+                                    <excludes>flyway_schema_history|scheduled_tasks</excludes>
+                                    <inputSchema>wallet</inputSchema>
+                                    <outputSchemaToDefault>true</outputSchemaToDefault>
+                                    <forcedTypes>
+                                        <forcedType>
+                                            <userType>java.time.Instant</userType>
+                                            <converter>io.ekbatan.core.persistence.jooq.converter.InstantConverter</converter>
+                                            <includeTypes>(?i:DATETIME|TIMESTAMP)</includeTypes>
+                                            <includeExpression>.*</includeExpression>
+                                        </forcedType>
+                                        <forcedType>
+                                            <userType>tools.jackson.databind.node.ObjectNode</userType>
+                                            <converter>io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter</converter>
+                                            <includeTypes>(?i:JSON)</includeTypes>
+                                            <includeExpression>.*</includeExpression>
+                                        </forcedType>
+                                        <!-- MySQL-only: CHAR(36) → java.util.UUID. -->
+                                        <forcedType>
+                                            <userType>java.util.UUID</userType>
+                                            <converter>io.ekbatan.core.persistence.jooq.converter.mysql.UuidStringConverter</converter>
+                                            <includeTypes>CHAR\(36\)</includeTypes>
+                                            <includeExpression>.*\.id|.*_id</includeExpression>
+                                        </forcedType>
+                                    </forcedTypes>
+                                </database>
+                                <target>
+                                    <packageName>io.example.wallet.generated.jooq</packageName>
+                                    <directory>${project.build.directory}/generated-sources/jooq</directory>
+                                </target>
+                            </generator>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!-- `mvn verify -Dnative` activates this profile: enables Quarkus's native packaging,
+             switches Flyway/Hikari to runtime-init, and adds maven-failsafe-plugin to run
+             *IT.java (the @QuarkusIntegrationTest classes) against the just-built native
+             binary. Without this profile, `mvn verify` builds a JVM jar and skips the IT
+             classes — the JVM `WalletResourceIntegrationTest` (@QuarkusTest) runs via
+             surefire as usual. -->
+        <profile>
+            <id>native</id>
+            <activation>
+                <property>
+                    <name>native</name>
+                </property>
+            </activation>
+            <properties>
+                <skipITs>false</skipITs>
+                <quarkus.native.enabled>true</quarkus.native.enabled>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                                <configuration>
+                                    <systemPropertyVariables>
+                                        <native.image.path>${project.build.directory}/${project.build.finalName}-runner</native.image.path>
+                                    </systemPropertyVariables>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: spring-boot-wallet-rest-gradle-mysql
+
+
+# Single source of truth for DB connection details — both Flyway (run on startup via
+# FlywayConfiguration) and Ekbatan's runtime pools read from this same block. Spring Boot's
+# own DataSource/Flyway auto-config is intentionally NOT used.
+#
+# Notes on the JDBC URLs:
+#   - `serverTimezone=UTC` keeps DATETIME round-tripping consistent with Ekbatan's always-UTC
+#     contract. The container is also pinned to TZ=UTC (see compose.yaml), so this is a
+#     belt-and-suspenders setting — newer connectors infer TZ from the server, but it's cheap.
+#   - The main DB is `wallet`; eventlog is a separate database `eventlog`, created by the V0000
+#     Flyway migration. The connecting user needs cross-database privileges — set up by
+#     `mysql_init.sql` mounted into /docker-entrypoint-initdb.d. See docs/database/mysql.md.
+ekbatan:
+  namespace: example.wallet.mysql
+  sharding:
+    defaultShard:
+      group: 0
+      member: 0
+    groups:
+      - group: 0
+        name: default
+        members:
+          - member: 0
+            name: default
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                username: wallet
+                password: wallet
+                driverClassName: com.mysql.cj.jdbc.Driver
+                maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                username: wallet
+                password: wallet
+                driverClassName: com.mysql.cj.jdbc.Driver
+                maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                username: wallet
+                password: wallet
+                driverClassName: com.mysql.cj.jdbc.Driver
+                # Lock pool: sized for max concurrent held leases (each lease pins one connection
+                # until release). Leak detection off — locks may be legitimately held for a while.
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
+  local-event-handler:
+    handling:
+      enabled: true
+
+logging:
+  level:
+    io.ekbatan: INFO
+    io.example.wallet: DEBUG
+

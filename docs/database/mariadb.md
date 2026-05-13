@@ -154,7 +154,7 @@ create table scheduled_tasks (
 | `created_date` | `DATETIME(6) NOT NULL` | Set once on insert |
 | `updated_date` | `DATETIME(6) NOT NULL` | Bumped on every update alongside `version` |
 
-A minimal example (from `ekbatan-examples/quarkus-wallet-rest`):
+A minimal example (from `ekbatan-examples/quarkus-wallet-rest-gradle-mariadb`):
 
 ```sql
 CREATE TABLE wallets (
@@ -173,7 +173,7 @@ CREATE INDEX idx_wallets_owner_id ON wallets(owner_id);
 
 ## jOOQ codegen
 
-Explicit `jooq { withContainer { … } }` is required — the plugin defaults to Postgres. Full reference: [JOOQ codegen → MariaDB](jooq-codegen.md#mariadb).
+Explicit `jooq { withContainer { … } }` is required — the plugin defaults to Postgres. Full reference: [JOOQ codegen on Gradle → MariaDB](../gradle/jooq-codegen.md#mariadb). **On Maven?** See [JOOQ codegen on Maven → MariaDB](../maven/jooq-codegen.md#mariadb) — same dialect deltas (image, env vars, `(?i:DATETIME|TIMESTAMP)`, `(?i:JSON)`) expressed as `<plugin>` blocks in a `pom.xml`.
 
 ```kotlin
 jooq {
@@ -250,8 +250,10 @@ dependencies {
 - [Multi-database](multi-database.md) — cross-dialect background, column-type cheatsheet, init scripts, repository field-definition pattern
 - [Outbox schema](outbox-schema.md) — the logical shape of `eventlog.events`
 - [Repositories on JOOQ](repositories.md) — how `AbstractRepository` consumes the generated classes
-- [JOOQ codegen](jooq-codegen.md) — the full `build.gradle.kts` reference for all dialects
+- [JOOQ codegen](jooq-codegen.md) — what codegen generates, the converters, per-dialect modeling rationale
+- [JOOQ codegen on Gradle](../gradle/jooq-codegen.md) — the full `build.gradle.kts` reference for all dialects
+- [JOOQ codegen on Maven](../maven/jooq-codegen.md) — the equivalent `pom.xml` plugin chain
 - [Keyed locks](keyed-locks.md) — MariaDB `GET_LOCK()`-backed pessimistic locking
-- Worked examples: [`ekbatan-examples/quarkus-wallet-rest`](../../ekbatan-examples/quarkus-wallet-rest), [`ekbatan-integration-tests/local-event-handler/mariadb`](../../ekbatan-integration-tests/local-event-handler/mariadb)
+- Worked examples: [`ekbatan-examples/quarkus-wallet-rest-gradle-mariadb`](../../ekbatan-examples/quarkus-wallet-rest-gradle-mariadb), [`ekbatan-integration-tests/local-event-handler/mariadb`](../../ekbatan-integration-tests/local-event-handler/mariadb)
 
 ← Back to [Database](README.md) · [docs index](../README.md)

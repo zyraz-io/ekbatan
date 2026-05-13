@@ -178,7 +178,7 @@ CREATE INDEX idx_wallets_owner_id ON wallets(owner_id);
 
 ## jOOQ codegen
 
-Explicit `jooq { withContainer { … } }` is required. The MySQL block adds a third `ForcedType` for `CHAR(36)` → `UUID`. Full reference: [JOOQ codegen → MySQL](jooq-codegen.md#mysql).
+Explicit `jooq { withContainer { … } }` is required. The MySQL block adds a third `ForcedType` for `CHAR(36)` → `UUID`. Full reference: [JOOQ codegen on Gradle → MySQL](../gradle/jooq-codegen.md#mysql). **On Maven?** See [JOOQ codegen on Maven → MySQL](../maven/jooq-codegen.md#mysql) — same three `ForcedType` entries (Instant, JSON, CHAR(36)→UUID) expressed as `<forcedType>` elements in a `pom.xml`.
 
 ```kotlin
 jooq {
@@ -259,7 +259,9 @@ dependencies {
 - [Multi-database](multi-database.md) — cross-dialect background, column-type cheatsheet, init scripts, repository field-definition pattern
 - [Outbox schema](outbox-schema.md) — the logical shape of `eventlog.events`
 - [Repositories on JOOQ](repositories.md) — how `AbstractRepository` consumes the generated classes
-- [JOOQ codegen](jooq-codegen.md) — the full `build.gradle.kts` reference for all dialects
+- [JOOQ codegen](jooq-codegen.md) — what codegen generates, the converters, per-dialect modeling rationale
+- [JOOQ codegen on Gradle](../gradle/jooq-codegen.md) — the full `build.gradle.kts` reference for all dialects
+- [JOOQ codegen on Maven](../maven/jooq-codegen.md) — the equivalent `pom.xml` plugin chain
 - [Keyed locks](keyed-locks.md) — MySQL `GET_LOCK()`-backed pessimistic locking
 - Worked example: [`ekbatan-integration-tests/local-event-handler/mysql`](../../ekbatan-integration-tests/local-event-handler/mysql)
 

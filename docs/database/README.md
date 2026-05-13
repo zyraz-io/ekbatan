@@ -13,6 +13,6 @@ For the framework's *concept* of the outbox (the atomic state + events story), s
   - **[PostgreSQL setup](postgresql.md)** — required tables, DDL, codegen block, gotchas (one-stop reference)
   - **[MariaDB setup](mariadb.md)** — required tables, DDL, codegen block, init script, gotchas
   - **[MySQL setup](mysql.md)** — required tables, DDL, codegen block, init script, gotchas
-- **[JOOQ codegen](jooq-codegen.md)** — per-dialect `build.gradle.kts` blocks for the `dev.monosoul.jooq-docker` plugin
+- **[JOOQ codegen](jooq-codegen.md)** — what codegen generates, the framework's seven converters, when to use each, per-dialect modeling rationale (build-tool agnostic). For the plugin syntax itself, see [Gradle](../gradle/jooq-codegen.md) / [Maven](../maven/jooq-codegen.md).
 
 ← Back to [docs index](../README.md) · [Top README](../../README.md)

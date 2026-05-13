@@ -1,0 +1,501 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.example</groupId>
+    <artifactId>quarkus-wallet-rest-maven-native-pg</artifactId>
+    <version>0.0.3-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>quarkus-wallet-rest-maven-native-pg</name>
+    <description>Quarkus + Postgres wallet example demonstrating Ekbatan with Maven (PG dialect of the Maven Quarkus triple).</description>
+
+    <properties>
+        <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
+
+        <!-- Quarkus' BOM doesn't pin jOOQ, but the codegen plugin's default may not match
+             what Ekbatan was built against. Pin explicitly anyway — the failure mode if you
+             skip this is a NoSuchMethodError at runtime. -->
+        <jooq.version>3.20.10</jooq.version>
+
+        <ekbatan.version>0.0.3</ekbatan.version>
+        <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
+        <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
+        <quarkus.platform.version>3.34.6</quarkus.platform.version>
+
+        <!-- Hyphenated property names — avoid the `flyway.*` / `jooq.*` namespace, which the
+             respective Maven plugins scan and reject for unrecognized keys.
+             Pinned to 12.0.0 to match the version Quarkus 3.34.6's BOM pins for its
+             quarkus-flyway extension — keeping codegen-time and runtime in sync. -->
+        <flyway-version>12.0.0</flyway-version>
+        <postgresql.version>42.7.10</postgresql.version>
+
+        <fabric8-docker-plugin-version>0.48.1</fabric8-docker-plugin-version>
+        <flyway-maven-plugin-version>12.0.0</flyway-maven-plugin-version>
+        <jooq-codegen-maven-plugin-version>3.20.10</jooq-codegen-maven-plugin-version>
+
+        <testcontainers.version>2.0.5</testcontainers.version>
+
+        <!-- Single source of truth for the codegen-time database. -->
+        <codegen.db.port>15432</codegen.db.port>
+        <codegen.db.name>wallet_codegen</codegen.db.name>
+        <codegen.db.user>codegen</codegen.db.user>
+        <codegen.db.password>codegen</codegen.db.password>
+        <codegen.db.url>jdbc:postgresql://localhost:${codegen.db.port}/${codegen.db.name}</codegen.db.url>
+    </properties>
+
+    <repositories>
+        <repository>
+            <!-- Maven reserves the literal id `local` for the local-repository config in settings.xml,
+                 so use a different id here for the file:// fallback. -->
+            <id>maven-local-fallback</id>
+            <url>file://${user.home}/.m2/repository</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>true</enabled></snapshots>
+        </repository>
+        <repository>
+            <id>central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </repository>
+    </repositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Quarkus has no parent POM; the platform BOM is imported here. -->
+            <dependency>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>${quarkus.platform.artifact-id}</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- ── Ekbatan ───────────────────────────────────────────────────────────── -->
+        <!-- The Quarkus extension pulls ekbatan-core + handlers + jobs + AP jar transitively. -->
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-quarkus</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+        <!-- @AutoBuilder dual-path, part 1. -->
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-annotation-processor</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+        <!-- Native-image extras: ships GraalVM Features (Jackson 3 records + builders +
+             @JsonCreator factories, jOOQ-generated record components) and vendored HikariCP
+             reachability metadata. Auto-applied via META-INF/native-image properties when
+             native-image runs; pure no-op on the JVM. Quarkus's own native handling covers
+             extensions, but Ekbatan's runtime types (ShardingConfig.Builder etc.) live in
+             plain ekbatan-* JARs that aren't Quarkus extensions — this module bridges that
+             gap. -->
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-native</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.20.0</version>
+        </dependency>
+
+        <!-- ── Quarkus REST ──────────────────────────────────────────────────────── -->
+        <!-- quarkus-rest is the modern (formerly RESTEasy-Reactive) JAX-RS impl. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest</artifactId>
+        </dependency>
+        <!-- Jackson plug for the request/response (de)serializers. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest-jackson</artifactId>
+        </dependency>
+
+        <!-- ── Flyway via Quarkus's official extension ──────────────────────────── -->
+        <!-- Migrations run at app startup driven by `quarkus.flyway.migrate-at-start=true`
+             against the `quarkus.datasource.*` config (see application.properties). The
+             extension carries native-image reachability metadata for Flyway 12.0.0 and
+             handles the substrate-VM classpath scanning Flyway can't do on its own — no
+             FlywayHelper or NativeImageFlywayResourceProvider needed in user code.
+             Mirrors the Spring Boot starter / Micronaut Flyway pattern in the sibling
+             wallet examples — each framework owns its Flyway integration. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-flyway</artifactId>
+        </dependency>
+        <!-- Database-specific Flyway plugin pulled in alongside the extension. Version is
+             BOM-managed (Quarkus pins 12.0.0). -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- ── PostgreSQL JDBC driver ───────────────────────────────────────────── -->
+        <!-- quarkus-jdbc-postgresql registers the driver for reflective Class.forName in
+             native image AND pulls in the org.postgresql:postgresql JAR transitively, so
+             both the Quarkus datasource (used by quarkus-flyway for migrations) and
+             Ekbatan's own Hikari pool (used at runtime) can resolve the driver. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jdbc-postgresql</artifactId>
+        </dependency>
+
+
+        
+
+
+
+        <!-- ── Tests ─────────────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.27.6</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.3.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Testcontainers 2.x dropped commons-codec from its transitive closure (1.x carried it
+             via httpclient). *Container.start() still calls into helpers that reach for
+             `org.apache.commons.codec.Charsets`, so add it back explicitly here for tests. -->
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.18.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- ════════════════════════════════════════════════════════════════════════════
+                 Compile: enable -parameters (Ekbatan reads parameter names via reflection) and
+                 wire up the @AutoBuilder annotation processor.
+                 ════════════════════════════════════════════════════════════════════════════ -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                    <parameters>true</parameters>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.github.zyraz-io</groupId>
+                            <artifactId>ekbatan-annotation-processor</artifactId>
+                            <version>${ekbatan.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- ════════════════════════════════════════════════════════════════════════════
+                 Quarkus Maven plugin — produces the runnable artifact (`./mvnw quarkus:dev`,
+                 `./mvnw package` produces `target/quarkus-app/`). Hooked into the build via
+                 `<extensions>true</extensions>` so its lifecycle bindings register automatically.
+                 ════════════════════════════════════════════════════════════════════════════ -->
+            <!-- Exclude *IT.java from surefire-test — those are @QuarkusIntegrationTest classes
+                 designed to run via failsafe against the packaged binary, NOT in-process via
+                 @QuarkusTest. Without this exclude, surefire tries to deploy the IT class as a
+                 regular Quarkus test, and Quarkus Arc crashes during bean discovery with
+                 IndexOutOfBoundsException because the deployment path differs between
+                 @QuarkusTest and @QuarkusIntegrationTest. -->
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Skip surefire-test in native-suffixed projects entirely. The JVM-mode
+                         @QuarkusTest (WalletResourceIntegrationTest) is already covered by the
+                         sibling non-native project; running it here adds zero coverage AND
+                         crashes Quarkus Arc with IndexOutOfBoundsException because ekbatan-native
+                         is on this project's test classpath (Maven doesn't have Gradle's
+                         integrationTest source-set isolation). The native-only IT class
+                         (WalletResourceNativeIT, @QuarkusIntegrationTest) runs via failsafe
+                         in the `native` profile and exercises the native binary directly. -->
+                    <skipTests>true</skipTests>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build</goal>
+                            <goal>generate-code</goal>
+                            <goal>generate-code-tests</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>2.46.1</version>
+                <configuration>
+                    <java>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                        </includes>
+                        <palantirJavaFormat>
+                            <version>2.81.0</version>
+                        </palantirJavaFormat>
+                    </java>
+                    <formats>
+                        <format>
+                            <includes>
+                                <include>*.md</include>
+                                <include>.gitignore</include>
+                                <include>.gitattributes</include>
+                                <include>*.yaml</include>
+                                <include>*.yml</include>
+                                <include>*.json</include>
+                                <include>*.properties</include>
+                            </includes>
+                            <trimTrailingWhitespace/>
+                            <endWithNewline/>
+                            <indent>
+                                <spaces>true</spaces>
+                                <spacesPerTab>4</spacesPerTab>
+                            </indent>
+                        </format>
+                    </formats>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- ════════════════════════════════════════════════════════════════════════════
+                 jOOQ codegen chain (PostgreSQL flavour). Three plugins in `initialize` /
+                 `generate-sources` / `prepare-package`. Declared AFTER quarkus-maven-plugin
+                 so within `generate-sources` they run after Quarkus's code generation — but
+                 it doesn't matter for correctness; the jooq generator only needs the live
+                 schema and emits its output independently.
+                 ════════════════════════════════════════════════════════════════════════════ -->
+
+            <plugin>
+                <groupId>io.fabric8</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>${fabric8-docker-plugin-version}</version>
+                <configuration>
+                    <images>
+                        <image>
+                            <name>postgres:16</name>
+                            <alias>postgres-codegen</alias>
+                            <run>
+                                <ports>
+                                    <port>${codegen.db.port}:5432</port>
+                                </ports>
+                                <env>
+                                    <POSTGRES_DB>${codegen.db.name}</POSTGRES_DB>
+                                    <POSTGRES_USER>${codegen.db.user}</POSTGRES_USER>
+                                    <POSTGRES_PASSWORD>${codegen.db.password}</POSTGRES_PASSWORD>
+                                    <TZ>UTC</TZ>
+                                </env>
+                                <wait>
+                                    <log>(?s)database system is ready to accept connections.*database system is ready to accept connections</log>
+                                    <time>30000</time>
+                                </wait>
+                            </run>
+                        </image>
+                    </images>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>start-codegen-postgres</id>
+                        <phase>initialize</phase>
+                        <goals><goal>start</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>stop-codegen-postgres</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>stop</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <version>${flyway-maven-plugin-version}</version>
+                <configuration>
+                    <url>${codegen.db.url}</url>
+                    <user>${codegen.db.user}</user>
+                    <password>${codegen.db.password}</password>
+                    <schemas>
+                        <schema>public</schema>
+                        <schema>eventlog</schema>
+                    </schemas>
+                    <locations>
+                        <location>filesystem:src/main/resources/db/migration</location>
+                    </locations>
+                    <placeholderReplacement>false</placeholderReplacement>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.flywaydb</groupId>
+                        <artifactId>flyway-database-postgresql</artifactId>
+                        <version>${flyway-version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>codegen-migrate</id>
+                        <phase>initialize</phase>
+                        <goals><goal>migrate</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.jooq</groupId>
+                <artifactId>jooq-codegen-maven</artifactId>
+                <version>${jooq-codegen-maven-plugin-version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.postgresql</groupId>
+                        <artifactId>postgresql</artifactId>
+                        <version>${postgresql.version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>jooq-codegen</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>generate</goal></goals>
+                        <configuration>
+                            <jdbc>
+                                <driver>org.postgresql.Driver</driver>
+                                <url>${codegen.db.url}</url>
+                                <user>${codegen.db.user}</user>
+                                <password>${codegen.db.password}</password>
+                            </jdbc>
+                            <generator>
+                                <database>
+                                    <name>org.jooq.meta.postgres.PostgresDatabase</name>
+                                    <includes>.*</includes>
+                                    <excludes>flyway_schema_history</excludes>
+                                    <schemata>
+                                        <schema>
+                                            <inputSchema>public</inputSchema>
+                                            <outputSchema>public_schema</outputSchema>
+                                            <outputSchemaToDefault>true</outputSchemaToDefault>
+                                        </schema>
+                                        <schema>
+                                            <inputSchema>eventlog</inputSchema>
+                                            <outputSchema>eventlog_schema</outputSchema>
+                                        </schema>
+                                    </schemata>
+                                    <forcedTypes>
+                                        <forcedType>
+                                            <userType>java.time.Instant</userType>
+                                            <converter>io.ekbatan.core.persistence.jooq.converter.InstantConverter</converter>
+                                            <includeTypes>TIMESTAMP</includeTypes>
+                                            <includeExpression>.*</includeExpression>
+                                        </forcedType>
+                                        <forcedType>
+                                            <userType>tools.jackson.databind.node.ObjectNode</userType>
+                                            <converter>io.ekbatan.core.persistence.jooq.converter.JSONBObjectNodeConverter</converter>
+                                            <includeTypes>JSONB</includeTypes>
+                                            <includeExpression>.*</includeExpression>
+                                        </forcedType>
+                                    </forcedTypes>
+                                </database>
+                                <target>
+                                    <packageName>io.example.wallet.generated.jooq</packageName>
+                                    <directory>${project.build.directory}/generated-sources/jooq</directory>
+                                </target>
+                            </generator>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!-- `mvn verify -Dnative` activates this profile: enables Quarkus's native packaging,
+             switches Flyway/Hikari to runtime-init, and adds maven-failsafe-plugin to run
+             *IT.java (the @QuarkusIntegrationTest classes) against the just-built native
+             binary. Without this profile, `mvn verify` builds a JVM jar and skips the IT
+             classes — the JVM `WalletResourceIntegrationTest` (@QuarkusTest) runs via
+             surefire as usual. -->
+        <profile>
+            <id>native</id>
+            <activation>
+                <property>
+                    <name>native</name>
+                </property>
+            </activation>
+            <properties>
+                <skipITs>false</skipITs>
+                <quarkus.native.enabled>true</quarkus.native.enabled>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                                <configuration>
+                                    <systemPropertyVariables>
+                                        <native.image.path>${project.build.directory}/${project.build.finalName}-runner</native.image.path>
+                                    </systemPropertyVariables>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

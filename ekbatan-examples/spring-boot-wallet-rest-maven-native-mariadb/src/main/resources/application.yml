@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: spring-boot-wallet-rest-maven-native-mariadb
+
+
+# Single source of truth for DB connection details — both Flyway (run by Spring Boot's
+# FlywayAutoConfiguration via the spring.datasource.* block at the bottom of this file)
+# and Ekbatan's runtime pools read from the same ekbatan.sharding.* block.
+#
+# Notes on the JDBC URLs:
+#   - The main DB is `wallet`; eventlog is a separate database `eventlog`, created by the
+#     V0000 Flyway migration. The connecting user needs cross-database privileges — set up
+#     by `mariadb_init.sql` mounted into /docker-entrypoint-initdb.d. See
+#     docs/database/mariadb.md.
+#   - The container is pinned to TZ=UTC (see compose.yaml), so DATETIME(6) round-trips
+#     consistently with Ekbatan's always-UTC contract. No `serverTimezone=UTC` query
+#     parameter needed on the MariaDB driver.
+ekbatan:
+  namespace: example.wallet.maven-native-mariadb
+  sharding:
+    defaultShard:
+      group: 0
+      member: 0
+    groups:
+      - group: 0
+        name: default
+        members:
+          - member: 0
+            name: default
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 5
+  local-event-handler:
+    handling:
+      enabled: true
+
+logging:
+  level:
+    io.ekbatan: INFO
+    io.example.wallet: DEBUG
+

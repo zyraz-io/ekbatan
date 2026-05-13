@@ -32,11 +32,14 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Demonstrates the README example {@link WalletDepositAction} in action — including its
- * deliberate use of {@link KeyedLockProvider#acquire(Object, Duration)}, which has no wait
- * timeout. The {@link #brokenAcquire_blocksIndefinitely_whenLockHeldElsewhere() broken-behavior
- * test} makes the consequence concrete: if another process holds the wallet's advisory lock,
- * the Action's thread is stuck until that holder releases.
+ * Demonstrates the canonical caller-side lock pattern: the lease wraps
+ * {@code executor.execute(...)} so it spans both {@code Action.perform()} AND the framework's
+ * transaction commit. The deposit Action itself stays lock-agnostic — locking is a policy
+ * applied at the boundary.
+ *
+ * <p>{@link #brokenAcquire_blocksIndefinitely_whenLockHeldElsewhere() The blocking-behavior
+ * test} pins the consequence of the no-wait-timeout {@code acquire(...)} variant: while
+ * another acquirer owns the wallet's lock, our caller is stuck until that holder releases.
  */
 @Testcontainers
 public class WalletDepositLockingIntegrationTest {
@@ -78,7 +81,7 @@ public class WalletDepositLockingIntegrationTest {
 
         var actionRegistry = actionRegistry()
                 .withAction(WalletCreateAction.class, new WalletCreateAction(clock))
-                .withAction(WalletDepositAction.class, new WalletDepositAction(clock, walletRepo, lockProvider))
+                .withAction(WalletDepositAction.class, new WalletDepositAction(clock, walletRepo))
                 .build();
 
         executor = actionExecutor()
@@ -97,11 +100,14 @@ public class WalletDepositLockingIntegrationTest {
         // GIVEN — a fresh wallet with 100.00
         var wallet = createWallet(new BigDecimal("100.00"));
 
-        // WHEN — a single uncontested deposit
-        var updated = executor.execute(
-                () -> "test-user",
-                WalletDepositAction.class,
-                new WalletDepositAction.Params(wallet.id, new BigDecimal("25.50")));
+        // WHEN — caller-side: lease wraps execute()
+        Wallet updated;
+        try (var lease = lockProvider.acquire("wallet:" + wallet.id, Duration.ofSeconds(10))) {
+            updated = executor.execute(
+                    () -> "test-user",
+                    WalletDepositAction.class,
+                    new WalletDepositAction.Params(wallet.id, new BigDecimal("25.50")));
+        }
 
         // THEN — the new balance is the sum
         assertThat(updated.balance).isEqualByComparingTo(new BigDecimal("125.50"));
@@ -109,10 +115,11 @@ public class WalletDepositLockingIntegrationTest {
     }
 
     /**
-     * Demonstrates the consequence of {@link KeyedLockProvider#acquire(String, Duration)} having
-     * no wait timeout — the Duration is {@code maxHold}, not {@code maxWait}. While another
-     * holder owns the wallet's advisory lock, the Action's thread is stuck and only proceeds
-     * once that holder releases.
+     * Demonstrates the consequence of {@link KeyedLockProvider#acquire(String, Duration)}
+     * having no wait timeout — the {@link Duration} is {@code maxHold}, not {@code maxWait}.
+     * While another holder owns the wallet's advisory lock, the caller's
+     * {@code lockProvider.acquire(...)} call is stuck and only proceeds once that holder
+     * releases.
      */
     @Test
     void brokenAcquire_blocksIndefinitely_whenLockHeldElsewhere() throws Exception {
@@ -120,9 +127,9 @@ public class WalletDepositLockingIntegrationTest {
         var wallet = createWallet(new BigDecimal("100.00"));
         var heldByOther = lockProvider.acquire("wallet:" + wallet.id, Duration.ofMinutes(1));
 
-        // WHEN — an Action attempts to deposit on the same wallet
+        // WHEN — another caller attempts to deposit on the same wallet under the same lock
         var depositFuture = CompletableFuture.supplyAsync(() -> {
-            try {
+            try (var lease = lockProvider.acquire("wallet:" + wallet.id, Duration.ofSeconds(10))) {
                 return executor.execute(
                         () -> "test-user",
                         WalletDepositAction.class,
@@ -132,12 +139,13 @@ public class WalletDepositLockingIntegrationTest {
             }
         });
 
-        // THEN — the Action is stuck. acquire(...) has no wait timeout, so it blocks until
-        // the holder releases. We give it 750ms to fail-fast (which it can't, since there's
-        // no fail-fast path), then assert it's still in flight.
+        // THEN — the second caller is stuck on lockProvider.acquire(...). acquire(...) has no
+        // wait timeout, so it blocks until the first holder releases. We give it 750ms to
+        // fail-fast (which it can't, since there's no fail-fast path), then assert it's still
+        // in flight.
         Thread.sleep(750);
         assertThat(depositFuture.isDone())
-                .as("Action should still be blocked while the other holder owns the lock")
+                .as("Caller should still be blocked while the other holder owns the lock")
                 .isFalse();
 
         // WHEN — the "other instance" releases the lock

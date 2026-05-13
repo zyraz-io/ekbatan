@@ -10,6 +10,32 @@ java {
     withSourcesJar()
 }
 
+// Generate a Jandex bean-archive index (META-INF/jandex.idx) inside every published
+// ekbatan-* JAR. Quarkus, Spring, and Micronaut all consume `META-INF/jandex.idx` when
+// present, skipping their own on-the-fly indexing — which makes consumption transparent
+// (no per-app `quarkus.index-dependency.*` config required for non-extension deps).
+//
+// Implemented as a custom Gradle task (see JandexIndexTask) rather than the
+// `org.kordamp.gradle.jandex` plugin: kordamp's plugin (1.x and 2.x) trips a Gradle 9
+// `ClassCastException` on `Banner$Inject_` the moment it's applied to more than one
+// subproject in the same build — fatal here because both ekbatan-quarkus and
+// ekbatan-native need indexes. Our custom task uses `org.jboss.jandex.Indexer` directly
+// from build-logic's classpath, sidestepping the plugin entirely.
+//
+// Output goes to `build/jandex/META-INF/jandex.idx` (a dedicated dir, NOT
+// `build/resources/main/META-INF/...`) — Gradle 9.x's strict task-dependency validator
+// flags implicit cross-project reads when sibling projects (e.g. the protobuf plugin's
+// `extractIncludeProto`) read from each other's `resources/main`. Adding the dedicated
+// dir as an extra `from(...)` source on `jar` keeps the index isolated.
+val jandexIndex = tasks.register<JandexIndexTask>("jandexIndex") {
+    classesDir.set(layout.buildDirectory.dir("classes/java/main"))
+    resourcesDir.set(layout.buildDirectory.dir("jandex"))
+    dependsOn("classes")
+}
+tasks.named<Jar>("jar") {
+    from(jandexIndex.flatMap { it.resourcesDir })
+}
+
 afterEvaluate {
     val artifactId = ekbatanPublishing.artifactId.orNull
         ?: error("Module ${project.path} applies 'ekbatan.publishing' but doesn't set ekbatanPublishing.artifactId")

@@ -2,7 +2,6 @@ plugins {
     `java-library`
     id("ekbatan.publishing")
     id("io.quarkus.extension") version "3.34.6"
-    id("org.kordamp.gradle.jandex") version "2.3.0"
 }
 
 ekbatanPublishing {
@@ -21,17 +20,6 @@ java {
 // We don't publish to the Quarkus website, so disable the config-doc generator explicitly.
 tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.add("-AgenerateDoc=false")
-}
-
-// kordamp's `jandex` task writes META-INF/jandex.idx into build/resources/main, the same dir
-// processResources populates and that checkstyleMain reads. Gradle 9.x's task-validator refuses
-// the implicit ordering — declare it explicitly.
-tasks.named("checkstyleMain") {
-    mustRunAfter("jandex")
-}
-// Same dependency-validator issue for the javadoc task (reads the same resources dir).
-tasks.named("javadoc") {
-    mustRunAfter("jandex")
 }
 
 quarkusExtension {

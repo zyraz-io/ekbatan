@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: spring-boot-wallet-saga-gradle-pg
+
+# Single source of truth for DB connection details — both Flyway and Ekbatan's runtime pools
+# read from this block. Spring Boot's own DataSource/Flyway auto-config is intentionally NOT
+# used.
+ekbatan:
+  namespace: example.wallet.saga
+  sharding:
+    defaultShard:
+      group: 0
+      member: 0
+    groups:
+      - group: 0
+        name: default
+        members:
+          - member: 0
+            name: default
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                username: wallet
+                password: wallet
+                maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                username: wallet
+                password: wallet
+                maximumPoolSize: 5
+  # The whole saga choreography depends on the local-event-handler running — every step except
+  # the first is triggered by an in-process event handler picking up the previous step's event
+  # and invoking the next action.
+  local-event-handler:
+    handling:
+      enabled: true
+
+logging:
+  level:
+    io.ekbatan: INFO
+    io.example.wallet: DEBUG

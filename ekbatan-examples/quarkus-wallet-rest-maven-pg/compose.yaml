@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet
+      POSTGRES_DB: wallet
+      # Pin the server TZ to UTC — the Ekbatan framework writes/reads TIMESTAMP
+      # (without time zone) and assumes UTC at the DB layer.
+      TZ: UTC
+    ports:
+      # Fixed mapping so the hard-coded jdbc:postgresql://localhost:5432/... in
+      # application.yml (used by Ekbatan) matches. Spring Boot's docker-compose
+      # integration also injects the mapped port into spring.datasource.* for
+      # the Flyway-driven migration run.
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallet -d wallet"]
+      interval: 1s
+      timeout: 5s
+      retries: 10

@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: spring-boot-wallet-rest-maven-native-pg
+
+
+# Single source of truth for DB connection details — both Flyway (run by Spring Boot's
+# FlywayAutoConfiguration via the spring.datasource.* block at the bottom of this file)
+# and Ekbatan's runtime pools read from the same ekbatan.sharding.* block.
+ekbatan:
+  namespace: example.wallet.maven-native-pg
+  sharding:
+    defaultShard:
+      group: 0
+      member: 0
+    groups:
+      - group: 0
+        name: default
+        members:
+          - member: 0
+            name: default
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                username: wallet
+                password: wallet
+                maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                username: wallet
+                password: wallet
+                maximumPoolSize: 5
+  local-event-handler:
+    handling:
+      enabled: true
+
+logging:
+  level:
+    io.ekbatan: INFO
+    io.example.wallet: DEBUG
+

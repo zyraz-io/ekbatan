@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: spring-boot-job-worker-gradle-pg
+  main:
+    # No HTTP — this app is a job worker. Spring would also auto-detect this from the absence
+    # of spring-boot-starter-web on the classpath, but pinning it explicitly makes the intent
+    # visible and prevents accidental servlet starters from flipping the mode.
+    web-application-type: none
+
+# Single source of truth for DB connection details — Flyway, Ekbatan's main connection pool,
+# and the JobRegistry's dedicated jobsConfig pool all read from this block.
+ekbatan:
+  namespace: example.wallet.worker
+  sharding:
+    defaultShard:
+      group: 0
+      member: 0
+    groups:
+      - group: 0
+        name: default
+        members:
+          - member: 0
+            name: default
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                username: wallet
+                password: wallet
+                maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                username: wallet
+                password: wallet
+                maximumPoolSize: 5
+  # The framework's local-event-handler still runs in this process — the
+  # WalletStipendJob's deposits emit events that go through the fan-out/handling pipeline
+  # and trigger the CreateNotificationAction handler chain, end-to-end inside one worker JVM.
+  local-event-handler:
+    handling:
+      enabled: true
+
+logging:
+  level:
+    io.ekbatan: INFO
+    io.example.wallet: DEBUG

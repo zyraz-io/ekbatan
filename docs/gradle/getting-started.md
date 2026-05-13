@@ -1,0 +1,334 @@
+# Getting started with Gradle
+
+What you write in a `build.gradle.kts` to consume Ekbatan from Maven Central, on any of the supported stacks. Mirrors the Java-level setup in [`wiring/spring.md`](../wiring/spring.md), [`wiring/quarkus.md`](../wiring/quarkus.md), and [`wiring/micronaut.md`](../wiring/micronaut.md) — the per-stack pages cover the DI wiring, this page covers the build descriptor.
+
+For jOOQ codegen wiring, jump to [jOOQ codegen on Gradle](jooq-codegen.md) — that part is involved enough to deserve its own page.
+
+## Minimum `build.gradle.kts`
+
+Pick the dependency block for your stack. Everything below it (compiler flag, codegen plugin, source-set wiring) is identical across stacks.
+
+### Spring Boot
+
+```kotlin
+plugins {
+    java
+    id("org.springframework.boot") version "4.0.6"
+    id("io.spring.dependency-management") version "1.1.6"
+    id("dev.monosoul.jooq-docker") version "8.0.9"
+}
+
+// (1) Spring Boot 4.0.x's BOM pins jOOQ to 3.19.x; Ekbatan needs 3.20.x.
+extra["jooq.version"] = "3.20.10"
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    // (2) The starter — pulls ekbatan-core, the annotation processor jar, the local
+    // event handler, and distributed jobs transitively.
+    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.3")
+
+    // (3) @AutoBuilder dual-path: implementation so javac sees the annotation symbol,
+    // annotationProcessor so the processor actually runs and emits *Builder.java.
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("org.springframework.boot:spring-boot-starter-web")
+
+    // Your DB driver + Flyway, plus a jooqCodegen() classpath entry for the driver
+    // so the build-time container can be introspected. See jooq-codegen.md.
+    runtimeOnly("org.postgresql:postgresql")
+    jooqCodegen("org.postgresql:postgresql")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    // (4) Required: framework reflection reads constructor parameter names.
+    options.compilerArgs.add("-parameters")
+}
+```
+
+### Quarkus
+
+```kotlin
+plugins {
+    java
+    id("io.quarkus") version "3.34.6"
+    id("dev.monosoul.jooq-docker") version "8.0.9"
+}
+
+// (1) The Quarkus platform BOM doesn't pin jOOQ, but the codegen plugin does — pin
+// explicitly so the runtime classpath matches what the generated classes were compiled
+// against.
+extra["jooq.version"] = "3.20.10"
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:3.34.6"))
+
+    // (2) The Quarkus extension — pulls ekbatan-core + the local-event-handler +
+    // distributed-jobs + the annotation processor jar transitively.
+    implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.3")
+
+    // (3) @AutoBuilder dual-path — same pattern as Spring Boot.
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("io.quarkus:quarkus-rest")
+    implementation("io.quarkus:quarkus-rest-jackson")
+
+    // Driver + jooqCodegen entry.
+    implementation("org.mariadb.jdbc:mariadb-java-client:3.5.7")
+    jooqCodegen("org.mariadb.jdbc:mariadb-java-client:3.5.7")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.add("-parameters")
+}
+```
+
+### Micronaut
+
+```kotlin
+plugins {
+    java
+    // The Micronaut Gradle plugin registers `micronaut-inject-java` as an annotation
+    // processor and provides `./gradlew run`.
+    id("io.micronaut.application") version "4.6.1"
+    id("dev.monosoul.jooq-docker") version "8.0.9"
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+micronaut {
+    version("4.10.7")
+    runtime("netty")
+    testRuntime("junit5")
+    processing {
+        incremental(true)
+        // Tells Micronaut's AP where to scan for *your* beans. Required when classes are
+        // marked with our @EkbatanAction / @EkbatanRepository (not stock Micronaut
+        // stereotypes) — the visitor lifts them to @Singleton at compile time.
+        annotations("com.your.package.*")
+    }
+}
+
+dependencies {
+    // (2) The integration jar — pulls ekbatan-core + handlers + jobs transitively.
+    implementation("io.github.zyraz-io:ekbatan-micronaut:0.0.3")
+    // (5) REQUIRED on Micronaut: the EkbatanStereotypeVisitor lives in ekbatan-micronaut
+    // and must be on the annotationProcessor classpath so it sees @EkbatanAction etc.
+    // during *your* compile. Without this, no BeanDefinition is generated for your
+    // annotated classes and Micronaut treats them as plain non-beans at runtime.
+    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.3")
+
+    // (3) @AutoBuilder dual-path.
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("io.micronaut:micronaut-jackson-databind")
+
+    runtimeOnly("org.postgresql:postgresql:42.7.10")
+    jooqCodegen("org.postgresql:postgresql:42.7.10")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.add("-parameters")
+}
+```
+
+### Plain Java (no DI container)
+
+```kotlin
+plugins {
+    java
+    id("dev.monosoul.jooq-docker") version "8.0.9"
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    // ── Required ────────────────────────────────────────────────────────────
+    implementation("io.github.zyraz-io:ekbatan-core:0.0.3")
+
+    // ── Optional capabilities — add only what you need ──────────────────────
+
+    // @AutoBuilder code generation — generates *Builder classes for Models/Entities.
+    // Skip if you'd rather write the builders by hand.
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    // In-process event handlers (fan-out + handling jobs over the eventlog).
+    implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.0.3")
+
+    // Distributed background jobs (db-scheduler facade; cluster-exclusive scheduling).
+    implementation("io.github.zyraz-io:ekbatan-distributed-jobs:0.0.3")
+
+    runtimeOnly("org.postgresql:postgresql:42.7.10")
+    jooqCodegen("org.postgresql:postgresql:42.7.10")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.add("-parameters")
+}
+```
+
+Each numbered item below is the reason this `build.gradle.kts` differs from a vanilla Spring Boot / Quarkus / Micronaut starter project.
+
+## (1) Override the jOOQ version on Spring Boot
+
+Spring Boot 4.0.x's BOM pins `jooq.version=3.19.x`. Ekbatan compiles against jOOQ 3.20.x and the generated classes call 3.20.x-only APIs. If the BOM wins, you get `NoSuchMethodError` at runtime the first time Ekbatan's code touches a 3.20-only method.
+
+The fix is one line:
+
+```kotlin
+extra["jooq.version"] = "3.20.10"
+```
+
+Quarkus' BOM doesn't pin jOOQ, but the codegen plugin's default version may not match what Ekbatan was built against — pin explicitly anyway, the cost is one line and the failure mode if you skip it is the same `NoSuchMethodError`. Micronaut's BOM also doesn't pin jOOQ; explicit pin is good hygiene there too. Plain-Java projects have no BOM and pull jOOQ transitively from `ekbatan-core` — no override needed.
+
+## (2) The integration dependency
+
+| Stack | Coordinate | Pulls transitively |
+|---|---|---|
+| Spring Boot | `io.github.zyraz-io:ekbatan-spring-boot-starter` | `ekbatan-core`, `ekbatan-annotation-processor`, `ekbatan-local-event-handler`, `ekbatan-distributed-jobs` |
+| Quarkus | `io.github.zyraz-io:ekbatan-quarkus` | same set |
+| Micronaut | `io.github.zyraz-io:ekbatan-micronaut` | same set |
+| Plain Java | `io.github.zyraz-io:ekbatan-core` (+ each optional module explicitly) | nothing transitively — see below |
+
+The four `@Ekbatan*` annotations (`@EkbatanAction`, `@EkbatanRepository`, `@EkbatanEventHandler`, `@EkbatanDistributedJob`) live in `ekbatan-annotation-processor` and come with the integration jars. You don't add them explicitly.
+
+## (3) The annotation processor dual-path
+
+`@AutoBuilder` (used on every `Model` / `Entity`) is declared in `ekbatan-annotation-processor`. The class file has to be on **both** Gradle configurations:
+
+```kotlin
+// regular classpath — so javac sees the @AutoBuilder symbol when parsing your source
+implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+// annotation processor classpath — so the processor actually runs and emits *Builder.java
+annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+```
+
+This isn't redundant — `annotationProcessor` is isolated from the main compile classpath. Dropping one or the other breaks differently:
+
+- Without `implementation` → compile fails with `cannot find symbol: class AutoBuilder`.
+- Without `annotationProcessor` → compile succeeds, processor never runs, you find out at the first reference to `WalletBuilder.wallet()` (`cannot find symbol: class WalletBuilder`).
+
+## (4) `-parameters` is mandatory
+
+Ekbatan reflects over constructor *parameter names* for two things: the `@AutoBuilder` processor names builder methods after them, and Jackson 3's `RecordsModule` uses them to bind JSON fields to record components. Without `-parameters` the bytecode stores them as `arg0`, `arg1`, … and the runtime fails with "no setter for property X" or "missing required field arg0".
+
+Gradle's `java` plugin defaults to omitting it; add the flag explicitly:
+
+```kotlin
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.add("-parameters")
+}
+```
+
+Same requirement applies on Maven (`<parameters>true</parameters>` under `maven-compiler-plugin`).
+
+## (5) Micronaut needs `annotationProcessor("…ekbatan-micronaut")`
+
+This one bites. The `ekbatan-micronaut` jar ships an `EkbatanStereotypeVisitor` that hooks into Micronaut's compile-time annotation processor and lifts your `@Ekbatan*`-annotated classes to `@Singleton`. **The visitor only runs on classes compiled with the jar on the annotation-processor classpath.**
+
+If you only have `implementation("io.github.zyraz-io:ekbatan-micronaut:…")` and forget the `annotationProcessor` line:
+
+- Build succeeds.
+- Runtime: Micronaut finds no `BeanDefinition` for your `@EkbatanAction` / `@EkbatanRepository` / `@EkbatanEventHandler` / `@EkbatanDistributedJob` classes.
+- You get `UnsatisfiedDependencyException` (for repositories injected into actions) or "no candidates for `WalletDepositAction`" when `ActionExecutor.execute(...)` runs.
+
+Spring Boot and Quarkus don't need a separate annotation-processor line for their integration jars — Spring uses runtime classpath scan + AOT, Quarkus uses Jandex at the deployment phase. Micronaut is the one that does *all* its DI work at compile time, so its discovery requires the visitor to be on the AP path.
+
+## (6) Optional add-ons
+
+The four integration jars (Spring Boot / Quarkus / Micronaut / Plain Java's `ekbatan-core`) pull the common modules — annotation processor, local event handler, distributed jobs — transitively. The following are deliberately *not* pulled; add them only when you need them:
+
+```kotlin
+// Redis-backed distributed KeyedLockProvider (Redisson under the hood).
+implementation("io.github.zyraz-io:ekbatan-keyed-lock-redis:0.0.3")
+
+// GraalVM native-image Features (auto-loaded; include only if you build native binaries).
+implementation("io.github.zyraz-io:ekbatan-native:0.0.3")
+
+// Wire-format DTOs for Kafka consumer apps reading from the eventlog. Pick the one
+// matching your Kafka serializer; NOT needed in the producer app itself.
+implementation("io.github.zyraz-io:ekbatan-action-event-json:0.0.3")
+implementation("io.github.zyraz-io:ekbatan-action-event-avro:0.0.3")
+implementation("io.github.zyraz-io:ekbatan-action-event-protobuf:0.0.3")
+```
+
+The wire-format jars are tagged "not needed in the producer app" because the framework writes events to the outbox using its own internal payload format — the wire-format DTOs are POJOs you deserialize *back into* on the consumer side (whatever app reads Kafka or polls the eventlog from outside the producing JVM).
+
+## (7) The jOOQ codegen plugin
+
+Every example uses `dev.monosoul.jooq-docker`:
+
+```kotlin
+plugins {
+    id("dev.monosoul.jooq-docker") version "8.0.9"
+}
+```
+
+The plugin starts a throwaway DB container at build time, runs your Flyway migrations against it, introspects the live schema, and writes Java classes into `build/generated-jooq/`. The dialect-specific `jooq { withContainer { … } }` block, the `generateJooqClasses` task config, and the `sourceSets.main.java.srcDir(…)` line that puts generated classes on the compile path all live in their own page: [jOOQ codegen on Gradle](jooq-codegen.md).
+
+## `gradle.properties`
+
+Most examples keep the Ekbatan version (and dialect-specific driver versions) in `gradle.properties` rather than hard-coding them in `build.gradle.kts`:
+
+```properties
+ekbatanVersion=0.0.3
+```
+
+Read in the build script via:
+
+```kotlin
+val ekbatanVersion: String by project
+```
+
+That gives one place to bump the version across a multi-module repo.
+
+## Gradle wrapper
+
+Use the wrapper so users don't need a system Gradle install:
+
+```
+./gradlew wrapper --gradle-version 9.0.0
+```
+
+Commit `gradle/wrapper/gradle-wrapper.jar`, `gradle/wrapper/gradle-wrapper.properties`, `gradlew`, and `gradlew.bat`. The wrapper bootstraps the right Gradle version on first run.
+
+## Build commands
+
+| Command | Purpose |
+|---|---|
+| `./gradlew build` | Compile + test + assemble. Runs `generateJooqClasses` as a `compileJava` prerequisite. |
+| `./gradlew test` | Tests only. Still triggers `generateJooqClasses` if anything under `src/main/resources/db/migration/` changed. |
+| `./gradlew generateJooqClasses` | Just the codegen step — useful when iterating on a Flyway migration before writing application code. |
+| `./gradlew bootRun` | Spring Boot run-in-place. With `developmentOnly("…spring-boot-docker-compose")` and a `compose.yaml` next to `build.gradle.kts`, it brings up + tears down the DB. |
+| `./gradlew quarkusDev` | Quarkus dev mode (continuous testing, live reload). |
+| `./gradlew run` | Micronaut's equivalent — set `application { mainClass.set("…") }`. |
+| `./gradlew spotlessApply` | Format Java + Markdown + YAML in place (every example wires the [Spotless plugin](https://github.com/diffplug/spotless)). |
+| `./gradlew spotlessCheck` | CI-friendly check without rewriting. |
+
+## See also
+
+- [jOOQ codegen on Gradle](jooq-codegen.md) — the `dev.monosoul.jooq-docker` plugin, per-dialect container/forced-type blocks, source-set wiring
+- [Wiring with Spring Boot](../wiring/spring.md) / [Quarkus](../wiring/quarkus.md) / [Micronaut](../wiring/micronaut.md) — what these dependencies enable on the Java side
+- [Database → PostgreSQL](../database/postgresql.md) / [MariaDB](../database/mariadb.md) / [MySQL](../database/mysql.md) — per-dialect column types, framework tables, gotchas
+- [`ekbatan-examples/`](../../ekbatan-examples/) — every example is a runnable Gradle project
+
+← Back to [Gradle](README.md) · [docs index](../README.md)

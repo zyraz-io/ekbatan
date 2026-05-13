@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.example</groupId>
+    <artifactId>micronaut-wallet-rest-maven-native-mariadb</artifactId>
+    <version>0.0.3-SNAPSHOT</version>
+    <packaging>${packaging}</packaging>
+    <name>micronaut-wallet-rest-maven-native-mariadb</name>
+    <description>Micronaut + MariaDB wallet example demonstrating Ekbatan with Maven + GraalVM native-image (MariaDB dialect of the Maven Micronaut native triple).</description>
+
+    <parent>
+        <groupId>io.micronaut.platform</groupId>
+        <artifactId>micronaut-parent</artifactId>
+        <version>4.10.7</version>
+    </parent>
+
+    <properties>
+        <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
+
+        <packaging>jar</packaging>
+
+        <ekbatan.version>0.0.3</ekbatan.version>
+        <micronaut.runtime>netty</micronaut.runtime>
+        <exec.mainClass>io.example.wallet.Application</exec.mainClass>
+
+        <flyway-version>12.0.0</flyway-version>
+        <mariadb-driver-version>3.5.7</mariadb-driver-version>
+
+        <fabric8-docker-plugin-version>0.48.1</fabric8-docker-plugin-version>
+        <flyway-maven-plugin-version>12.0.0</flyway-maven-plugin-version>
+        <jooq-codegen-maven-plugin-version>3.20.10</jooq-codegen-maven-plugin-version>
+
+        <testcontainers.version>2.0.5</testcontainers.version>
+
+        <codegen.db.port>13306</codegen.db.port>
+        <codegen.db.name>wallet</codegen.db.name>
+        <codegen.db.user>root</codegen.db.user>
+        <codegen.db.password>root</codegen.db.password>
+        <codegen.db.url>jdbc:mariadb://localhost:${codegen.db.port}/${codegen.db.name}</codegen.db.url>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>maven-local-fallback</id>
+            <url>file://${user.home}/.m2/repository</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>true</enabled></snapshots>
+        </repository>
+        <repository>
+            <id>central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <!-- ── Ekbatan ───────────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-micronaut</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-annotation-processor</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+        <!-- Force jOOQ 3.20 runtime; the Micronaut parent POM transitively pulls jOOQ 3.19 via
+             its BOM, but the jooq-codegen-maven plugin generates classes against 3.20 APIs (e.g.
+             `VERSION_3_20`, `resetTouchedOnNotNull()`). Declared as a direct dependency so the
+             explicit version wins over the BOM-managed transitive, without adding a
+             <dependencyManagement> block — that breaks micronaut-maven-plugin 4.11.5's
+             aot-analysis mojo. -->
+        <dependency>
+            <groupId>org.jooq</groupId>
+            <artifactId>jooq</artifactId>
+            <version>3.20.10</version>
+        </dependency>
+
+
+        <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
+             Flyway resource provider, etc.) that auto-apply when native-image runs. -->
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-native</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.20.0</version>
+        </dependency>
+
+        <!-- ── Micronaut runtime ─────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.micronaut</groupId>
+            <artifactId>micronaut-http-server-netty</artifactId>
+            <scope>compile</scope>
+        </dependency>
+        <!-- micronaut-serde-jackson — Jackson-compatible (de)serialization using
+             compile-time generated serdes instead of Jackson Databind's reflection.
+             This is the native-image-friendly path; standard Jackson annotations
+             (@JsonProperty, @JsonCreator) are honoured. Types must carry @Serdeable
+             to opt in. -->
+        <dependency>
+            <groupId>io.micronaut.serde</groupId>
+            <artifactId>micronaut-serde-jackson</artifactId>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- ── Flyway via Micronaut's official extension ──────────────────────── -->
+        <!-- micronaut-flyway picks up `flyway.datasources.{name}.enabled=true` blocks
+             and runs Flyway on startup; `EkbatanShardFlywayCustomizer` overrides the
+             dataSource from `ekbatan.sharding.*`. flyway-core version is BOM-managed
+             by Micronaut. -->
+        <dependency>
+            <groupId>io.micronaut.flyway</groupId>
+            <artifactId>micronaut-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+
+        <!-- ── MariaDB ───────────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>org.mariadb.jdbc</groupId>
+            <artifactId>mariadb-java-client</artifactId>
+            <version>${mariadb-driver-version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ── Tests ─────────────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>io.micronaut.test</groupId>
+            <artifactId>micronaut-test-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.micronaut</groupId>
+            <artifactId>micronaut-http-client</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.27.6</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Testcontainers 2.x dropped commons-codec from its transitive closure (1.x carried it
+             via httpclient). MariaDBContainer.start() still calls into URL/socket helpers that
+             reach for `org.apache.commons.codec.Charsets`, so add it back explicitly here for
+             tests. -->
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.18.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-mariadb</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.3.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                    <parameters>true</parameters>
+                    <compilerArgs>
+                        <arg>-Amicronaut.processing.annotations=io.example.wallet.*</arg>
+                        <arg>-Amicronaut.processing.incremental=true</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths combine.children="append">
+                        <path>
+                            <groupId>io.github.zyraz-io</groupId>
+                            <artifactId>ekbatan-annotation-processor</artifactId>
+                            <version>${ekbatan.version}</version>
+                        </path>
+                        <path>
+                            <groupId>io.github.zyraz-io</groupId>
+                            <artifactId>ekbatan-micronaut</artifactId>
+                            <version>${ekbatan.version}</version>
+                        </path>
+                        <!-- micronaut-serde-processor generates compile-time Serializer/
+                             Deserializer beans for any class annotated with @Serdeable.
+                             Required by micronaut-serde-jackson. -->
+                        <path>
+                            <groupId>io.micronaut.serde</groupId>
+                            <artifactId>micronaut-serde-processor</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>io.micronaut.maven</groupId>
+                <artifactId>micronaut-maven-plugin</artifactId>
+                <configuration>
+                    <aotDependencies>true</aotDependencies>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.graalvm.buildtools</groupId>
+                <artifactId>native-maven-plugin</artifactId>
+                <configuration>
+                    <buildArgs combine.children="append">
+                        <buildArg>-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,io.example</buildArg>
+                        <!-- nativeTest only: the bundled graalvm-reachability-metadata
+                             doesn't tag newer JUnit Platform / Logback classes for build-time
+                             init. Without these, native-image trips on a Logger instance in the
+                             image heap because the type is run-time-init by default. -->
+                        <buildArg>--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory</buildArg>
+                        <buildArg>--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory$DelegatingLogger</buildArg>
+                        <buildArg>--initialize-at-build-time=ch.qos.logback</buildArg>
+                        <buildArg>--initialize-at-build-time=org.slf4j</buildArg>
+                        <buildArg>-H:IncludeResources=db/migration/.*\.sql</buildArg>
+                        <buildArg>-H:IncludeResources=mariadb_init\.sql</buildArg>
+                    </buildArgs>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>2.46.1</version>
+                <configuration>
+                    <java>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                        </includes>
+                        <palantirJavaFormat>
+                            <version>2.81.0</version>
+                        </palantirJavaFormat>
+                    </java>
+                    <formats>
+                        <format>
+                            <includes>
+                                <include>*.md</include>
+                                <include>.gitignore</include>
+                                <include>.gitattributes</include>
+                                <include>*.yaml</include>
+                                <include>*.yml</include>
+                                <include>*.json</include>
+                            </includes>
+                            <trimTrailingWhitespace/>
+                            <endWithNewline/>
+                            <indent>
+                                <spaces>true</spaces>
+                                <spacesPerTab>4</spacesPerTab>
+                            </indent>
+                        </format>
+                    </formats>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- ════════════════════════════════════════════════════════════════════════════
+                 jOOQ codegen chain (MariaDB flavour). Identical to the JVM sibling.
+                 ════════════════════════════════════════════════════════════════════════════ -->
+
+            <plugin>
+                <groupId>io.fabric8</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>${fabric8-docker-plugin-version}</version>
+                <configuration>
+                    <images>
+                        <image>
+                            <name>mariadb:11.8</name>
+                            <alias>mariadb-codegen</alias>
+                            <run>
+                                <ports>
+                                    <port>${codegen.db.port}:3306</port>
+                                </ports>
+                                <env>
+                                    <MARIADB_ROOT_PASSWORD>${codegen.db.password}</MARIADB_ROOT_PASSWORD>
+                                    <MARIADB_DATABASE>${codegen.db.name}</MARIADB_DATABASE>
+                                    <TZ>UTC</TZ>
+                                </env>
+                                <wait>
+                                    <log>(?s)ready for connections.*ready for connections</log>
+                                    <time>60000</time>
+                                </wait>
+                            </run>
+                        </image>
+                    </images>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>start-codegen-mariadb</id>
+                        <phase>initialize</phase>
+                        <goals><goal>start</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>stop-codegen-mariadb</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>stop</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <version>${flyway-maven-plugin-version}</version>
+                <configuration>
+                    <url>${codegen.db.url}</url>
+                    <user>${codegen.db.user}</user>
+                    <password>${codegen.db.password}</password>
+                    <schemas>
+                        <schema>wallet</schema>
+                        <schema>eventlog</schema>
+                    </schemas>
+                    <locations>
+                        <location>filesystem:src/main/resources/db/migration</location>
+                    </locations>
+                    <placeholderReplacement>false</placeholderReplacement>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.flywaydb</groupId>
+                        <artifactId>flyway-mysql</artifactId>
+                        <version>${flyway-version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>codegen-migrate</id>
+                        <phase>initialize</phase>
+                        <goals><goal>migrate</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.jooq</groupId>
+                <artifactId>jooq-codegen-maven</artifactId>
+                <version>${jooq-codegen-maven-plugin-version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.mariadb.jdbc</groupId>
+                        <artifactId>mariadb-java-client</artifactId>
+                        <version>${mariadb-driver-version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>jooq-codegen</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>generate</goal></goals>
+                        <configuration>
+                            <jdbc>
+                                <driver>org.mariadb.jdbc.Driver</driver>
+                                <url>${codegen.db.url}</url>
+                                <user>${codegen.db.user}</user>
+                                <password>${codegen.db.password}</password>
+                            </jdbc>
+                            <generator>
+                                <database>
+                                    <name>org.jooq.meta.mariadb.MariaDBDatabase</name>
+                                    <includes>.*</includes>
+                                    <excludes>flyway_schema_history|scheduled_tasks</excludes>
+                                    <inputSchema>wallet</inputSchema>
+                                    <outputSchemaToDefault>true</outputSchemaToDefault>
+                                    <forcedTypes>
+                                        <forcedType>
+                                            <userType>java.time.Instant</userType>
+                                            <converter>io.ekbatan.core.persistence.jooq.converter.InstantConverter</converter>
+                                            <includeTypes>(?i:DATETIME|TIMESTAMP)</includeTypes>
+                                            <includeExpression>.*</includeExpression>
+                                        </forcedType>
+                                        <forcedType>
+                                            <userType>tools.jackson.databind.node.ObjectNode</userType>
+                                            <converter>io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter</converter>
+                                            <includeTypes>(?i:JSON)</includeTypes>
+                                            <includeExpression>.*</includeExpression>
+                                        </forcedType>
+                                    </forcedTypes>
+                                </database>
+                                <target>
+                                    <packageName>io.example.wallet.generated.jooq</packageName>
+                                    <directory>${project.build.directory}/generated-sources/jooq</directory>
+                                </target>
+                            </generator>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

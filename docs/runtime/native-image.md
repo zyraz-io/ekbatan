@@ -46,16 +46,41 @@ JDBC drivers, HikariCP, jOOQ internals, etc. — these need their own native met
 
 jOOQ 3.20's `Internal.arrayType(Class<T>)` calls `type.arrayType()`, which returns null in native image for some types (reflection metadata missing). Ekbatan ships a GraalVM SVM substitution at `io.ekbatan.core.nativeimage.Target_org_jooq_impl_Internal` that overrides it with `Array.newInstance(type, 0).getClass()` — the safe fallback. This is auto-applied; no opt-in needed.
 
-## Flyway on native
+## Flyway on native — two patterns
 
-Flyway's default `ClassPathScanner` relies on `ClassLoader.getResources(dir)` returning a `file:` or `jar:` URL, which Substrate cannot satisfy. `NativeImageFlywayResourceProvider` walks `resource:/` instead. `FlywayHelper.migrate(...)` automatically swaps in the right provider:
+Flyway's default `ClassPathScanner` relies on `ClassLoader.getResources(dir)` returning a `file:` or `jar:` URL, which GraalVM Substrate cannot satisfy. There are **two ways** Ekbatan apps cope with this, and which one applies depends on whether you're running raw Flyway or a framework-wrapped Flyway:
+
+### Pattern A — framework extension (use this in your app)
+
+If you're writing a Spring Boot / Quarkus / Micronaut app — **use the framework's official Flyway integration**. Each ships its own substrate-VM-aware Flyway resource scanning, so classpath migrations Just Work on native; you don't need to touch `FlywayHelper` at all.
+
+| Framework | Dependency | Customization hook | Wallet example |
+|---|---|---|---|
+| Spring Boot | `org.springframework.boot:spring-boot-starter-flyway` | `@FlywayDataSource @Bean DataSource` | [`spring-boot-wallet-rest-gradle-pg`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-pg) |
+| Quarkus | `io.quarkus:quarkus-flyway` | `implements io.quarkus.flyway.FlywayConfigurationCustomizer` | [`quarkus-wallet-rest-gradle-pg`](../../ekbatan-examples/quarkus-wallet-rest-gradle-pg) |
+| Micronaut | `io.micronaut.flyway:micronaut-flyway` | `@Named("default") implements io.micronaut.flyway.FlywayConfigurationCustomizer` | [`micronaut-wallet-rest-gradle-pg`](../../ekbatan-examples/micronaut-wallet-rest-gradle-pg) |
+
+Full wiring details for each — including the exact dep coordinates to use and to avoid — live in the wiring docs:
+- [Wiring with Quarkus § Flyway](../wiring/quarkus.md#flyway--use-quarkus-flyway--a-flywayconfigurationcustomizer)
+- [Wiring with Micronaut § Flyway](../wiring/micronaut.md#flyway--use-micronaut-flyway--a-flywayconfigurationcustomizer)
+- [Wiring with Spring Boot § Flyway](../wiring/spring.md#flyway--use-spring-boot-starter-flyway--a-flywaydatasource-bean)
+
+### Pattern B — raw Flyway via `FlywayHelper` (framework's own tests; opt-in for non-framework apps)
+
+If you're using raw Flyway **without** any of the three framework extensions — e.g. a plain Java app, a test harness, or a special scenario where the framework integration doesn't fit — wrap your migration call with `FlywayHelper.migrate(...)`. The helper detects native image and swaps in `NativeImageFlywayResourceProvider`, which walks the bundled migrations through Substrate's `resource:/` NIO filesystem:
 
 ```java
+import io.ekbatan.graalvm.flyway.FlywayHelper;
+
 FlywayHelper.migrate(jdbcUrl, username, password);              // default classpath:db/migration
 FlywayHelper.migrate(jdbcUrl, username, password, "classpath:db/migration", "classpath:db/seed");
 ```
 
-Both the migration SQL files and any TestContainers init scripts must be bundled into the native image. The framework's `build.gradle.kts` enables this for every module via:
+This is the path the framework's own integration tests under `ekbatan-integration-tests/` take — they exercise `ekbatan-core` / `ekbatan-events:local-event-handler` / `ekbatan-distributed-jobs` directly with raw Flyway, without dragging in a whole DI framework just to run a migration. On the JVM the helper's behaviour is identical to inline `Flyway.configure().dataSource(...).load().migrate()`; on native it installs the resource provider transparently.
+
+### Resource inclusion (applies to both patterns)
+
+Either way, the migration SQL files and any Testcontainers init scripts must be bundled into the native image. The framework's `build.gradle.kts` enables this for every module via the convention plugin:
 
 ```kotlin
 graalvmNative {

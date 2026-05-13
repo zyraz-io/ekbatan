@@ -25,7 +25,152 @@ The `implementation` jar transitively pulls in `ekbatan-core`, `ekbatan-events:l
 
 ### 2. Your domain classes — annotated
 
-The five domain classes — `@AutoBuilder` `Wallet`, `@EkbatanAction` `WalletDepositAction`, `@EkbatanRepository` `WalletRepository`, `@EkbatanEventHandler` `WalletMoneyDepositedEventHandler`, and `@EkbatanDistributedJob` `DailyWalletReportJob` — are framework-agnostic. **For the full code inline, jump to [annotations.md](annotations.md)** — every line is identical here. Micronaut discovers `@Ekbatan*`-annotated classes via the compile-time `EkbatanStereotypeVisitor` (see [How the integration works](#how-the-integration-works) below); the source itself is unchanged.
+This is what you actually write. Five domain classes carry five annotations — `@AutoBuilder` on the `Model`, and the four `@Ekbatan*` markers on the action, repository, event handler, and job. They're framework-agnostic: the same source compiles and runs identically against Spring Boot, Quarkus, and Micronaut. The four `@Ekbatan*` annotations are pure markers; `@AutoBuilder` is an independent compile-time builder generator. Micronaut discovers the `@Ekbatan*`-annotated classes via the compile-time `EkbatanStereotypeVisitor` (see [How the integration works](#how-the-integration-works) below); the source itself is unchanged.
+
+#### Wallet — the Model (`@AutoBuilder`)
+
+```java
+@AutoBuilder
+public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+
+    public final UUID ownerId;
+    public final Currency currency;
+    public final BigDecimal balance;
+
+    Wallet(WalletBuilder builder) {
+        super(builder);
+        this.ownerId  = Validate.notNull(builder.ownerId,  "ownerId cannot be null");
+        this.currency = Validate.notNull(builder.currency, "currency cannot be null");
+        this.balance  = Validate.notNull(builder.balance,  "balance cannot be null");
+    }
+
+    public Wallet deposit(BigDecimal amount) {
+        Validate.isTrue(amount.compareTo(BigDecimal.ZERO) > 0, "Deposit amount must be positive");
+        final var newBalance = balance.add(amount);
+        return copy()
+                .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
+                .balance(newBalance)
+                .build();
+    }
+
+    @Override
+    public WalletBuilder copy() {
+        return WalletBuilder.wallet().copyBase(this).ownerId(ownerId).currency(currency).balance(balance);
+    }
+}
+```
+
+#### WalletDepositAction — the Action (`@EkbatanAction`)
+
+Discovered and registered into `ActionRegistry` so `ActionExecutor.execute(...)` can find it. Constructor params are resolved by the DI container.
+
+```java
+@EkbatanAction
+public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
+
+    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
+
+    private final WalletRepository walletRepository;
+
+    public WalletDepositAction(Clock clock, WalletRepository walletRepository) {
+        super(clock);
+        this.walletRepository = walletRepository;
+    }
+
+    @Override
+    protected Wallet perform(Principal principal, Params params) {
+        var wallet  = walletRepository.getById(params.walletId().getValue());
+        var updated = wallet.deposit(params.amount());
+        return plan().update(updated);
+    }
+}
+```
+
+#### WalletRepository — the Repository (`@EkbatanRepository`)
+
+Registered as a managed DI bean and into `RepositoryRegistry`. Inject it by its concrete class anywhere.
+
+```java
+@EkbatanRepository
+public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
+
+    public WalletRepository(DatabaseRegistry databaseRegistry) {
+        super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry);
+    }
+
+    @Override
+    public Wallet fromRecord(WalletsRecord r) {
+        return WalletBuilder.wallet()
+                .id(Id.of(Wallet.class, r.getId()))
+                .version(r.getVersion())
+                .state(WalletState.valueOf(r.getState()))
+                .ownerId(r.getOwnerId())
+                .currency(Currency.getInstance(r.getCurrency()))
+                .balance(r.getBalance())
+                .createdDate(r.getCreatedDate())
+                .updatedDate(r.getUpdatedDate())
+                .build();
+    }
+
+    @Override
+    public WalletsRecord toRecord(Wallet w) {
+        return new WalletsRecord(
+                w.id.getValue(), w.version, w.state.name(),
+                w.ownerId, w.currency.getCurrencyCode(), w.balance,
+                w.createdDate, w.updatedDate);
+    }
+}
+```
+
+#### WalletMoneyDepositedEventHandler — the EventHandler (`@EkbatanEventHandler`)
+
+Registered with `EventHandlerRegistry`. Only effective when the local-event-handler module is on the classpath.
+
+```java
+@EkbatanEventHandler
+public class WalletMoneyDepositedEventHandler implements EventHandler<WalletMoneyDepositedEvent> {
+
+    private final NotificationService notificationService;
+
+    public WalletMoneyDepositedEventHandler(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
+
+    @Override public String name()                               { return "wallet-deposit-notification"; }
+    @Override public Class<WalletMoneyDepositedEvent> eventType() { return WalletMoneyDepositedEvent.class; }
+
+    @Override
+    public void handle(EventEnvelope<WalletMoneyDepositedEvent> envelope) {
+        notificationService.notifyDeposit(envelope.event.modelId, envelope.event.amount);
+    }
+}
+```
+
+#### DailyWalletReportJob — the DistributedJob (`@EkbatanDistributedJob`)
+
+Registered with `JobRegistry`. Only effective when the distributed-jobs module is on the classpath.
+
+```java
+@EkbatanDistributedJob
+public class DailyWalletReportJob extends DistributedJob {
+
+    private final ReportService reportService;
+
+    public DailyWalletReportJob(ReportService reportService) {
+        this.reportService = reportService;
+    }
+
+    @Override public String name()       { return "daily-wallet-report"; }
+    @Override public Schedule schedule() { return Schedules.daily(LocalTime.of(2, 0)); }
+
+    @Override
+    public void execute(ExecutionContext ctx) {
+        reportService.generateAndSend();
+    }
+}
+```
+
+For the annotation reference table and the full rationale on why `Action` instances are *not* exposed as DI beans, see [annotations.md](annotations.md).
 
 ### 3. The application bootstrap
 
@@ -152,9 +297,170 @@ In `io.ekbatan.micronaut`:
 | `@EkbatanEventHandler` | Same lifting; only effective when the local-event-handler module is on the classpath (`@Requires(classes = ...)`). |
 | `@EkbatanDistributedJob` | Same lifting; only effective when ekbatan-distributed-jobs is on the classpath. |
 
+### Flyway — use `micronaut-flyway` + a `FlywayConfigurationCustomizer`
+
+Don't run Flyway by hand from a `@Context @PostConstruct` bean (that's what the framework's own tests at `ekbatan-integration-tests/di/micronaut` do via `FlywayHelper`, because they use raw Flyway with no framework extension wrapping it — see [GraalVM native-image § two patterns](../runtime/native-image.md#flyway-on-native--two-patterns)). For a real Micronaut app, **use `micronaut-flyway`** and let an `EkbatanShardFlywayCustomizer` (a `@Singleton @Named("default")` bean) override the dataSource from `ekbatan.sharding.*`.
+
+**Dependencies** — pull the Micronaut extension, NOT raw `flyway-core`:
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    // ✅ The Micronaut extension. Pulls flyway-core transitively at Micronaut's BOM-pinned
+    //    version, runs Flyway as a `@Singleton` migration runner, integrates with
+    //    `flyway.datasources.{name}.*` config keys, and ships substrate-VM Flyway scanning.
+    implementation("io.micronaut.flyway:micronaut-flyway")
+
+    // ✅ Database-specific Flyway plugin (BOM-managed; no version needed).
+    implementation("org.flywaydb:flyway-database-postgresql")   // or flyway-mysql for MariaDB/MySQL
+
+    // ❌ Don't add `org.flywaydb:flyway-core` directly. micronaut-flyway brings the right
+    //    version and wires the customizer hook for you; pulling flyway-core independently
+    //    bypasses the framework's qualifier-based customizer lookup (`Qualifiers.byName`)
+    //    and you lose the substrate-VM hints on native.
+}
+```
+
+```xml
+<!-- pom.xml -->
+<dependency>
+    <groupId>io.micronaut.flyway</groupId>
+    <artifactId>micronaut-flyway</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.flywaydb</groupId>
+    <artifactId>flyway-database-postgresql</artifactId>
+</dependency>
+```
+
+```yaml
+# application.yml — derived from ekbatan.sharding.* via property placeholders.
+# The customizer below overrides these programmatically too (belt and braces).
+flyway:
+  datasources:
+    default:
+      enabled: true
+      url: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl}
+      user: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username}
+      password: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password}
+```
+
+```java
+@Singleton
+@Named("default")
+public class EkbatanShardFlywayCustomizer implements FlywayConfigurationCustomizer {
+
+    private final ShardingConfig shardingConfig;
+
+    public EkbatanShardFlywayCustomizer(ShardingConfig shardingConfig) {
+        this.shardingConfig = shardingConfig;
+    }
+
+    // Required because FlywayConfigurationCustomizer extends io.micronaut.core.naming.Named.
+    @Override
+    @NonNull
+    public String getName() {
+        return "default";
+    }
+
+    @Override
+    public void customizeFluentConfiguration(FluentConfiguration configuration) {
+        var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
+        configuration.dataSource(primary.jdbcUrl, primary.username, primary.password);
+    }
+}
+```
+
+Why this shape:
+- **Both `@Named("default")` and `getName()` return `"default"`.** Micronaut uses `Qualifiers.byName("default")` to look up the customizer for the Flyway instance keyed `flyway.datasources.default`. The `getName()` method is required because the interface extends `io.micronaut.core.naming.Named` — both have to agree on `"default"`.
+- **Single source of truth.** Connection coordinates live under `ekbatan.sharding.*`; the YAML placeholders + customizer both read from the same tree.
+- **Native works.** `micronaut-flyway` handles substrate-VM Flyway scanning; no need for `FlywayHelper`.
+
+See [`ekbatan-examples/micronaut-wallet-rest-gradle-pg`](../../ekbatan-examples/micronaut-wallet-rest-gradle-pg) for the full runnable shape (and its `-mariadb`/`-mysql`/`-native-*`/`-maven-*` variants).
+
+### Serialization — use `micronaut-serde-jackson` (not `micronaut-jackson-databind`)
+
+For native-image friendliness, swap the runtime Jackson integration to **`micronaut-serde-jackson`**, which generates compile-time `Serializer`/`Deserializer` beans instead of relying on Jackson Databind's reflection.
+
+**Dependencies** — pull the Micronaut Serialization Jackson bridge, NOT raw `jackson-databind` or `micronaut-jackson-databind`:
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    // ✅ The Micronaut Serialization Jackson bridge. Standard Jackson annotations
+    //    (@JsonProperty, @JsonCreator, @JsonAlias) are honoured; types tagged with @Serdeable
+    //    get a compile-time Serializer + Deserializer generated. No runtime reflection — the
+    //    native image is ~5MB smaller as a result.
+    implementation("io.micronaut.serde:micronaut-serde-jackson")
+
+    // ✅ The annotation processor that emits the compile-time serdes. REQUIRED — without
+    //    it, micronaut-serde-jackson runs but finds no generated serdes and falls back to
+    //    Jackson Databind, which trips reflection errors on native.
+    annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
+
+    // ❌ Don't add `io.micronaut:micronaut-jackson-databind` alongside this — they conflict
+    //    (both register Jackson MessageBodyReader/Writer beans). Drop jackson-databind
+    //    entirely; micronaut-serde-jackson replaces it.
+    //
+    // ❌ Don't add `com.fasterxml.jackson.core:jackson-databind` directly either —
+    //    micronaut-serde-jackson brings the right version transitively, and direct pulls
+    //    bypass the AOT processor's serde generation.
+}
+```
+
+```xml
+<!-- pom.xml -->
+<dependency>
+    <groupId>io.micronaut.serde</groupId>
+    <artifactId>micronaut-serde-jackson</artifactId>
+</dependency>
+
+<!-- Plus the annotation processor entry in maven-compiler-plugin's <annotationProcessorPaths> -->
+<plugin>
+    <artifactId>maven-compiler-plugin</artifactId>
+    <configuration>
+        <annotationProcessorPaths combine.children="append">
+            <path>
+                <groupId>io.micronaut.serde</groupId>
+                <artifactId>micronaut-serde-processor</artifactId>
+            </path>
+        </annotationProcessorPaths>
+    </configuration>
+</plugin>
+```
+
+Tag your on-the-wire types with `@io.micronaut.serde.annotation.Serdeable`. Standard Jackson annotations (`@JsonProperty`, `@JsonCreator`, `@JsonAlias`) are still honoured:
+
+```java
+@Controller("/wallets")
+public class WalletController {
+
+    @Serdeable
+    public record CreateRequest(UUID ownerId, String currency, BigDecimal initialBalance) {}
+
+    @Serdeable
+    public record WalletResponse(UUID id, UUID ownerId, String currency, BigDecimal balance, String state, Long version) {}
+
+    @Post
+    public HttpResponse<WalletResponse> create(@Body CreateRequest body) { ... }
+}
+```
+
+Records work out of the box (canonical constructor). For non-record DTOs, add `@JsonCreator` to the constructor you want used. The reward: no reflection on the HTTP path → smaller, faster native image.
+
 ### Native-image specifics
 
 - The GraalVM Build Tools plugin auto-pulls the GraalVM Reachability Metadata Repository, which already covers HikariCP and the major JDBC drivers. Nothing extra to vendor.
+- The auto-applied native-build-tools plugin (0.11.x, brought by Micronaut 4.6.x) expects an old metadata-repo format; pin the repo to `0.3.35` (last 0.x release). The wallet examples show this in their `graalvmNative { metadataRepository { version.set("0.3.35") } }` block.
+- For JUnit `nativeTest`, ship a minimal `src/main/resources/logback.xml` that pins `com.zaxxer.hikari` to INFO. Hikari's `HikariConfig.logConfiguration()` at DEBUG reflects over every JavaBean property, which trips a missing-reflection-metadata error at runtime; raising the level short-circuits the gating `if (LOGGER.isDebugEnabled()) logConfiguration();`.
+- For Testcontainers init scripts (the `mariadb_init.sql` / `mysql_init.sql` that grants the test user cross-DB privileges), replace `MountableFile.forClasspathResource(...)` with `Transferable.of(<inline-bytes>.getBytes(UTF_8))`. Classpath-resource resolution doesn't work reliably inside an in-process native test image; inlining the bytes does.
+- Add init-at-build-time hints for the JUnit and Logback classes the bundled 0.3.35 metadata-repo doesn't cover:
+  ```kotlin
+  buildArgs.add("--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory")
+  buildArgs.add("--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory\$DelegatingLogger")
+  buildArgs.add("--initialize-at-build-time=ch.qos.logback")
+  buildArgs.add("--initialize-at-build-time=org.slf4j")
+  ```
 - For your own records / `@AutoBuilder` builders / `@JsonCreator` mixins / jOOQ-generated classes that live outside `io.ekbatan`, extend the scan roots:
   ```kotlin
   graalvmNative {

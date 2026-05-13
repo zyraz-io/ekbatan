@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Minimal Logback config for the native-image variant. Two jobs:
+
+    1. Pin HikariCP to INFO so its startup `logConfiguration()` short-circuits behind the
+       `if (LOGGER.isDebugEnabled()) ...` gate inside `HikariConfig`. Without this, native-image
+       trips a `MissingReflectionRegistrationError` at runtime when `PropertyElf` reflectively
+       walks every HikariConfig getter (e.g. `isAllowPoolSuspension`) to print the pool's
+       configuration — ekbatan-native's vendored Hikari reflect-config doesn't enumerate the
+       full bean-property surface that Hikari's "log everything" path touches.
+
+    2. Provide an actual `logback.xml` on the classpath so Micronaut's
+       `PropertiesLoggingLevelsConfigurer` (the bean that wires `logger.levels.*` from
+       application.yml into the live Logback context) finds a config it can refresh. Without
+       a file on the classpath this bean fails fast with `LoggingSystemException: Resource
+       logback.xml not found`. The JVM-only sibling doesn't need one because we never set
+       any `logger.levels` keys there — the logback default is fine.
+-->
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="com.zaxxer.hikari" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

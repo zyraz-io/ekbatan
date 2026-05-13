@@ -1,0 +1,458 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.example</groupId>
+    <artifactId>spring-boot-wallet-rest-maven-native-pg</artifactId>
+    <version>0.0.3-SNAPSHOT</version>
+    <packaging>${packaging}</packaging>
+    <name>spring-boot-wallet-rest-maven-native-pg</name>
+    <description>Spring Boot + Postgres wallet example demonstrating Ekbatan with Maven (PG dialect of the Maven sibling triple).</description>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.0.6</version>
+        <relativePath/>
+    </parent>
+
+    <properties>
+        <java.version>25</java.version>
+        <maven.compiler.release>25</maven.compiler.release>
+
+        <!-- Default packaging is jar; the native profile overrides via -Dpackaging=native-image. -->
+        <packaging>jar</packaging>
+
+        <!-- Spring Boot 4.0.x's BOM pins jOOQ to 3.19.x, but Ekbatan (and the codegen plugin) target 3.20.x.
+             Override the parent's property so the generated record classes and the runtime jOOQ classpath agree. -->
+        <jooq.version>3.20.10</jooq.version>
+
+        <ekbatan.version>0.0.3</ekbatan.version>
+        <!-- Avoid the `flyway.*` namespace for Maven properties — Flyway's maven plugin scans
+             system properties and rejects anything prefixed with `flyway.` that isn't a known
+             Flyway configuration key. Same caution applies to `jooq.*` (the codegen plugin scans
+             its own namespace), so use hyphenated names for plugin / artifact versions. -->
+        <flyway-version>12.0.0</flyway-version>
+        <postgresql.version>42.7.10</postgresql.version>
+
+        <fabric8-docker-plugin-version>0.48.1</fabric8-docker-plugin-version>
+        <flyway-maven-plugin-version>12.0.0</flyway-maven-plugin-version>
+        <jooq-codegen-maven-plugin-version>3.20.10</jooq-codegen-maven-plugin-version>
+
+        <testcontainers.version>2.0.5</testcontainers.version>
+
+        <!-- Single source of truth for the codegen-time database. Used by docker-maven-plugin (to start the
+             container), flyway-maven-plugin (to migrate), and jooq-codegen-maven (to introspect). -->
+        <codegen.db.port>15432</codegen.db.port>
+        <codegen.db.name>wallet_codegen</codegen.db.name>
+        <codegen.db.user>codegen</codegen.db.user>
+        <codegen.db.password>codegen</codegen.db.password>
+        <codegen.db.url>jdbc:postgresql://localhost:${codegen.db.port}/${codegen.db.name}</codegen.db.url>
+    </properties>
+
+    <repositories>
+        <!-- mavenLocal first so unreleased Ekbatan versions (a `./mvnw install` of an in-progress fix)
+             take precedence over Maven Central. Safe to leave in for a published example. -->
+        <repository>
+            <!-- Maven reserves the literal id `local` for the local-repository config in settings.xml,
+                 so use a different id here for the file:// fallback. -->
+            <id>maven-local-fallback</id>
+            <url>file://${user.home}/.m2/repository</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>true</enabled></snapshots>
+        </repository>
+        <repository>
+            <id>central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <!-- ── Ekbatan ───────────────────────────────────────────────────────────── -->
+        <!-- The Spring Boot starter pulls ekbatan-core, the annotation processor, the local-event-handler,
+             and distributed-jobs transitively. -->
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-spring-boot-starter</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+        <!-- The annotation processor jar must be on the compile classpath so the @AutoBuilder annotation
+             is visible to the compiler. The processor itself is wired up via maven-compiler-plugin's
+             <annotationProcessorPaths> below. -->
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-annotation-processor</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+
+        <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
+             Flyway resource provider, etc.) that auto-apply when native-image runs. Also provides
+             FlywayHelper — see FlywayConfiguration. -->
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-native</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+
+        <!-- Used by the domain classes for Validate.notNull / Validate.isTrue style guards. -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.20.0</version>
+        </dependency>
+
+        <!-- ── Spring Boot ───────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Brings up the compose.yaml services on `./mvnw spring-boot:run` and tears them down on shutdown.
+             Tests don't go through this — they use Testcontainers. <optional>true</optional> keeps it out of
+             the produced jar, mirroring Gradle's `developmentOnly` semantics. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-docker-compose</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ── Flyway via Spring Boot's official starter ───────────────────────── -->
+        <!-- spring-boot-starter-flyway brings FlywayAutoConfiguration plus flyway-core.
+             EkbatanShardFlywayCustomizer (@Component) overrides the dataSource from
+             ekbatan.sharding.* so connection coords live in one place. flyway-core version
+             is BOM-managed by Spring Boot. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- ── PostgreSQL ────────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${postgresql.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ── Tests ─────────────────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Testcontainers 2.x renamed the modules: postgresql → testcontainers-postgresql,
+             junit-jupiter → testcontainers-junit-jupiter. -->
+        <!-- Testcontainers 2.x dropped commons-codec from its transitive closure (1.x carried it
+             via httpclient). *Container.start() still calls into helpers that reach for
+             `org.apache.commons.codec.Charsets`, so add it back explicitly here for tests. -->
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.18.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.3.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- ════════════════════════════════════════════════════════════════════════════
+                 Compile: enable -parameters (Ekbatan reads parameter names via reflection) and
+                 wire up the annotation processor that emits @AutoBuilder code.
+                 ════════════════════════════════════════════════════════════════════════════ -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                    <parameters>true</parameters>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.github.zyraz-io</groupId>
+                            <artifactId>ekbatan-annotation-processor</artifactId>
+                            <version>${ekbatan.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- ════════════════════════════════════════════════════════════════════════════
+                 Spring Boot: build the executable jar, run dev mode via `mvn spring-boot:run`.
+                 Provided by the parent POM; declared here so version is centrally controlled.
+                 ════════════════════════════════════════════════════════════════════════════ -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- ════════════════════════════════════════════════════════════════════════════
+                 Spotless — Palantir Java Format 2.81.0, matching the framework repo's Gradle
+                 spotless config. Bound to the `compile` phase so `./mvnw compile` (and `verify`)
+                 fails on formatting drift; `./mvnw spotless:apply` rewrites files in place.
+                 ════════════════════════════════════════════════════════════════════════════ -->
+            <plugin>
+                <groupId>org.graalvm.buildtools</groupId>
+                <artifactId>native-maven-plugin</artifactId>
+                <configuration>
+                    <buildArgs combine.children="append">
+                        <buildArg>-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,io.example</buildArg>
+                        <buildArg>-H:IncludeResources=db/migration/.*\.sql</buildArg>
+                    </buildArgs>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>2.46.1</version>
+                <configuration>
+                    <java>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                        </includes>
+                        <palantirJavaFormat>
+                            <version>2.81.0</version>
+                        </palantirJavaFormat>
+                    </java>
+                    <formats>
+                        <format>
+                            <includes>
+                                <include>*.md</include>
+                                <include>.gitignore</include>
+                                <include>.gitattributes</include>
+                                <include>*.yaml</include>
+                                <include>*.yml</include>
+                                <include>*.json</include>
+                            </includes>
+                            <trimTrailingWhitespace/>
+                            <endWithNewline/>
+                            <indent>
+                                <spaces>true</spaces>
+                                <spacesPerTab>4</spacesPerTab>
+                            </indent>
+                        </format>
+                    </formats>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- ════════════════════════════════════════════════════════════════════════════
+                 jOOQ codegen chain — three plugins running in `initialize` and `generate-sources`.
+
+                 The Gradle sibling uses the `dev.monosoul.jooq-docker` plugin which bundles all of
+                 this into one declaration; on Maven we compose three official plugins instead:
+
+                   1. fabric8 docker-maven-plugin  — spin up an ephemeral Postgres
+                   2. flyway-maven-plugin          — run our migrations against it
+                   3. jooq-codegen-maven           — introspect and generate Java classes
+
+                 The plugins are declared in this order so their executions in the `initialize`
+                 phase run sequentially (Maven runs executions of the same phase in declaration
+                 order). At `prepare-package`, fabric8 tears the container back down.
+                 ════════════════════════════════════════════════════════════════════════════ -->
+
+            <!-- 1. Postgres container lifecycle. -->
+            <plugin>
+                <groupId>io.fabric8</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>${fabric8-docker-plugin-version}</version>
+                <configuration>
+                    <images>
+                        <image>
+                            <name>postgres:16</name>
+                            <alias>postgres-codegen</alias>
+                            <run>
+                                <ports>
+                                    <port>${codegen.db.port}:5432</port>
+                                </ports>
+                                <env>
+                                    <POSTGRES_DB>${codegen.db.name}</POSTGRES_DB>
+                                    <POSTGRES_USER>${codegen.db.user}</POSTGRES_USER>
+                                    <POSTGRES_PASSWORD>${codegen.db.password}</POSTGRES_PASSWORD>
+                                    <TZ>UTC</TZ>
+                                </env>
+                                <!-- Postgres logs "ready to accept connections" twice during init: once
+                                     before the init script runs (still in setup mode), once after the
+                                     real server starts. Match both occurrences with (?s).*. -->
+                                <wait>
+                                    <log>(?s)database system is ready to accept connections.*database system is ready to accept connections</log>
+                                    <time>30000</time>
+                                </wait>
+                            </run>
+                        </image>
+                    </images>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>start-codegen-postgres</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>start</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>stop-codegen-postgres</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>stop</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- 2. Run Flyway migrations against the freshly-started container. -->
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <version>${flyway-maven-plugin-version}</version>
+                <configuration>
+                    <url>${codegen.db.url}</url>
+                    <user>${codegen.db.user}</user>
+                    <password>${codegen.db.password}</password>
+                    <schemas>
+                        <schema>public</schema>
+                        <schema>eventlog</schema>
+                    </schemas>
+                    <locations>
+                        <location>filesystem:src/main/resources/db/migration</location>
+                    </locations>
+                    <placeholderReplacement>false</placeholderReplacement>
+                </configuration>
+                <!-- Flyway 10+ requires the per-dialect plugin module on the build classpath. -->
+                <dependencies>
+                    <dependency>
+                        <groupId>org.flywaydb</groupId>
+                        <artifactId>flyway-database-postgresql</artifactId>
+                        <version>${flyway-version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>codegen-migrate</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>migrate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- 3. Introspect the live schema and generate JOOQ classes into target/generated-sources/jooq.
+                 The same forced-type mappings as the Gradle sibling: Instant on TIMESTAMP, ObjectNode on JSONB.
+                 (Postgres has a native UUID type so no UUID forced type is needed.) -->
+            <plugin>
+                <groupId>org.jooq</groupId>
+                <artifactId>jooq-codegen-maven</artifactId>
+                <version>${jooq-codegen-maven-plugin-version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.postgresql</groupId>
+                        <artifactId>postgresql</artifactId>
+                        <version>${postgresql.version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>jooq-codegen</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <jdbc>
+                                <driver>org.postgresql.Driver</driver>
+                                <url>${codegen.db.url}</url>
+                                <user>${codegen.db.user}</user>
+                                <password>${codegen.db.password}</password>
+                            </jdbc>
+                            <generator>
+                                <database>
+                                    <name>org.jooq.meta.postgres.PostgresDatabase</name>
+                                    <includes>.*</includes>
+                                    <excludes>flyway_schema_history</excludes>
+                                    <!-- Two settings together mirror the Gradle plugin's
+                                         outputSchemaToDefault + schemaToPackageMapping pair:
+                                         - <outputSchema> sets the Java package name component
+                                           (so imports read `io.example...public_schema.tables.Wallets`)
+                                         - <outputSchemaToDefault> tells jOOQ the schema is the
+                                           default in SQL — table refs render unqualified
+                                           (`INSERT INTO wallets ...`, not `public_schema.wallets`).
+                                         Without the second flag, jOOQ would emit the package name
+                                         as a schema name into the SQL, which doesn't exist in
+                                         Postgres ("public_schema does not exist"). -->
+                                    <schemata>
+                                        <schema>
+                                            <inputSchema>public</inputSchema>
+                                            <outputSchema>public_schema</outputSchema>
+                                            <outputSchemaToDefault>true</outputSchemaToDefault>
+                                        </schema>
+                                        <schema>
+                                            <inputSchema>eventlog</inputSchema>
+                                            <outputSchema>eventlog_schema</outputSchema>
+                                        </schema>
+                                    </schemata>
+                                    <forcedTypes>
+                                        <forcedType>
+                                            <userType>java.time.Instant</userType>
+                                            <converter>io.ekbatan.core.persistence.jooq.converter.InstantConverter</converter>
+                                            <includeTypes>TIMESTAMP</includeTypes>
+                                            <includeExpression>.*</includeExpression>
+                                        </forcedType>
+                                        <forcedType>
+                                            <userType>tools.jackson.databind.node.ObjectNode</userType>
+                                            <converter>io.ekbatan.core.persistence.jooq.converter.JSONBObjectNodeConverter</converter>
+                                            <includeTypes>JSONB</includeTypes>
+                                            <includeExpression>.*</includeExpression>
+                                        </forcedType>
+                                    </forcedTypes>
+                                </database>
+                                <target>
+                                    <packageName>io.example.wallet.generated.jooq</packageName>
+                                    <directory>${project.build.directory}/generated-sources/jooq</directory>
+                                </target>
+                            </generator>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

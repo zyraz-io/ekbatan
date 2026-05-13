@@ -23,7 +23,152 @@ That single dependency transitively pulls in `ekbatan-core`, `ekbatan-events:loc
 
 ### 2. Your domain classes — annotated
 
-The five domain classes — `@AutoBuilder` `Wallet`, `@EkbatanAction` `WalletDepositAction`, `@EkbatanRepository` `WalletRepository`, `@EkbatanEventHandler` `WalletMoneyDepositedEventHandler`, and `@EkbatanDistributedJob` `DailyWalletReportJob` — are framework-agnostic. **For the full code inline, jump to [annotations.md](annotations.md)** — every line is identical here. Spring discovers `@Ekbatan*`-annotated classes via classpath scan + AOT processor (see [How the integration works](#how-the-integration-works) below); the source itself is unchanged.
+This is what you actually write. Five domain classes carry five annotations — `@AutoBuilder` on the `Model`, and the four `@Ekbatan*` markers on the action, repository, event handler, and job. They're framework-agnostic: the same source compiles and runs identically against Spring Boot, Quarkus, and Micronaut. The four `@Ekbatan*` annotations are pure markers; `@AutoBuilder` is an independent compile-time builder generator. Spring discovers the `@Ekbatan*`-annotated classes via classpath scan + AOT processor (see [How the integration works](#how-the-integration-works) below); the source itself is unchanged.
+
+#### Wallet — the Model (`@AutoBuilder`)
+
+```java
+@AutoBuilder
+public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+
+    public final UUID ownerId;
+    public final Currency currency;
+    public final BigDecimal balance;
+
+    Wallet(WalletBuilder builder) {
+        super(builder);
+        this.ownerId  = Validate.notNull(builder.ownerId,  "ownerId cannot be null");
+        this.currency = Validate.notNull(builder.currency, "currency cannot be null");
+        this.balance  = Validate.notNull(builder.balance,  "balance cannot be null");
+    }
+
+    public Wallet deposit(BigDecimal amount) {
+        Validate.isTrue(amount.compareTo(BigDecimal.ZERO) > 0, "Deposit amount must be positive");
+        final var newBalance = balance.add(amount);
+        return copy()
+                .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
+                .balance(newBalance)
+                .build();
+    }
+
+    @Override
+    public WalletBuilder copy() {
+        return WalletBuilder.wallet().copyBase(this).ownerId(ownerId).currency(currency).balance(balance);
+    }
+}
+```
+
+#### WalletDepositAction — the Action (`@EkbatanAction`)
+
+Discovered and registered into `ActionRegistry` so `ActionExecutor.execute(...)` can find it. Constructor params are resolved by the DI container.
+
+```java
+@EkbatanAction
+public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
+
+    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
+
+    private final WalletRepository walletRepository;
+
+    public WalletDepositAction(Clock clock, WalletRepository walletRepository) {
+        super(clock);
+        this.walletRepository = walletRepository;
+    }
+
+    @Override
+    protected Wallet perform(Principal principal, Params params) {
+        var wallet  = walletRepository.getById(params.walletId().getValue());
+        var updated = wallet.deposit(params.amount());
+        return plan().update(updated);
+    }
+}
+```
+
+#### WalletRepository — the Repository (`@EkbatanRepository`)
+
+Registered as a managed DI bean and into `RepositoryRegistry`. Inject it by its concrete class anywhere.
+
+```java
+@EkbatanRepository
+public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
+
+    public WalletRepository(DatabaseRegistry databaseRegistry) {
+        super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry);
+    }
+
+    @Override
+    public Wallet fromRecord(WalletsRecord r) {
+        return WalletBuilder.wallet()
+                .id(Id.of(Wallet.class, r.getId()))
+                .version(r.getVersion())
+                .state(WalletState.valueOf(r.getState()))
+                .ownerId(r.getOwnerId())
+                .currency(Currency.getInstance(r.getCurrency()))
+                .balance(r.getBalance())
+                .createdDate(r.getCreatedDate())
+                .updatedDate(r.getUpdatedDate())
+                .build();
+    }
+
+    @Override
+    public WalletsRecord toRecord(Wallet w) {
+        return new WalletsRecord(
+                w.id.getValue(), w.version, w.state.name(),
+                w.ownerId, w.currency.getCurrencyCode(), w.balance,
+                w.createdDate, w.updatedDate);
+    }
+}
+```
+
+#### WalletMoneyDepositedEventHandler — the EventHandler (`@EkbatanEventHandler`)
+
+Registered with `EventHandlerRegistry`. Only effective when the local-event-handler module is on the classpath.
+
+```java
+@EkbatanEventHandler
+public class WalletMoneyDepositedEventHandler implements EventHandler<WalletMoneyDepositedEvent> {
+
+    private final NotificationService notificationService;
+
+    public WalletMoneyDepositedEventHandler(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
+
+    @Override public String name()                               { return "wallet-deposit-notification"; }
+    @Override public Class<WalletMoneyDepositedEvent> eventType() { return WalletMoneyDepositedEvent.class; }
+
+    @Override
+    public void handle(EventEnvelope<WalletMoneyDepositedEvent> envelope) {
+        notificationService.notifyDeposit(envelope.event.modelId, envelope.event.amount);
+    }
+}
+```
+
+#### DailyWalletReportJob — the DistributedJob (`@EkbatanDistributedJob`)
+
+Registered with `JobRegistry`. Only effective when the distributed-jobs module is on the classpath.
+
+```java
+@EkbatanDistributedJob
+public class DailyWalletReportJob extends DistributedJob {
+
+    private final ReportService reportService;
+
+    public DailyWalletReportJob(ReportService reportService) {
+        this.reportService = reportService;
+    }
+
+    @Override public String name()       { return "daily-wallet-report"; }
+    @Override public Schedule schedule() { return Schedules.daily(LocalTime.of(2, 0)); }
+
+    @Override
+    public void execute(ExecutionContext ctx) {
+        reportService.generateAndSend();
+    }
+}
+```
+
+For the annotation reference table and the full rationale on why `Action` instances are *not* exposed as DI beans, see [annotations.md](annotations.md).
 
 ### 3. The application bootstrap
 
@@ -152,6 +297,144 @@ At runtime, `EkbatanCoreConfiguration` first checks `EkbatanActionsHolder.get()`
 
 For broader native-image considerations (Jackson 3 record reflection, jOOQ, JDBC drivers, HikariCP), see [docs/runtime/native-image.md](../runtime/native-image.md).
 
+### Jackson — comes via `spring-boot-starter-web`
+
+**Dependencies** — Jackson is pulled by the web starter; you don't need to declare it separately:
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    // ✅ The web starter. Pulls jackson-databind + jackson-datatype-jsr310 + the
+    //    MappingJackson2HttpMessageConverter that wires Jackson into request/response
+    //    (de)serialization. Reads Jackson config from `spring.jackson.*` properties.
+    implementation("org.springframework.boot:spring-boot-starter-web")
+
+    // ❌ Don't add `com.fasterxml.jackson.core:jackson-databind` directly. The web starter
+    //    brings the right version pinned by Spring Boot's BOM; pulling jackson-databind
+    //    independently can drift from what spring-boot-starter-test, spring-cloud-*, etc.
+    //    expect for jackson-core / jackson-annotations.
+}
+```
+
+To customize the `ObjectMapper`, declare a `@Bean Jackson2ObjectMapperBuilderCustomizer` (Spring's idiomatic hook). The wallet examples don't need any customization — defaults are fine.
+
+> **Ekbatan internals use Jackson 3** (`tools.jackson.databind.*`) for event serialization, not Jackson 2. That dependency is pulled transitively by `ekbatan-core` and is unrelated to your HTTP-layer Jackson 2 setup; the two coexist. `ekbatan-native`'s `Jackson3RecordsFeature` registers your records under Jackson 3 — see [docs/runtime/native-image.md](../runtime/native-image.md).
+
+### Flyway — use `spring-boot-starter-flyway` + a `@FlywayDataSource @Bean`
+
+Don't run Flyway by hand from an `@PostConstruct` bean (that's what the framework's own tests at `ekbatan-integration-tests/di/spring-boot-starter/TestcontainersConfiguration` do via `FlywayHelper`, because they use raw Flyway with no framework extension wrapping it — see [GraalVM native-image § two patterns](../runtime/native-image.md#flyway-on-native--two-patterns)). For a real Spring Boot app, **use `spring-boot-starter-flyway`** and supply a `@FlywayDataSource`-scoped `DataSource` bean built from `ekbatan.sharding.*`.
+
+**Dependencies** — pull the Spring Boot starter, NOT raw `flyway-core`:
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    // ✅ The Spring Boot starter. Pulls flyway-core + spring-boot-flyway (which contains
+    //    FlywayAutoConfiguration) transitively at the BOM-pinned version. Spring Boot 4
+    //    modularized FlywayAutoConfiguration into its own artifact; the starter brings the
+    //    right combination automatically.
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+
+    // ✅ Database-specific Flyway plugin (BOM-managed; no version needed).
+    implementation("org.flywaydb:flyway-database-postgresql")   // or flyway-mysql for MariaDB/MySQL
+
+    // ❌ Don't add `org.flywaydb:flyway-core` directly. The starter brings the right version
+    //    AND the autoconfig that creates the Flyway bean. Pulling flyway-core alone skips
+    //    the autoconfig, leaving you to wire everything by hand.
+}
+```
+
+```xml
+<!-- pom.xml -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-flyway</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.flywaydb</groupId>
+    <artifactId>flyway-database-postgresql</artifactId>
+</dependency>
+```
+
+Bean wiring (the `DataSource` is the part that's framework-specific to Spring Boot):
+
+```java
+@Configuration
+public class EkbatanShardFlywayDataSource {
+
+    @Bean
+    @FlywayDataSource    // org.springframework.boot.flyway.autoconfigure.FlywayDataSource (Spring Boot 4)
+    public DataSource flywayDataSource(ShardingConfig shardingConfig) {
+        var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
+        var ds = new HikariDataSource();
+        ds.setJdbcUrl(primary.jdbcUrl);
+        ds.setUsername(primary.username);
+        ds.setPassword(primary.password);
+        ds.setMaximumPoolSize(2);                      // small pool — only Flyway migration uses it
+        ds.setPoolName("flyway-migrations");
+        return ds;
+    }
+}
+```
+
+Why a `@Bean` (Spring) rather than a `FlywayConfigurationCustomizer` (Quarkus/Micronaut pattern): Spring Boot's `FlywayAutoConfiguration` is gated on `@ConditionalOnBean(DataSource.class)` — without a `DataSource` bean, it never creates the Flyway instance and a customizer would never fire. Producing the `DataSource` programmatically from `ShardingConfig` satisfies the gate AND provides the right coordinates in one step. The `@FlywayDataSource` annotation scopes the bean to Flyway only — Spring Boot won't pick it up as the application's main `DataSource`. Ekbatan keeps owning the application's runtime pools (sharding-aware `ConnectionProvider`); this small pool exists solely for the Flyway migration burst on startup.
+
+The `flywayInitializer` bean (Spring Boot's migration runner) is created during context refresh, before `ekbatanJobRegistry` starts polling — so the schema exists by the time db-scheduler reads `scheduled_tasks`. If you want an explicit happens-before edge anyway:
+
+```java
+@Configuration
+public class JobRegistryDependsOnFlywayPostProcessor {
+    @Bean
+    public static BeanFactoryPostProcessor jobRegistryDependsOnFlyway() {
+        return beanFactory -> {
+            if (!beanFactory.containsBeanDefinition("ekbatanJobRegistry")) return;
+            var bd = beanFactory.getBeanDefinition("ekbatanJobRegistry");
+            var existing = bd.getDependsOn();
+            bd.setDependsOn(existing == null
+                    ? new String[]{"flywayInitializer"}
+                    : Stream.concat(Arrays.stream(existing), Stream.of("flywayInitializer"))
+                            .toArray(String[]::new));
+        };
+    }
+}
+```
+
+This is what the wallet examples do as belt-and-braces.
+
+#### Multi-shard: `spring.flyway.enabled=false` + programmatic loop
+
+Spring Boot's auto-config can only attach Flyway to one `DataSource` bean. For multi-shard wallets, disable the auto-config and run the loop yourself:
+
+```yaml
+# application.yml
+spring:
+  flyway:
+    enabled: false
+```
+
+```java
+@Configuration
+public class EkbatanShardFlywayMigrator {
+    @Bean
+    public FlywayMigration flywayMigration(ShardingConfig shardingConfig) {
+        for (var group : shardingConfig.groups) {
+            for (var member : group.members) {
+                var primary = member.primaryConfig();
+                Flyway.configure()
+                        .dataSource(primary.jdbcUrl, primary.username, primary.password)
+                        .locations("classpath:db/migration")
+                        .load()
+                        .migrate();
+            }
+        }
+        return new FlywayMigration();
+    }
+    public static final class FlywayMigration {}
+}
+```
+
+See [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-pg) for the single-shard shape and [`spring-boot-wallet-rest-gradle-sharded-pg`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) for the multi-shard one.
+
 ### Optional knobs
 
 | Property | Default | Purpose |
@@ -176,4 +459,4 @@ For broader native-image considerations (Jackson 3 record reflection, jOOQ, JDBC
 - [GraalVM native-image](../runtime/native-image.md) — Spring AOT specifics
 - Runnable references:
   - [`ekbatan-integration-tests/di/spring-boot-starter`](../../ekbatan-integration-tests/di/spring-boot-starter) — the framework's own smoke test for the Spring Boot integration.
-  - [`ekbatan-examples/spring-boot-wallet-rest`](../../ekbatan-examples/spring-boot-wallet-rest) — a standalone Spring Boot app that uses Ekbatan as a Maven Central dependency, with a Wallet `Model`, a Notification `Entity`, three Actions, an `EventHandler` that runs listen-to-yourself, REST endpoints, and a Testcontainers integration test. Closer to what you'd actually write in your own service.
+  - [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-pg) — a standalone Spring Boot app that uses Ekbatan as a Maven Central dependency, with a Wallet `Model`, a Notification `Entity`, three Actions, an `EventHandler` that runs listen-to-yourself, REST endpoints, and a Testcontainers integration test. Closer to what you'd actually write in your own service.

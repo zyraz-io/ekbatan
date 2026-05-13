@@ -2,7 +2,7 @@
 
 Ekbatan supports PostgreSQL, MySQL, and MariaDB out of the box. Most of the framework is dialect-agnostic — the differences are concentrated in three places: column types in your migrations, JOOQ converters in your repository field constants, and the codegen container that introspects your schema at build time.
 
-For the JOOQ codegen `build.gradle.kts` blocks (one per dialect), see [JOOQ codegen](jooq-codegen.md). This page covers everything else.
+For the *what & why* of codegen (generated classes, converters, modeling rationale), see [JOOQ codegen](jooq-codegen.md). For the per-dialect build-tool syntax, see [JOOQ codegen on Gradle](../gradle/jooq-codegen.md) (`build.gradle.kts`) or [JOOQ codegen on Maven](../maven/jooq-codegen.md) (`pom.xml`). This page covers everything else.
 
 ## Always UTC
 
@@ -34,7 +34,7 @@ UUID strings are pure 7-bit ASCII (8-4-4-4-12 hex with hyphens). Pinning the cha
 
 ### Why MariaDB JSON columns still need a converter
 
-MariaDB stores `JSON` as `LONGTEXT` with a CHECK constraint internally, and the JDBC driver reports the type accordingly. The forced-type entry in your `generateJooqClasses` block must use `(?i:JSON)` (or `(?i:JSON|LONGTEXT)` if you have legitimate `LONGTEXT` columns) and bind `JSONObjectNodeConverter`. See [JOOQ codegen](jooq-codegen.md) for the full block.
+MariaDB stores `JSON` as `LONGTEXT` with a CHECK constraint internally, and the JDBC driver reports the type accordingly. The forced-type entry must use `(?i:JSON)` (or `(?i:JSON|LONGTEXT)` if you have legitimate `LONGTEXT` columns) and bind `JSONObjectNodeConverter`. See [JOOQ codegen on Gradle](../gradle/jooq-codegen.md) (for `generateJooqClasses { … }`) or [JOOQ codegen on Maven](../maven/jooq-codegen.md) (for `<forcedType>`) for the full block.
 
 ### Why MySQL UUID converter is `CHAR(36)`-shaped, not `BINARY(16)`
 
@@ -109,11 +109,13 @@ Reference implementations: `ekbatan-core/.../single_table_json/EventEntityReposi
 4. Implement a `DummyRepository` for the new dialect with the right field-constant set.
 5. Create a test runner extending `BaseRepositoryTest`.
 6. If the dialect requires new SQL strategies (e.g. a different idiom for batch update), branch on `dialect.family()` in `AbstractRepository`.
-7. Add the per-dialect [JOOQ codegen](jooq-codegen.md) `build.gradle.kts` block to the new test module.
+7. Add the per-dialect codegen block to the new test module — [Gradle](../gradle/jooq-codegen.md) (`build.gradle.kts`) or [Maven](../maven/jooq-codegen.md) (`pom.xml`).
 
 ## See also
 
-- [JOOQ codegen](jooq-codegen.md) — the per-dialect `build.gradle.kts` blocks
+- [JOOQ codegen](jooq-codegen.md) — what codegen generates, the seven framework converters, per-dialect modeling rationale
+- [JOOQ codegen on Gradle](../gradle/jooq-codegen.md) — the per-dialect `build.gradle.kts` blocks
+- [JOOQ codegen on Maven](../maven/jooq-codegen.md) — the equivalent `pom.xml` plugin chain
 - [Repositories on JOOQ](repositories.md) — how field constants and converters fit together
 - [The outbox: atomic state + events](../concepts/outbox.md) — the framework's canonical schema this page enables you to author
 - [Outbox schema](outbox-schema.md) — the on-disk shape of `eventlog.events` and friends

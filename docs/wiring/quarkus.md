@@ -21,7 +21,152 @@ That one runtime artifact transitively pulls in `ekbatan-core`, `ekbatan-events:
 
 ### 2. Your domain classes — annotated
 
-The five domain classes — `@AutoBuilder` `Wallet`, `@EkbatanAction` `WalletDepositAction`, `@EkbatanRepository` `WalletRepository`, `@EkbatanEventHandler` `WalletMoneyDepositedEventHandler`, and `@EkbatanDistributedJob` `DailyWalletReportJob` — are framework-agnostic. **For the full code inline, jump to [annotations.md](annotations.md)** — every line is identical here. Quarkus discovers `@Ekbatan*`-annotated classes via Jandex at deployment time (see [How the extension works](#how-the-extension-works) below); the source itself is unchanged.
+This is what you actually write. Five domain classes carry five annotations — `@AutoBuilder` on the `Model`, and the four `@Ekbatan*` markers on the action, repository, event handler, and job. They're framework-agnostic: the same source compiles and runs identically against Spring Boot, Quarkus, and Micronaut. The four `@Ekbatan*` annotations are pure markers; `@AutoBuilder` is an independent compile-time builder generator. Quarkus discovers the `@Ekbatan*`-annotated classes via Jandex at deployment time (see [How the extension works](#how-the-extension-works) below); the source itself is unchanged.
+
+#### Wallet — the Model (`@AutoBuilder`)
+
+```java
+@AutoBuilder
+public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+
+    public final UUID ownerId;
+    public final Currency currency;
+    public final BigDecimal balance;
+
+    Wallet(WalletBuilder builder) {
+        super(builder);
+        this.ownerId  = Validate.notNull(builder.ownerId,  "ownerId cannot be null");
+        this.currency = Validate.notNull(builder.currency, "currency cannot be null");
+        this.balance  = Validate.notNull(builder.balance,  "balance cannot be null");
+    }
+
+    public Wallet deposit(BigDecimal amount) {
+        Validate.isTrue(amount.compareTo(BigDecimal.ZERO) > 0, "Deposit amount must be positive");
+        final var newBalance = balance.add(amount);
+        return copy()
+                .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
+                .balance(newBalance)
+                .build();
+    }
+
+    @Override
+    public WalletBuilder copy() {
+        return WalletBuilder.wallet().copyBase(this).ownerId(ownerId).currency(currency).balance(balance);
+    }
+}
+```
+
+#### WalletDepositAction — the Action (`@EkbatanAction`)
+
+Discovered and registered into `ActionRegistry` so `ActionExecutor.execute(...)` can find it. Constructor params are resolved by the DI container.
+
+```java
+@EkbatanAction
+public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
+
+    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
+
+    private final WalletRepository walletRepository;
+
+    public WalletDepositAction(Clock clock, WalletRepository walletRepository) {
+        super(clock);
+        this.walletRepository = walletRepository;
+    }
+
+    @Override
+    protected Wallet perform(Principal principal, Params params) {
+        var wallet  = walletRepository.getById(params.walletId().getValue());
+        var updated = wallet.deposit(params.amount());
+        return plan().update(updated);
+    }
+}
+```
+
+#### WalletRepository — the Repository (`@EkbatanRepository`)
+
+Registered as a managed DI bean and into `RepositoryRegistry`. Inject it by its concrete class anywhere.
+
+```java
+@EkbatanRepository
+public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
+
+    public WalletRepository(DatabaseRegistry databaseRegistry) {
+        super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry);
+    }
+
+    @Override
+    public Wallet fromRecord(WalletsRecord r) {
+        return WalletBuilder.wallet()
+                .id(Id.of(Wallet.class, r.getId()))
+                .version(r.getVersion())
+                .state(WalletState.valueOf(r.getState()))
+                .ownerId(r.getOwnerId())
+                .currency(Currency.getInstance(r.getCurrency()))
+                .balance(r.getBalance())
+                .createdDate(r.getCreatedDate())
+                .updatedDate(r.getUpdatedDate())
+                .build();
+    }
+
+    @Override
+    public WalletsRecord toRecord(Wallet w) {
+        return new WalletsRecord(
+                w.id.getValue(), w.version, w.state.name(),
+                w.ownerId, w.currency.getCurrencyCode(), w.balance,
+                w.createdDate, w.updatedDate);
+    }
+}
+```
+
+#### WalletMoneyDepositedEventHandler — the EventHandler (`@EkbatanEventHandler`)
+
+Registered with `EventHandlerRegistry`. Only effective when the local-event-handler module is on the classpath.
+
+```java
+@EkbatanEventHandler
+public class WalletMoneyDepositedEventHandler implements EventHandler<WalletMoneyDepositedEvent> {
+
+    private final NotificationService notificationService;
+
+    public WalletMoneyDepositedEventHandler(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
+
+    @Override public String name()                               { return "wallet-deposit-notification"; }
+    @Override public Class<WalletMoneyDepositedEvent> eventType() { return WalletMoneyDepositedEvent.class; }
+
+    @Override
+    public void handle(EventEnvelope<WalletMoneyDepositedEvent> envelope) {
+        notificationService.notifyDeposit(envelope.event.modelId, envelope.event.amount);
+    }
+}
+```
+
+#### DailyWalletReportJob — the DistributedJob (`@EkbatanDistributedJob`)
+
+Registered with `JobRegistry`. Only effective when the distributed-jobs module is on the classpath.
+
+```java
+@EkbatanDistributedJob
+public class DailyWalletReportJob extends DistributedJob {
+
+    private final ReportService reportService;
+
+    public DailyWalletReportJob(ReportService reportService) {
+        this.reportService = reportService;
+    }
+
+    @Override public String name()       { return "daily-wallet-report"; }
+    @Override public Schedule schedule() { return Schedules.daily(LocalTime.of(2, 0)); }
+
+    @Override
+    public void execute(ExecutionContext ctx) {
+        reportService.generateAndSend();
+    }
+}
+```
+
+For the annotation reference table and the full rationale on why `Action` instances are *not* exposed as DI beans, see [annotations.md](annotations.md).
 
 ### 3. The application bootstrap
 
@@ -148,10 +293,111 @@ Without this, the deployment processor's scan returns nothing for that jar and A
 
 This matches Spring's `@ConditionalOnProperty(havingValue="true")` "default-off" semantic. The reason it's build-time-only on Quarkus is so the `EventHandlingJob` bean simply doesn't exist in the closed-world image — useful for native builds where every bean adds reflection metadata.
 
+### Flyway — use `quarkus-flyway` + a `FlywayConfigurationCustomizer`
+
+Don't run Flyway by hand from a `@Observes StartupEvent` (that's what the framework's own tests at `ekbatan-integration-tests/di/quarkus/PostgresTestResource` do via `FlywayHelper`, because they use raw Flyway with no framework extension wrapping it — see [GraalVM native-image § two patterns](../runtime/native-image.md#flyway-on-native--two-patterns)). For a real Quarkus app, **use `quarkus-flyway`** and let an `EkbatanShardFlywayCustomizer` (a CDI bean) override the dataSource from `ekbatan.sharding.*`.
+
+**Dependencies** — pull the Quarkus extension, NOT raw `flyway-core`:
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    // ✅ The Quarkus extension. Pulls flyway-core transitively at Quarkus's BOM-pinned version,
+    //    ships substrate-VM Flyway resource scanning for native, integrates with @ConfigMapping.
+    implementation("io.quarkus:quarkus-flyway")
+
+    // ✅ Database-specific Flyway plugin (also BOM-managed; no version needed).
+    implementation("org.flywaydb:flyway-database-postgresql")   // or flyway-mysql for MariaDB/MySQL
+
+    // ✅ Matching JDBC driver extension — registers the driver class for native automatically.
+    implementation("io.quarkus:quarkus-jdbc-postgresql")        // or quarkus-jdbc-mariadb / quarkus-jdbc-mysql
+
+    // ❌ Don't add `org.flywaydb:flyway-core` directly. quarkus-flyway brings the right version
+    //    and configures the CDI bean for you; pulling flyway-core independently can pin a
+    //    version that doesn't match what Quarkus's @ConfigMapping expects, and even when it
+    //    does, the native build won't find migrations at runtime (no substrate-VM scanner).
+}
+```
+
+```xml
+<!-- pom.xml -->
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-flyway</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.flywaydb</groupId>
+    <artifactId>flyway-database-postgresql</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-jdbc-postgresql</artifactId>
+</dependency>
+```
+
+```properties
+# application.properties — minimum needed for FlywayAutoConfiguration to wake up.
+# We don't set quarkus.datasource.url/username/password — the customizer below overrides it.
+quarkus.datasource.db-kind=postgresql
+quarkus.flyway.migrate-at-start=true
+```
+
+```java
+@ApplicationScoped
+public class EkbatanShardFlywayCustomizer implements FlywayConfigurationCustomizer {
+
+    private final ShardingConfig shardingConfig;
+
+    public EkbatanShardFlywayCustomizer(ShardingConfig shardingConfig) {
+        this.shardingConfig = shardingConfig;
+    }
+
+    @Override
+    public void customize(FluentConfiguration configuration) {
+        var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
+        configuration.dataSource(primary.jdbcUrl, primary.username, primary.password);
+    }
+}
+```
+
+Why this shape:
+- **Single source of truth.** Connection coordinates live under `ekbatan.sharding.*`; no parallel `quarkus.datasource.url/username/password` tree to keep in sync.
+- **Native works out of the box.** `quarkus-flyway` ships substrate-VM-aware Flyway resource scanning; no need for `FlywayHelper`.
+- **Migrations run before the StartupEvent fires**, so `ekbatan-jobs`' `scheduled_tasks` table polling sees the schema already in place.
+
+See [`ekbatan-examples/quarkus-wallet-rest-gradle-pg`](../../ekbatan-examples/quarkus-wallet-rest-gradle-pg) for the full runnable shape (and its `-mariadb`/`-mysql`/`-native-*`/`-maven-*` variants for the other dialects, build tools, and native).
+
+### Jackson — use `quarkus-rest-jackson` (which pulls `quarkus-jackson`)
+
+**Dependencies** — pull the Quarkus REST-Jackson bridge, NOT raw `jackson-databind`:
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    // ✅ The Quarkus JAX-RS Jackson integration. Pulls `quarkus-jackson` (the underlying
+    //    ObjectMapper-providing extension) transitively. Together they:
+    //    - wire `ObjectMapper` into request/response (de)serialization for @POST / @GET handlers
+    //    - register reflection metadata for Jackson 2 types reachable from JAX-RS resources in
+    //      native-image
+    //    - integrate with `quarkus.jackson.*` configuration keys (date format, fail-on-unknown)
+    implementation("io.quarkus:quarkus-rest-jackson")
+
+    // ❌ Don't add `com.fasterxml.jackson.core:jackson-databind` directly. It bypasses
+    //    the JAX-RS integration (no MessageBodyReader/Writer wiring), bypasses Quarkus's
+    //    native-image reflection registration, and pins a version that may not match
+    //    what Quarkus' BOM expects for related modules (jackson-annotations, jackson-core,
+    //    jackson-datatype-jsr310).
+}
+```
+
+To customize the mapper (date formats, naming strategy, modules), implement `io.quarkus.jackson.ObjectMapperCustomizer` and `@ApplicationScoped` it. The wallet examples don't need any customization — defaults are fine.
+
+> **Ekbatan internals use Jackson 3** (`tools.jackson.databind.*`) for event serialization, not Jackson 2. That dependency is pulled transitively by `ekbatan-core` and is unrelated to your app's HTTP-layer Jackson 2 setup; the two coexist. `ekbatan-native`'s `Jackson3RecordsFeature` registers your records under Jackson 3 — see [Native-image specifics](#native-image-specifics) below.
+
 ### Native-image specifics
 
 - **JDBC drivers** come via `quarkus-jdbc-postgresql` / `quarkus-jdbc-mysql` / `quarkus-jdbc-mariadb`. Add the matching extension to your build; Quarkus registers the driver class for native automatically.
-- **HikariCP** is *not* covered by any Quarkus extension (Quarkus blesses Agroal). The framework integration tests vendor the upstream GraalVM Reachability Metadata Repository entry at [`ekbatan-integration-tests/di/quarkus/src/main/resources/META-INF/native-image/com.zaxxer/HikariCP/reachability-metadata.json`](../../ekbatan-integration-tests/di/quarkus). Copy that file into your app's `META-INF/native-image/com.zaxxer/HikariCP/`.
+- **HikariCP** is *not* covered by any Quarkus extension (Quarkus blesses Agroal). The framework integration tests vendor the upstream GraalVM Reachability Metadata Repository entry at [`ekbatan-integration-tests/di/quarkus/src/main/resources/META-INF/native-image/com.zaxxer/HikariCP/reachability-metadata.json`](../../ekbatan-integration-tests/di/quarkus). Copy that file into your app's `META-INF/native-image/com.zaxxer/HikariCP/`. (`ekbatan-native` ships the same file under its own coordinate, so depending on `ekbatan-native` is the cheapest way to pull it in.)
 - **Jackson 3 records** — the `ekbatan-native` module's `Jackson3RecordsFeature` picks up the framework's records automatically. For your own records / `@AutoBuilder` builders, set `quarkus.native.additional-build-args=-Dio.ekbatan.graalvm.scan.packages=io.ekbatan\,com.your.package` (the comma in the value must be escaped — Quarkus uses `,` to separate multiple build args).
 
 For broader native-image considerations, see [docs/runtime/native-image.md](../runtime/native-image.md).

@@ -1,0 +1,66 @@
+micronaut:
+  application:
+    name: micronaut-wallet-rest-maven-mariadb
+
+# Single source of truth for DB connection details — both Flyway (run on startup via
+# FlywayConfiguration) and Ekbatan's runtime pools read from this same block. Micronaut's
+# own datasource auto-config (micronaut-data, jdbc) is intentionally NOT used.
+#
+# Notes on the JDBC URLs:
+#   - The main DB is `wallet`; eventlog is a separate database `eventlog`, created by the
+#     V0000 Flyway migration. The connecting user needs cross-database privileges — set up
+#     by `mariadb_init.sql` mounted into /docker-entrypoint-initdb.d. See
+#     docs/database/mariadb.md.
+#   - The container is pinned to TZ=UTC (see compose.yaml), so DATETIME(6) round-trips
+#     consistently with Ekbatan's always-UTC contract.
+ekbatan:
+  namespace: example.wallet.maven-mariadb-micronaut
+  sharding:
+    defaultShard:
+      group: 0
+      member: 0
+    groups:
+      - group: 0
+        name: default
+        members:
+          - member: 0
+            name: default
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                # Lock pool: sized for max concurrent held leases (each lease pins one connection
+                # until release). Leak detection off — locks may be legitimately held for a while.
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
+  local-event-handler:
+    handling:
+      enabled: true
+
+# micronaut-flyway: runs migrations on application startup. The datasource it binds to is
+# `flyway.datasources.default` — coords here are pulled from `ekbatan.sharding.*` via
+# property expressions (single source of truth). `EkbatanShardFlywayCustomizer` additionally
+# overrides the dataSource programmatically inside `FluentConfiguration.customize(...)` —
+# symmetric with the Quarkus wallet's customizer, and a single place to extend Flyway
+# behaviour later (locations, callbacks, etc.) without touching YAML.
+flyway:
+  datasources:
+    default:
+      enabled: true
+      url: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl}
+      user: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username}
+      password: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password}

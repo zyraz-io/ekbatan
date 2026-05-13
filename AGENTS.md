@@ -120,6 +120,8 @@ Keyed mutual-exclusion primitives for cross-thread (and cross-JVM) coordination:
 
 **Reentrancy contract (uniform across all providers).** Same thread + same key acquires re-enter without blocking; the underlying backend lock is released only when the *outermost* lease is closed (or `maxHold` watchdog fires). The first acquire's `maxHold` governs the watchdog — re-entries' `maxHold` arguments are ignored. This is stricter than Redisson/Hazelcast's "last-call-wins" convention and prevents an inner re-entry from shortening the outer holder's commitment. Reentrancy is per-thread, not per-call-stack: a child thread spawned inside a held region is a different identity and will block.
 
+**Where to acquire — caller-side, not inside `Action.perform()`.** For "concurrent writes on the same key produce a consistent result" use cases (the most common), acquire the lock in the **caller** that invokes the action (controller, job, event handler) so the lease wraps the entire `executor.execute(...)` call. Acquiring inside `Action.perform()` releases the lease before `ActionExecutor.persistChanges()` commits — leaving a race window where a concurrent acquirer reads pre-commit state and fails the framework's optimistic-locking version check. Inside-`perform()` is only appropriate for **side-effect coordination** (e.g. serializing an outbound webhook call where the DB write is incidental), not for commit serialization. See [`docs/database/keyed-locks.md#where-to-acquire-the-lock`](./docs/database/keyed-locks.md#where-to-acquire-the-lock) for the timeline diagram and full rationale. The caller-side pattern is demonstrated in every base wallet REST example — each project (per `(stack × build tool × dialect)`) ships a dialect-appropriate `KeyedLockProvider` bean + `lockConfig` slot and wraps its deposit endpoint with `try (var lease = lockProvider.acquire(...))`.
+
 ### Distributed Lock Layer (`ekbatan-keyed-lock-redis/`)
 
 - **`RedisKeyedLockProvider`** — `KeyedLockProvider` backed by Redisson's `RLock`. Reuses `KeyedReentrantHolder` to enforce Ekbatan's first-call-wins reentrancy on top of Redisson's last-call-wins default. Always passes `maxHold` as Redisson's `leaseTime` (disables Redisson's watchdog), uses the local virtual-thread watchdog instead. Builder takes a `RedissonClient` plus an optional `namespace` prefix (default `"ekbatan-lock"`). Single-master Redis only — not Redlock-based.
@@ -953,11 +955,20 @@ void retry_recovers_after_transient_failure() throws Exception {
 ## Build & Tooling
 
 - **Java 25** — Uses records, ScopedValue, modern features
-- **Gradle** (Kotlin DSL) — Multi-project build
+- **Gradle** (Kotlin DSL) — Multi-project build (the framework repo itself)
 - **Spotless** — Palantir Java Format 2.81.0, auto-applied before build
 - **Checkstyle** — Custom rules in `config/checkstyle/checkstyle.xml`
-- **JOOQ Docker Plugin** — Generates type-safe SQL classes from Flyway migrations via Docker
+- **JOOQ Docker Plugin** (Gradle) — Generates type-safe SQL classes from Flyway migrations via Docker
 - **Dependency versions** — Centralized in `gradle.properties`
+
+The framework repo itself is Gradle-only — `buildSrc/` convention plugins, the `ekbatan.publishing` plugin, and the `dev.monosoul.jooq-docker` integration assume Gradle. **Downstream consumers, however, can use either Gradle or Maven** — the 15 published JARs have plain Maven POMs with no Gradle-only metadata. The runnable proof is the Maven `(DI × dialect)` matrix under `ekbatan-examples/` — a 3×3 grid (Spring Boot × Quarkus × Micronaut, each in PG/MariaDB/MySQL flavours):
+
+- **Spring Boot:** [`spring-boot-wallet-rest-maven-pg`](./ekbatan-examples/spring-boot-wallet-rest-maven-pg), [`-mariadb`](./ekbatan-examples/spring-boot-wallet-rest-maven-mariadb), [`-mysql`](./ekbatan-examples/spring-boot-wallet-rest-maven-mysql)
+- **Quarkus:** [`quarkus-wallet-rest-maven-pg`](./ekbatan-examples/quarkus-wallet-rest-maven-pg), [`-mariadb`](./ekbatan-examples/quarkus-wallet-rest-maven-mariadb), [`-mysql`](./ekbatan-examples/quarkus-wallet-rest-maven-mysql)
+- **Micronaut:** [`micronaut-wallet-rest-maven-pg`](./ekbatan-examples/micronaut-wallet-rest-maven-pg), [`-mariadb`](./ekbatan-examples/micronaut-wallet-rest-maven-mariadb), [`-mysql`](./ekbatan-examples/micronaut-wallet-rest-maven-mysql)
+- **Micronaut + GraalVM native-image:** [`micronaut-wallet-rest-maven-native-pg`](./ekbatan-examples/micronaut-wallet-rest-maven-native-pg), [`-mariadb`](./ekbatan-examples/micronaut-wallet-rest-maven-native-mariadb), [`-mysql`](./ekbatan-examples/micronaut-wallet-rest-maven-native-mysql)
+
+The first nine (JVM) consume Ekbatan from Maven Central and use the `fabric8 docker-maven-plugin` + `flyway-maven-plugin` + `jooq-codegen-maven` chain for codegen (the Maven equivalent of the Gradle plugin). Stack-specific Maven nuances: the **Spring Boot** triple uses `spring-boot-starter-parent` + `spring-boot-maven-plugin`; the **Quarkus** triple uses `quarkus-bom` import (no parent) + `quarkus-maven-plugin` with `<extensions>true</extensions>`; the **Micronaut** triple uses `micronaut-parent` + `micronaut-maven-plugin` and demonstrates `<annotationProcessorPaths combine.children="append">` for keeping the parent POM's `micronaut-inject-java` AP entry. The **Micronaut native triple** adds the `ekbatan-native` dependency (for `FlywayHelper` + `Jackson3RecordsFeature`), swaps `FlywayConfiguration` to `FlywayHelper.migrate(...)`, sets `<aotDependencies>true</aotDependencies>` on `micronaut-maven-plugin`, and configures `native-maven-plugin`'s `<buildArgs combine.children="append">` with `-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,io.example` and `-H:IncludeResources=db/migration/.*\.sql` (plus the dialect-specific init script). Maven-flavored consumer docs live at [docs/maven/](./docs/maven/README.md). Don't add Maven build files anywhere else in the framework — Maven is a *consumer-side* concern, not a framework-side one.
 
 ### Build Commands
 ```bash

@@ -5,13 +5,24 @@ plugins {
 
 ekbatanPublishing {
     artifactId.set("ekbatan-native")
-    description.set("GraalVM native-image features for Ekbatan (Jackson 3 records, Kafka clients, testcontainers).")
+    description.set("GraalVM native-image features for Ekbatan (Jackson 3 records, Kafka clients, testcontainers, Avro).")
 }
 
 java.sourceCompatibility = JavaVersion.VERSION_25
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(25))
+    }
+}
+
+// Set an explicit Automatic-Module-Name in the manifest. Without this, the JPMS
+// module name is auto-derived from the JAR file name ("ekbatan-native") as
+// "ekbatan.native" — and `native` is a Java reserved keyword, which makes the
+// auto-derived name invalid. Tools that consult JPMS metadata emit a warning or
+// refuse to load it. Picking a non-keyword tail keeps everything happy.
+tasks.named<Jar>("jar") {
+    manifest {
+        attributes("Automatic-Module-Name" to "io.ekbatan.graalvm")
     }
 }
 
@@ -28,9 +39,9 @@ dependencies {
     // It must reach the native-image build classpath, so it ships transitively.
     api("io.github.classgraph:classgraph:4.8.181")
 
-    // Flyway is needed for the NativeImageFlywayResourceProvider / FlywayHelper to
-    // compile against. Users who do not use Flyway never wire those classes; the
-    // analyser drops them. Exposed as `api` so consumers depending on this module
-    // see Flyway transitively when they call FlywayHelper.
+    // Flyway is the compile-time backing for NativeImageFlywayResourceProvider / FlywayHelper.
+    // Consumers who don't use Flyway never reach those classes — the native-image analyser drops
+    // them, no dead weight in the image. Exposed as `api` so callers of FlywayHelper.migrate(...)
+    // see Flyway transitively without declaring it themselves.
     api("org.flywaydb:flyway-core:${project.property("flywayVersion")}")
 }

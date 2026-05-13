@@ -27,41 +27,93 @@ public interface KeyedLockProvider {
 - `key` is a `String`. **Namespace it per type** when locking on entity IDs (e.g. `"wallet:" + walletId`) so two unrelated ID spaces never collide.
 - Closing the lease releases the lock. Use `try-with-resources`.
 
-A wallet deposit, serialized per-wallet:
+A wallet deposit, serialized per-wallet, with the lock acquired in the **caller** (the controller / job / handler that invokes the action), not inside `Action.perform()` — see [Where to acquire the lock](#where-to-acquire-the-lock) for the rationale:
 
 ```java
-public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
+@RestController
+@RequestMapping("/wallets")
+public class WalletController {
 
-    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
+    private static final Duration MAX_HOLD = Duration.ofSeconds(10);
 
-    private final WalletRepository walletRepo;
+    private final ActionExecutor executor;
     private final KeyedLockProvider lockProvider;
 
-    public WalletDepositAction(Clock clock, WalletRepository walletRepo, KeyedLockProvider lockProvider) {
-        super(clock);
-        this.walletRepo = walletRepo;
+    public WalletController(ActionExecutor executor, KeyedLockProvider lockProvider) {
+        this.executor = executor;
         this.lockProvider = lockProvider;
     }
 
-    @Override
-    protected Wallet perform(Principal principal, Params params) throws InterruptedException {
-        try (var lease = lockProvider.tryAcquire("wallet:" + params.walletId, Duration.ofSeconds(2), Duration.ofSeconds(10))
-                .orElseThrow(() -> new IllegalStateException(
-                        "Wallet " + params.walletId + " is busy; try again later"))) {
-            var wallet = walletRepo.getById(params.walletId.getValue());
-            return plan().update(wallet.copy()
-                    .balance(wallet.balance.add(params.amount))
-                    .build());
+    @PostMapping("/{id}/deposits")
+    public Wallet deposit(@PathVariable UUID id, @RequestBody DepositRequest body) throws Exception {
+        try (var lease = lockProvider.tryAcquire("wallet:" + id, Duration.ofSeconds(2), MAX_HOLD)
+                .orElseThrow(() -> new IllegalStateException("Wallet " + id + " is busy; try again later"))) {
+            return executor.execute(
+                    () -> "rest-user",
+                    WalletDepositAction.class,
+                    new WalletDepositAction.Params(Id.of(Wallet.class, id), body.amount()));
         }
     }
 }
 ```
 
+The `WalletDepositAction` itself is plain — no `KeyedLockProvider` injection, no try-with-resources in `perform()`. The locking is a *coordination policy* applied at the boundary of the action invocation, not a property of the action.
+
 Three things worth highlighting:
 
 - **`maxWait` (2s) bounds how long the caller will block** before giving up and surfacing a domain error. Without it (e.g. the no-wait `acquire(key, maxHold)` variant), a caller would queue indefinitely behind any prior holders.
-- **`maxHold` (10s) is a safety net, not a hint.** If the action overruns, the lock auto-releases — capping the blast radius of a hung holder regardless of what the calling thread is doing.
+- **`maxHold` (10s) is a safety net, not a hint.** If the locked region overruns, the lock auto-releases — capping the blast radius of a hung holder regardless of what the calling thread is doing.
 - **Each acquire borrows its own JDBC connection** (for the SQL-backed providers) for the lifetime of the lease and for the wait. For lock-heavy workloads, point the provider at a dedicated pool — see [the dedicated pool recipe below](#dedicated-pool-via-the-lockconfig-slot).
+
+## Where to acquire the lock
+
+A keyed lock can be acquired in two places. Both compile and run; only one of them actually serializes the underlying DB writes.
+
+### ✅ At the caller, around `executor.execute(...)` — the default
+
+```
+caller (controller / job / event handler)
+├─ acquire lock      ←─┐
+├─ executor.execute()  │
+│   ├─ Action.perform()│ lock held
+│   │   ├─ read state  │
+│   │   └─ plan.update │
+│   └─ commit txn      │
+└─ release lock      ←─┘
+```
+
+The lease wraps both `perform()` AND the framework's transaction commit. Concurrent acquirers can't enter until the previous commit is fully visible. No race window, no optimistic-locking conflicts triggered by lock-coordinated writes.
+
+**This is what most apps want.** When the goal is "concurrent writes on the same key must produce a consistent result", the lock must span the commit phase.
+
+### ⚠️ Inside `Action.perform()` — narrower use case only
+
+```
+caller
+└─ executor.execute()
+    ├─ Action.perform()
+    │   ├─ acquire lock   ←─┐
+    │   ├─ read state       │ lock held
+    │   ├─ plan.update      │
+    │   └─ release lock   ←─┘  (try-with-resources exits)
+    └─ commit txn            ← race window — concurrent acquirer can read pre-commit state
+```
+
+The lease closes *before* the framework's commit runs. Another acquirer can grab the lock immediately, read the still-pre-commit state, compute a stale-version update, and collide at its own commit. Ekbatan's optimistic-locking version check rejects the loser (`StaleRecordException` → the executor surfaces the failure), so no data is lost — but some calls fail under contention. With 10 concurrent deposits, only ~6 commit; the other 4 surface a version-conflict error.
+
+This placement is appropriate for **side-effect coordination, not commit serialization**:
+
+- An outbound webhook call where you want at-most-one in-flight per resource. The lock is held across the external call; the DB write is a thin record-keeping concern.
+- A long external compute (PDF generation, ML inference) where you want to dedupe in-flight calls per key.
+- Anywhere the DB write is idempotent (e.g. an upsert) and serialization isn't the goal.
+
+For **write-path serialization** (the most common use case), acquire at the caller.
+
+### Why not just always lock inside `perform()`?
+
+`Action.perform()` is the body of the action — the change plan is built here, but the framework hasn't yet opened the transaction or committed the writes. The transaction lifecycle is owned by `ActionExecutor`, not by the action; the executor opens the transaction *after* `perform()` returns the plan, and commits it before `execute(...)` returns to the caller. The action body has no facility to "extend the lock until the executor commits" — the lease closes when `perform()` exits, no exceptions.
+
+The caller-side pattern works because the caller owns the boundary that *contains* the executor's transaction lifecycle. The lease closes after `execute(...)` returns, which is after the framework's commit.
 
 ## Reentrancy contract — uniform across all five backends
 

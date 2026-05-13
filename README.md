@@ -12,6 +12,8 @@ Ekbatan is a Java library you embed in your application - Spring, Quarkus, Micro
 
 Built for **Java 25+**, sitting directly on **JOOQ**, designed around **virtual threads**.
 
+**Works with:** PostgreSQL · MariaDB · MySQL — and Spring Boot · Quarkus · Micronaut · plain Java. The same domain code compiles and runs identically against every database and DI container; only the wiring at the edges changes.
+
 ---
 
 ## Add to your project
@@ -24,7 +26,7 @@ Ekbatan is published on [Maven Central](https://central.sonatype.com/namespace/i
 
 ```kotlin
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.2")
+    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.3")
 }
 ```
 
@@ -32,7 +34,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.2")
+    implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.3")
 }
 ```
 
@@ -40,8 +42,8 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-micronaut:0.0.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.2")
+    implementation("io.github.zyraz-io:ekbatan-micronaut:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.3")
     annotationProcessor("io.micronaut:micronaut-inject-java")
 }
 ```
@@ -51,32 +53,32 @@ dependencies {
 ```kotlin
 dependencies {
     // ── Required ────────────────────────────────────────────────────────────
-    implementation("io.github.zyraz-io:ekbatan-core:0.0.2")
+    implementation("io.github.zyraz-io:ekbatan-core:0.0.3")
 
     // ── Optional capabilities ───────────────────────────────────────────────
 
     // @AutoBuilder code generation — generates *Builder classes for Models/Entities
     // (skip if you'd rather write the builders by hand)
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.2")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     // In-process event handlers (fanout + handling jobs over the eventlog)
-    implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.0.2")
+    implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.0.3")
 
     // Distributed background jobs (db-scheduler facade; cluster-exclusive scheduling)
-    implementation("io.github.zyraz-io:ekbatan-distributed-jobs:0.0.2")
+    implementation("io.github.zyraz-io:ekbatan-distributed-jobs:0.0.3")
 
     // Redis-backed distributed KeyedLockProvider (Redisson under the hood)
-    implementation("io.github.zyraz-io:ekbatan-keyed-lock-redis:0.0.2")
+    implementation("io.github.zyraz-io:ekbatan-keyed-lock-redis:0.0.3")
 
     // GraalVM native-image Features (auto-loaded; include only if you build native binaries)
-    implementation("io.github.zyraz-io:ekbatan-native:0.0.2")
+    implementation("io.github.zyraz-io:ekbatan-native:0.0.3")
 
     // ── Wire-format DTOs (only for Kafka consumer apps reading from the eventlog) ──
     // Pick the one matching your Kafka serializer; not needed in the producer app itself.
-    implementation("io.github.zyraz-io:ekbatan-action-event-json:0.0.2")
-    implementation("io.github.zyraz-io:ekbatan-action-event-avro:0.0.2")
-    implementation("io.github.zyraz-io:ekbatan-action-event-protobuf:0.0.2")
+    implementation("io.github.zyraz-io:ekbatan-action-event-json:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-action-event-avro:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-action-event-protobuf:0.0.3")
 }
 ```
 
@@ -88,21 +90,219 @@ Substitute the artifactId for your stack — `ekbatan-spring-boot-starter`, `ekb
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-spring-boot-starter</artifactId>
-    <version>0.0.2</version>
+    <version>0.0.3</version>
 </dependency>
 ```
 
-### Optional add-ons for the framework-integration paths
-
-The Spring Boot / Quarkus / Micronaut starters pull `ekbatan-core`, the annotation processor, the local event handler, and distributed jobs transitively. You only add optional modules explicitly:
-
-- `io.github.zyraz-io:ekbatan-keyed-lock-redis:0.0.2` — Redis-backed distributed lock provider
-- `io.github.zyraz-io:ekbatan-native:0.0.2` — GraalVM native-image Features (when building native binaries)
-- `io.github.zyraz-io:ekbatan-action-event-{json,avro,protobuf}:0.0.2` — wire-format DTOs for Kafka consumer apps
+**Using Ekbatan with Maven?** [docs/maven/](docs/maven/README.md) is the dedicated guide.
 
 Per-stack setup details: [Spring Boot](docs/wiring/spring.md) · [Quarkus](docs/wiring/quarkus.md) · [Micronaut](docs/wiring/micronaut.md) · [Plain Java](docs/wiring/without-di.md).
 
 ---
+
+## Learn by Example: A Wallet
+
+### Model & Entity
+
+A wallet is a **Model** — a domain object whose changes produce events. Models are the right fit when a record's history matters downstream: every mutation returns a new immutable instance with a `ModelEvent` attached, and the framework persists state and events together in one transaction. The contrast is an **Entity** — same persistence and version tracking, but **no events**: use it for lookup tables, settings, or auxiliary records whose history isn't consumed by other systems. `Wallet` produces events (deposits, closures) and is a Model; a `Country` reference table would be an Entity.
+
+Our `Wallet` has an owner, a currency, and a balance:
+
+```java
+@AutoBuilder
+public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+    public final UUID ownerId;
+    public final Currency currency;
+    public final BigDecimal balance;
+
+    Wallet(WalletBuilder builder) {
+        super(builder);
+        this.ownerId = Validate.notNull(builder.ownerId, "ownerId cannot be null");
+        this.currency = Validate.notNull(builder.currency, "currency cannot be null");
+        this.balance = Validate.notNull(builder.balance, "balance cannot be null");
+    }
+
+    public Wallet deposit(BigDecimal amount) {
+        var newBalance = balance.add(amount);
+        return copy()
+                .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
+                .balance(newBalance)
+                .build();
+    }
+    // close(), copy()...
+}
+```
+
+`deposit(...)` returns a new wallet with the corresponding event attached - no database call is made here.
+
+### Action & ActionPlan
+
+An **Action** is a unit of business work — deposit money, create order, ship parcel. It does **not** write to the database itself; its `perform(...)` method stages changes onto an **ActionPlan**, and the executor commits that plan in one atomic transaction afterwards. One class per operation, with a typed `Params` record and a `perform(...)` method:
+
+```java
+@EkbatanAction
+public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
+
+    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
+
+    private final WalletRepository walletRepository;
+
+    public WalletDepositAction(Clock clock, WalletRepository walletRepository) {
+        super(clock);
+        this.walletRepository = walletRepository;
+    }
+
+    @Override
+    protected Wallet perform(Principal principal, Params params) {
+        var wallet = walletRepository.getById(params.walletId().getValue());
+        var updated = wallet.deposit(params.amount());
+        return plan().update(updated);
+    }
+}
+```
+
+The `plan()` accessor inside `perform(...)` returns the **ActionPlan** — a per-action staging area for everything the framework should persist. Call `plan().add(newDomainObject)` for inserts and `plan().update(modifiedDomainObject)` for updates; the call above (`plan().update(updated)`) registers the deposited wallet and returns the same value as the action's result. Nothing is committed yet: the plan is just an in-memory list of intended writes. The executor flushes the whole plan, plus any attached events, in a single transaction once `perform(...)` returns — see [the two-phase lifecycle](#the-two-phase-lifecycle) below.
+
+### Action Executor
+
+The **Action Executor** runs the action by class and parameters:
+
+```java
+Wallet result = executor.execute(
+        () -> "alice",
+        WalletDepositAction.class,
+        new WalletDepositAction.Params(walletId, new BigDecimal("25.50")));
+```
+
+The executor opens a single transaction, writes the new wallet row, writes the `WalletMoneyDepositedEvent` row into the events table, and commits. If any step throws, both writes are rolled back together.
+
+### Repository
+
+The `WalletRepository` injected into the action above maps the domain to JOOQ records. The base class gives you full CRUD; you add custom queries - `readonlyDb()` for replica reads, `db()` for primary reads:
+
+```java
+@EkbatanRepository
+public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
+
+    public WalletRepository(DatabaseRegistry databaseRegistry) {
+        super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry);
+    }
+
+    // Replica read - list / search queries that tolerate replication lag
+    public List<Wallet> findAllByOwnerId(UUID ownerId) {
+        return readonlyDb()
+                .selectFrom(WALLETS)
+                .where(WALLETS.OWNER_ID.eq(ownerId))
+                .fetch(this::fromRecord);
+    }
+
+    // Primary read - strongly-consistent reads (e.g. immediately after a write)
+    public Optional<Wallet> findByIdOnPrimary(UUID walletId) {
+        return db()
+                .selectFrom(WALLETS)
+                .where(WALLETS.ID.eq(walletId))
+                .fetchOptional(this::fromRecord);
+    }
+
+    @Override
+    public Wallet fromRecord(WalletsRecord r) { /* … */ }
+
+    @Override
+    public WalletsRecord toRecord(Wallet w) { /* … */ }
+}
+```
+
+### Distributed Job
+
+A **Distributed Job** is periodic background work that should run on **at most one** instance across the cluster - daily reports, hourly cleanups, periodic reconciliations:
+
+```java
+@EkbatanDistributedJob
+public class DailyWalletReportJob extends DistributedJob {
+
+    private final ReportService reportService;
+
+    public DailyWalletReportJob(ReportService reportService) {
+        this.reportService = reportService;
+    }
+
+    @Override public String name()       { return "daily-wallet-report"; }   // cluster-wide unique
+    @Override public Schedule schedule() { return Schedules.daily(LocalTime.of(2, 0)); }
+
+    @Override
+    public void execute(ExecutionContext ctx) {
+        reportService.generateAndSend();
+    }
+}
+```
+
+### Event Handler
+
+An **Event Handler** reacts to a specific event in the same JVM after the action commits - for sending notifications, writing audit rows, or triggering downstream workflows. The framework's fan-out and dispatch jobs deliver each committed event with retry and at-least-once semantics:
+
+```java
+@EkbatanEventHandler
+public class WalletMoneyDepositedEventHandler implements EventHandler<WalletMoneyDepositedEvent> {
+
+    private final NotificationService notificationService;
+
+    public WalletMoneyDepositedEventHandler(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
+
+    @Override public String name()                                 { return "wallet-deposit-notification"; }
+    @Override public Class<WalletMoneyDepositedEvent> eventType()  { return WalletMoneyDepositedEvent.class; }
+
+    @Override
+    public void handle(EventEnvelope<WalletMoneyDepositedEvent> envelope) {
+        notificationService.notifyDeposit(envelope.event.modelId, envelope.event.amount);
+    }
+}
+```
+
+### The Action Lifecycle
+
+Every `executor.execute(...)` call runs in two distinct phases - pure construction first, then a single atomic transaction:
+
+```
+        executor.execute(WalletDepositAction.class, params)
+                              │
+                              ▼
+   ┌─── Phase 1 - Action.perform()  (no DB transaction yet) ────┐
+   │                                                            │
+   │   1. Read from repositories                                │
+   │   2. Build new immutable Models / Entities                 │
+   │   3. Attach Events to the Models                           │
+   │   4. Stage them on the ActionPlan:                         │
+   │         plan.add(newOrder)                                 │
+   │         plan.update(updatedWallet)                         │
+   │   5. Return a result value                                 │
+   │                                                            │
+   │   No database writes in this phase.                        │
+   └────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+   ┌─── Phase 2 - Executor.persistChanges()  (one atomic TX) ───┐
+   │                                                            │
+   │   TransactionManager.inTransaction(() -> {                 │
+   │     Repository.addAll / updateAll  →  domain rows          │
+   │     EventPersister.persistActionEvents  →  outbox rows     │
+   │     commit  ─or─  rollback                                 │
+   │   });                                                      │
+   │                                                            │
+   │   All writes land together, or none at all.                │
+   └────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                  result returned to the caller
+```
+
+Phase 1 is pure construction - reads are allowed, but no writes happen. Phase 2 is the only place the framework opens a transaction, and it always wraps every staged change plus the matching event rows together. Anything that throws inside Phase 2 rolls the whole transaction back; on optimistic-lock conflicts (`StaleRecordException`) the executor re-runs the entire action from Phase 1 with a fresh plan.
+
+Supporting types - `ModelEvent`, `Repository`, `TransactionManager`, `DatabaseRegistry`, `ShardedUUID` - are introduced in the relevant sections below.
+
+---
+
 
 ## The Big Picture
 
@@ -174,223 +374,18 @@ Around this core, the framework provides multi-database support, optional horizo
 
 ---
 
-## Core Concepts
-
-Five types do most of the work.
-
-### Action
-A unit of business work: deposit money, create order, ship parcel. An Action does not write to the database; it stages changes onto its `ActionPlan`.
-
-### ActionPlan
-A staging area held by every Action. Code calls `plan.add(...)` or `plan.update(...)` to register new or modified domain objects. Nothing is committed until the executor runs.
-
-### ActionExecutor
-Takes the plan, opens one transaction, writes the state and the events, and commits or rolls back. Also handles retries, tracing, and shard routing.
-
-### Model
-A domain object whose changes produce events. Mutations return a new immutable instance with a `ModelEvent` attached. Examples: Wallet, Order, Subscription.
-
-### Entity
-Persistable, version-tracked, and immutable, but produces no events. Use it for lookup tables, settings, or auxiliary records whose history is not consumed downstream.
-
-Supporting types - `ModelEvent`, `Repository`, `TransactionManager`, `DatabaseRegistry`, `ShardedUUID` - are introduced in the relevant sections below.
-
-Putting these five together, every action follows the same two-phase lifecycle:
-
-```
-        executor.execute(WalletDepositAction.class, params)
-                              │
-                              ▼
-   ┌─── Phase 1 - Action.perform()  (no DB transaction yet) ────┐
-   │                                                            │
-   │   1. Read from repositories                                │
-   │   2. Build new immutable Models / Entities                 │
-   │   3. Attach Events to the Models                           │
-   │   4. Stage them on the ActionPlan:                         │
-   │         plan.add(newOrder)                                 │
-   │         plan.update(updatedWallet)                         │
-   │   5. Return a result value                                 │
-   │                                                            │
-   │   No database writes in this phase.                        │
-   └────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-   ┌─── Phase 2 - Executor.persistChanges()  (one atomic TX) ───┐
-   │                                                            │
-   │   TransactionManager.inTransaction(() -> {                 │
-   │     Repository.addAll / updateAll  →  domain rows          │
-   │     EventPersister.persistActionEvents  →  outbox rows     │
-   │     commit  ─or─  rollback                                 │
-   │   });                                                      │
-   │                                                            │
-   │   All writes land together, or none at all.                │
-   └────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-                  result returned to the caller
-```
-
-Phase 1 is pure construction - reads are allowed, but no writes happen. Phase 2 is the only place the framework opens a transaction, and it always wraps every staged change plus the matching event rows together. Anything that throws inside Phase 2 rolls the whole transaction back; on optimistic-lock conflicts (`StaleRecordException`) the executor re-runs the entire action from Phase 1 with a fresh plan.
-
----
-
-## Learn by Example: A Wallet
-
-A wallet is a **Model** with an owner, a currency, and a balance:
-
-```java
-@AutoBuilder
-public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
-    public final UUID ownerId;
-    public final Currency currency;
-    public final BigDecimal balance;
-
-    Wallet(WalletBuilder builder) {
-        super(builder);
-        this.ownerId = Validate.notNull(builder.ownerId, "ownerId cannot be null");
-        this.currency = Validate.notNull(builder.currency, "currency cannot be null");
-        this.balance = Validate.notNull(builder.balance, "balance cannot be null");
-    }
-
-    public Wallet deposit(BigDecimal amount) {
-        var newBalance = balance.add(amount);
-        return copy()
-                .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
-                .balance(newBalance)
-                .build();
-    }
-    // close(), copy()...
-}
-```
-
-`deposit(...)` returns a new wallet with the corresponding event attached - no database call is made here.
-
-An **Action** wraps the operation so the executor can run it:
-
-```java
-@EkbatanAction
-public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
-
-    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
-
-    private final WalletRepository walletRepository;
-
-    public WalletDepositAction(Clock clock, WalletRepository walletRepository) {
-        super(clock);
-        this.walletRepository = walletRepository;
-    }
-
-    @Override
-    protected Wallet perform(Principal principal, Params params) {
-        var wallet = walletRepository.getById(params.walletId().getValue());
-        var updated = wallet.deposit(params.amount());
-        return plan().update(updated);
-    }
-}
-```
-
-No database write yet - only a registered change on the **plan**.
-
-The **Action Executor** runs the action by class and parameters:
-
-```java
-Wallet result = executor.execute(
-        () -> "alice",
-        WalletDepositAction.class,
-        new WalletDepositAction.Params(walletId, new BigDecimal("25.50")));
-```
-
-The executor opens a single transaction, writes the new wallet row, writes the `WalletMoneyDepositedEvent` row into the events table, and commits. If any step throws, both writes are rolled back together.
-
-The `WalletRepository` injected into the action above maps the domain to JOOQ records. The base class gives you full CRUD; you add custom queries - `readonlyDb()` for replica reads, `db()` for primary reads:
-
-```java
-@EkbatanRepository
-public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
-
-    public WalletRepository(DatabaseRegistry databaseRegistry) {
-        super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry);
-    }
-
-    // Replica read - list / search queries that tolerate replication lag
-    public List<Wallet> findAllByOwnerId(UUID ownerId) {
-        return readonlyDb()
-                .selectFrom(WALLETS)
-                .where(WALLETS.OWNER_ID.eq(ownerId))
-                .fetch(this::fromRecord);
-    }
-
-    // Primary read - strongly-consistent reads (e.g. immediately after a write)
-    public Optional<Wallet> findByIdOnPrimary(UUID walletId) {
-        return db()
-                .selectFrom(WALLETS)
-                .where(WALLETS.ID.eq(walletId))
-                .fetchOptional(this::fromRecord);
-    }
-
-    @Override
-    public Wallet fromRecord(WalletsRecord r) { /* … */ }
-
-    @Override
-    public WalletsRecord toRecord(Wallet w) { /* … */ }
-}
-```
-
-A **Distributed Job** is periodic background work that should run on **at most one** instance across the cluster - daily reports, hourly cleanups, periodic reconciliations:
-
-```java
-@EkbatanDistributedJob
-public class DailyWalletReportJob extends DistributedJob {
-
-    private final ReportService reportService;
-
-    public DailyWalletReportJob(ReportService reportService) {
-        this.reportService = reportService;
-    }
-
-    @Override public String name()       { return "daily-wallet-report"; }   // cluster-wide unique
-    @Override public Schedule schedule() { return Schedules.daily(LocalTime.of(2, 0)); }
-
-    @Override
-    public void execute(ExecutionContext ctx) {
-        reportService.generateAndSend();
-    }
-}
-```
-
-An **Event Handler** reacts to a specific event in the same JVM after the action commits - for sending notifications, writing audit rows, or triggering downstream workflows. The framework's fan-out and dispatch jobs deliver each committed event with retry and at-least-once semantics:
-
-```java
-@EkbatanEventHandler
-public class WalletMoneyDepositedEventHandler implements EventHandler<WalletMoneyDepositedEvent> {
-
-    private final NotificationService notificationService;
-
-    public WalletMoneyDepositedEventHandler(NotificationService notificationService) {
-        this.notificationService = notificationService;
-    }
-
-    @Override public String name()                                 { return "wallet-deposit-notification"; }
-    @Override public Class<WalletMoneyDepositedEvent> eventType()  { return WalletMoneyDepositedEvent.class; }
-
-    @Override
-    public void handle(EventEnvelope<WalletMoneyDepositedEvent> envelope) {
-        notificationService.notifyDeposit(envelope.event.modelId, envelope.event.amount);
-    }
-}
-```
-
----
-
 ## Capabilities
 
 Each topic links to a focused deep-dive doc with the full surface area, schema, and examples.
 
 ### Get started
 - [Wiring without DI](docs/wiring/without-di.md) - full plain-Java end-to-end snippet, every line explained
+- [Domain classes & the `@Ekbatan*` annotations](docs/wiring/annotations.md) - the four annotations and five domain classes that span every DI container
 - [Wiring with Spring Boot](docs/wiring/spring.md) - one starter dep + `@Ekbatan*` annotations
 - [Wiring with Quarkus](docs/wiring/quarkus.md) - extension + build-step / native specifics
 - [Wiring with Micronaut](docs/wiring/micronaut.md) - integration jar + compile-time visitor
+- [Building with Gradle](docs/gradle/README.md) - per-stack `build.gradle.kts` blocks, AP wiring, `dev.monosoul.jooq-docker` plugin, optional add-ons
+- [Building with Maven](docs/maven/README.md) - `pom.xml` walkthrough, AP wiring, the `fabric8 docker + flyway-maven + jooq-codegen-maven` chain
 
 ### Core
 - [The outbox: atomic state + events](docs/concepts/outbox.md) - the framework's atomic state-and-events guarantee
@@ -402,9 +397,12 @@ Each topic links to a focused deep-dive doc with the full surface area, schema, 
 - [TransactionManager](docs/database/transaction-manager.md) - direct transactional DB access outside the Action pipeline
 - [Outbox schema](docs/database/outbox-schema.md) - the SQL DDL of `eventlog.events`, the `delivered` flag, `event_notifications`, indexes
 - [Sharding](docs/database/sharding.md) - group + member, `ShardedUUID`, custom `ShardingStrategy`, cross-shard rules
-- [Pessimistic locking via `KeyedLockProvider`](docs/database/keyed-locks.md) - five backends (Postgres, MySQL, MariaDB, Redis, in-process), reentrancy contract
-- [Multi-database (PostgreSQL / MySQL / MariaDB)](docs/database/multi-database.md) - dialect cheatsheet, init scripts, partial indexes
-- [JOOQ codegen](docs/database/jooq-codegen.md) - per-dialect `build.gradle.kts` blocks for `dev.monosoul.jooq-docker`
+- [Pessimistic locking via `KeyedLockProvider`](docs/database/keyed-locks.md) - five backends (Postgres, MySQL, MariaDB, Redis, in-process), reentrancy contract, caller-side acquisition pattern
+- [Multi-database (PostgreSQL / MySQL / MariaDB)](docs/database/multi-database.md) - cross-dialect cheatsheet: type mapping, init scripts, partial indexes
+- [PostgreSQL setup](docs/database/postgresql.md) - native `UUID` + `JSONB`, real schemas, partial indexes — the smoothest fit
+- [MariaDB setup](docs/database/mariadb.md) - native `UUID` (10.7+), `JSON`, `DATETIME(6)`, `eventlog` as a separate database
+- [MySQL setup](docs/database/mysql.md) - `CHAR(36)` UUIDs via `UuidStringConverter`, cross-database GRANT for `eventlog`
+- [JOOQ codegen](docs/database/jooq-codegen.md) - what codegen generates, the seven framework converters, per-dialect modeling rationale (plugin syntax: [Gradle](docs/gradle/jooq-codegen.md) · [Maven](docs/maven/jooq-codegen.md))
 
 ### Jobs
 - [Distributed background jobs](docs/jobs/distributed-jobs.md) - `@EkbatanDistributedJob`, db-scheduler-backed cluster exclusivity
@@ -452,20 +450,49 @@ Ekbatan **is** a replacement for the persistence layer typically built with **Sp
 
 ---
 
-## Examples
+## Examples & runnable references
 
-The [`ekbatan-integration-tests/`](./ekbatan-integration-tests) directory contains complete, runnable examples that mirror every snippet on this page. Each subproject is a working application you can study, run, and adapt:
+Two directories, two audiences. Read this section if you want to copy code into your own app.
 
-| Subproject | What it demonstrates |
+### [`ekbatan-examples/`](./ekbatan-examples) — start here
+
+**Standalone runnable applications** that consume Ekbatan from Maven Central, exactly the way you would in your own project. Each subdirectory is its own Gradle/Maven project with its own wrapper; clone, `cd`, build, run. The layout is a uniform **3 stacks × 2 build tools × 3 dialects** grid — every combination of (Spring Boot / Quarkus / Micronaut) × (Gradle / Maven) × (PostgreSQL / MariaDB / MySQL), each with a JVM and a GraalVM-native variant — plus a handful of specialized examples for sharding, sagas, and a no-HTTP job worker.
+
+| Pattern | Spring Boot wallet | Quarkus wallet | Micronaut wallet |
+|---|---|---|---|
+| Framework Flyway extension | [`spring-boot-starter-flyway`](./docs/wiring/spring.md#flyway--use-spring-boot-starter-flyway--a-flywaydatasource-bean) + `@FlywayDataSource @Bean DataSource` | [`quarkus-flyway`](./docs/wiring/quarkus.md#flyway--use-quarkus-flyway--a-flywayconfigurationcustomizer) + `FlywayConfigurationCustomizer` (CDI) | [`micronaut-flyway`](./docs/wiring/micronaut.md#flyway--use-micronaut-flyway--a-flywayconfigurationcustomizer) + `FlywayConfigurationCustomizer @Named("default")` |
+| HTTP serialization | `spring-boot-starter-web` (Jackson via auto-config) | `quarkus-rest-jackson` (pulls `quarkus-jackson`) | [`micronaut-serde-jackson`](./docs/wiring/micronaut.md#serialization--use-micronaut-serde-jackson-not-micronaut-jackson-databind) + `@Serdeable` (compile-time serdes) |
+| Native-image | `nativeTest` (Spring AOT + GraalVM Build Tools) | `testNative` (Quarkus native pipeline) | `nativeTest` (Micronaut + GraalVM Build Tools) |
+
+Per-stack starting points (every one has 6 sibling DB / build-tool variants — see [`ekbatan-examples/README.md`](./ekbatan-examples/README.md) for the full grid):
+
+| Example | What it demonstrates |
 |---|---|
-| `postgres-simple/` | Single-database wallet with create / deposit / close actions |
-| `postgres-sharded/` | The same wallet model sharded across multiple Postgres instances, with cross-shard tests |
-| `core-repo/{pg,mysql,mariadb}/` | Repository CRUD coverage across all three supported databases |
+| [`spring-boot-wallet-rest-gradle-pg`](./ekbatan-examples/spring-boot-wallet-rest-gradle-pg) | Spring Boot wallet — REST + 4 Actions + listen-to-yourself handler + caller-side `KeyedLockProvider` + Testcontainers test, using `spring-boot-starter-flyway` |
+| [`quarkus-wallet-rest-gradle-pg`](./ekbatan-examples/quarkus-wallet-rest-gradle-pg) | Quarkus wallet — same surface, using `quarkus-flyway` + a CDI `FlywayConfigurationCustomizer` |
+| [`micronaut-wallet-rest-gradle-pg`](./ekbatan-examples/micronaut-wallet-rest-gradle-pg) | Micronaut wallet — same surface, using `micronaut-flyway` + a `@Named("default")` customizer and `micronaut-serde-jackson` |
+| [`spring-boot-wallet-rest-gradle-sharded-pg`](./ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) | Multi-shard Spring Boot wallet — 2 Postgres instances, `ShardedUUID`, `WalletTransferAction` with `allowCrossShard(true)`, programmatic Flyway loop with `spring.flyway.enabled: false` |
+| [`spring-boot-wallet-saga-gradle-pg`](./ekbatan-examples/spring-boot-wallet-saga-gradle-pg) | Saga pattern — `InitiateTransferAction` → `CompleteTransferAction` → `RefundTransferAction` chained by `@EkbatanEventHandler`s, forward-only compensation |
+| [`spring-boot-job-worker-gradle-pg`](./ekbatan-examples/spring-boot-job-worker-gradle-pg) | `@EkbatanDistributedJob` as the primary feature — no HTTP, `spring.main.web-application-type=none`, two jobs running end-to-end |
+
+**Use these as the template when wiring Ekbatan into your own project.** They show the canonical framework-native dep choices (`quarkus-flyway` / `micronaut-flyway` / `spring-boot-starter-flyway` — never raw `flyway-core` and a hand-rolled runner) and the customizer hooks each framework uses to feed connection coordinates from `ekbatan.sharding.*` into Flyway.
+
+### [`ekbatan-integration-tests/`](./ekbatan-integration-tests) — framework's own smoke tests
+
+These are **not** examples in the "copy me" sense — they're the framework's own integration test suite, exercising `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, the four `KeyedLockProvider` backends, and the three Debezium SMT serializers directly. Each runs against real Testcontainers and produces real coverage; together they're the green-light check before a release. They deliberately **do not** use a DI framework (except where the test target is the DI integration itself), and they call **raw Flyway** via `FlywayHelper.migrate(url, user, pass)` — see the [two Flyway-on-native patterns](./docs/runtime/native-image.md#flyway-on-native--two-patterns) for why that's right for these tests and wrong for your app.
+
+| Subproject | What it covers |
+|---|---|
+| `postgres-simple/` | Single-database wallet — the smallest end-to-end action+repository+executor smoke test |
+| `postgres-sharded/` | The same wallet sharded across multiple Postgres instances, with cross-shard tests |
+| `core-repo/{pg,mysql,mariadb}/` | Repository CRUD coverage across all three supported databases (81 tests per dialect) |
 | `keyed-lock-provider/{pg,mariadb,mysql,redis}/` | `KeyedLockProvider` implementations and reentrancy/timeout coverage |
 | `distributed-jobs-pg/` | `JobRegistry` + `DistributedJob` cluster-exclusive scheduling |
 | `event-pipeline/` | End-to-end Debezium → Kafka pipeline with JSON, Avro (SMT), and Protobuf (SMT) variants |
 | `local-event-handler/{shared,pg,mariadb,mysql}/` | In-process consumer (fan-out + handling jobs) on PG / MariaDB / MySQL |
-| `di/{spring-boot-starter,quarkus,micronaut}/` | DI integration smoke tests showcasing the `@Ekbatan*` annotations |
+| `di/{spring-boot-starter,quarkus,micronaut}/` | DI integration smoke tests for the framework's auto-config / extension / visitor |
+
+Every test module also has a `nativeTest` task (Gradle) — the full 402-test suite passes against the compiled native binary, validating the GraalVM substitutions, reachability metadata, and `NativeImageFlywayResourceProvider` end-to-end.
 
 ---
 

@@ -1,0 +1,18 @@
+services:
+  mariadb:
+    image: mariadb:11.8
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_USER: wallet
+      MARIADB_PASSWORD: wallet
+      MARIADB_DATABASE: wallet
+      TZ: UTC
+    ports:
+      - "3306:3306"
+    volumes:
+      - "./src/main/resources/mariadb_init.sql:/docker-entrypoint-initdb.d/mariadb_init.sql:ro"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
