@@ -1,0 +1,313 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'Compiling to a native binary'
+activeSection: learn
+lead: 'Take everything from the previous lessons and produce a single statically-linked binary with GraalVM. ~50ms startup, ~50MB image, no JVM required at runtime. The framework''s substrate-VM bridges handle Flyway resource scanning and Jackson 3 record reflection for you.'
+---
+
+import StackPicker from '../../components/StackPicker.astro';
+
+<StackPicker />
+
+A native image is GraalVM's ahead-of-time compilation of your whole JVM application — domain code, framework, JDK — into one ELF/Mach-O binary. The result: ~50ms cold start (vs. ~2-5s on the JVM), ~50MB image (vs. ~250MB JVM + jar), zero warm-up. Trade-off: no dynamic classloading, no runtime reflection without metadata, and a slower build (~2-4 minutes).
+
+This lesson assumes you've completed [Getting started](/learn/getting-started/) and [Your first Action](/learn/your-first-action/). The wallet runs on the JVM. Now we'll compile it to native.
+
+## 1. Install GraalVM
+
+```bash
+sdk install java 25-graal
+sdk use java 25-graal
+java -version    # → 25 + GraalVM
+```
+
+(SDKMAN! is the simplest path on macOS / Linux. If you don't use it, grab the tarball from oracle.com/graalvm.)
+
+## 2. Add the native-bridge dependency
+
+`ekbatan-native` ships:
+- A Flyway `ResourceProvider` that walks the `resource:/` NIO filesystem on substrate VM (Flyway's default classpath scanner fails on native — see [Reference → Native image](/reference/runtime/native-image/) for the why)
+- Jackson 3 record reflection metadata for the framework's event-envelope DTOs
+- A vendored HikariCP `ResourceManagementRequired` config so the connection pool works on substrate VM
+
+Add it to every native-target subproject:
+
+<div data-stack="spring" data-build="gradle">
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("io.github.zyraz-io:ekbatan-native:0.0.3")
+}
+
+plugins {
+    id("org.graalvm.buildtools.native") version "0.10.3"
+}
+
+graalvmNative {
+    binaries {
+        named("main") {
+            buildArgs.add("-Dio.ekbatan.graalvm.scan.packages=io.example,io.ekbatan")
+        }
+    }
+}
+```
+
+</div>
+
+<div data-stack="spring" data-build="maven">
+
+```xml
+<dependency>
+  <groupId>io.github.zyraz-io</groupId>
+  <artifactId>ekbatan-native</artifactId>
+  <version>0.0.3</version>
+</dependency>
+
+<!-- in <plugins>: -->
+<plugin>
+  <groupId>org.graalvm.buildtools</groupId>
+  <artifactId>native-maven-plugin</artifactId>
+  <version>0.10.3</version>
+  <configuration>
+    <buildArgs>
+      <buildArg>-Dio.ekbatan.graalvm.scan.packages=io.example,io.ekbatan</buildArg>
+    </buildArgs>
+  </configuration>
+</plugin>
+```
+
+</div>
+
+<div data-stack="quarkus" data-build="gradle">
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("io.github.zyraz-io:ekbatan-native:0.0.3")
+}
+```
+
+The Quarkus Gradle plugin auto-detects native builds. Pass the scan-packages flag via Quarkus config:
+
+```properties
+# application.properties
+quarkus.native.additional-build-args=-Dio.ekbatan.graalvm.scan.packages=io.example,io.ekbatan
+```
+
+</div>
+
+<div data-stack="quarkus" data-build="maven">
+
+```xml
+<dependency>
+  <groupId>io.github.zyraz-io</groupId>
+  <artifactId>ekbatan-native</artifactId>
+  <version>0.0.3</version>
+</dependency>
+```
+
+Plus in `application.properties`:
+
+```properties
+quarkus.native.additional-build-args=-Dio.ekbatan.graalvm.scan.packages=io.example,io.ekbatan
+```
+
+</div>
+
+<div data-stack="micronaut">
+
+```kotlin
+dependencies {
+    implementation("io.github.zyraz-io:ekbatan-native:0.0.3")
+}
+```
+
+The Micronaut Gradle/Maven plugin handles native builds. The `io.ekbatan.graalvm.scan.packages` system property goes into `nativeImage { buildArgs }` (Gradle) or `<buildArgs>` (Maven). See [`ekbatan-examples/micronaut-wallet-rest-gradle-native-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/micronaut-wallet-rest-gradle-native-pg) for the full block.
+
+</div>
+
+<div data-stack="plain">
+
+```kotlin
+dependencies {
+    implementation("io.github.zyraz-io:ekbatan-native:0.0.3")
+}
+
+plugins {
+    id("org.graalvm.buildtools.native") version "0.10.3"
+}
+
+graalvmNative {
+    binaries {
+        named("main") {
+            mainClass.set("io.example.Main")
+            buildArgs.add("-Dio.ekbatan.graalvm.scan.packages=io.example,io.ekbatan")
+        }
+    }
+}
+```
+
+</div>
+
+The `io.ekbatan.graalvm.scan.packages` value is the comma-separated list of root packages the framework's substrate-VM bridges should scan for `@EkbatanAction`, `@EkbatanRepository`, `@EkbatanEventHandler`, `@EkbatanDistributedJob`, and `@AutoBuilder`-generated builder classes. **Include your own root package**; the framework's own packages are added automatically.
+
+## 3. Build the native binary
+
+<div data-stack="spring" data-build="gradle">
+
+```bash
+./gradlew nativeCompile
+```
+
+Output: `build/native/nativeCompile/<app-name>` (a single ELF/Mach-O executable, no JVM needed). ~2-4 minutes on a modern laptop.
+
+</div>
+
+<div data-stack="spring" data-build="maven">
+
+```bash
+./mvnw -Pnative native:compile
+```
+
+Output: `target/<app-name>` (single executable).
+
+</div>
+
+<div data-stack="quarkus" data-build="gradle">
+
+```bash
+./gradlew build -Dquarkus.native.enabled=true
+```
+
+Output: `build/<app-name>-runner` (single executable).
+
+</div>
+
+<div data-stack="quarkus" data-build="maven">
+
+```bash
+./mvnw package -Dnative
+```
+
+Output: `target/<app-name>-runner`.
+
+</div>
+
+<div data-stack="micronaut" data-build="gradle">
+
+```bash
+./gradlew nativeCompile
+```
+
+Output: `build/native/nativeCompile/<app-name>`.
+
+</div>
+
+<div data-stack="micronaut" data-build="maven">
+
+```bash
+./mvnw -Pnative native:compile
+```
+
+</div>
+
+<div data-stack="plain" data-build="gradle">
+
+```bash
+./gradlew nativeCompile
+```
+
+</div>
+
+<div data-stack="plain" data-build="maven">
+
+```bash
+./mvnw -Pnative native:compile
+```
+
+</div>
+
+## 4. Run it
+
+<div data-stack="spring" data-build="gradle">
+
+```bash
+./build/native/nativeCompile/wallet
+# Started Application in 0.052s (process running for 0.057s)
+```
+
+</div>
+
+<div data-stack="spring" data-build="maven">
+
+```bash
+./target/wallet
+```
+
+</div>
+
+<div data-stack="quarkus">
+
+```bash
+./build/wallet-runner   # Gradle
+# OR
+./target/wallet-runner  # Maven
+```
+
+</div>
+
+<div data-stack="micronaut">
+
+```bash
+./build/native/nativeCompile/wallet
+```
+
+</div>
+
+<div data-stack="plain">
+
+```bash
+./build/native/nativeCompile/wallet <walletId> 10.00
+```
+
+</div>
+
+Hit the deposit endpoint exactly as in [Your first Action](/learn/your-first-action/) — the behavior is **identical** to the JVM build. Same wallet code, same outbox writes, same event handlers. The binary just happens to be a single 50MB file with no JVM dependency.
+
+## 5. Run native tests
+
+The `ekbatan-integration-tests` framework's own native test setup is a good template. With GraalVM Build Tools' `nativeTest` (Gradle) or Quarkus's `testNative`:
+
+<div data-stack="spring" data-build="gradle"><code>./gradlew nativeTest</code></div>
+<div data-stack="spring" data-build="maven"><code>./mvnw -Pnative test</code></div>
+<div data-stack="quarkus" data-build="gradle"><code>./gradlew testNative</code></div>
+<div data-stack="quarkus" data-build="maven"><code>./mvnw test -Pnative</code></div>
+<div data-stack="micronaut" data-build="gradle"><code>./gradlew nativeTest</code></div>
+<div data-stack="micronaut" data-build="maven"><code>./mvnw -Pnative test</code></div>
+<div data-stack="plain" data-build="gradle"><code>./gradlew nativeTest</code></div>
+<div data-stack="plain" data-build="maven"><code>./mvnw -Pnative test</code></div>
+
+The whole Testcontainers-driven integration suite runs against the compiled binary. If something breaks on native that worked on the JVM, this is where you'll see it — usually a missing reflection metadata entry that needs adding to the framework's bridges (or to your own `reflect-config.json`).
+
+## What just happened
+
+- **No JVM at runtime.** The binary is statically linked; deploy it to a `FROM scratch` Docker image and ship a 50MB container.
+- **No application-code changes.** The same `Wallet`, `WalletDepositMoneyAction`, `WalletController` you wrote in earlier lessons compile to native unchanged.
+- **The framework handled the substrate-VM hard parts** — Flyway resource scanning, Jackson 3 record reflection metadata, HikariCP pool startup. You added one dependency (`ekbatan-native`) and one build arg (`-Dio.ekbatan.graalvm.scan.packages=...`).
+- **Cold start drops from ~3s to ~50ms.** Serverless and on-demand workloads stop paying the JVM warm-up tax.
+
+## Where this can bite
+
+- **Build time is much longer** than the JVM build (2-4 min vs 10-15s). Save it for `release` and `nativeTest` workflows; iterate against the JVM during development.
+- **No runtime reflection without metadata.** If you add a library that uses reflection (e.g. a JSON mapper that isn't covered by Jackson 3's record support), you may need to add `reflect-config.json` entries. The native-image agent (`-agentlib:native-image-agent=...`) records them automatically during a JVM run.
+- **Some Java features don't work on substrate VM** — `Thread.holdsLock` introspection, dynamic proxies for unknown interfaces, `MethodHandles.privateLookupIn` across modules. These rarely come up in Ekbatan-style apps but check the [Reference → Native image](/reference/runtime/native-image/) page if a deep library fails to start.
+
+## See also
+
+- [Reference → Native image](/reference/runtime/native-image/) — substrate-VM bridges, `FlywayHelper`, scan packages, troubleshooting
+- [`ekbatan-examples/*-native-*`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples) — 12 runnable native projects (4 stacks × 3 dialects), each with full integration tests against the compiled binary
+- [GraalVM Build Tools docs](https://graalvm.github.io/native-build-tools/latest/) — the official `nativeCompile` / `nativeTest` plugin reference
+- [Quarkus native guide](https://quarkus.io/guides/building-native-image) — Quarkus-specific notes if you're on that stack
+
+🎉 **You've finished the Learn track.** From a single `implementation(...)` line you now have a sharded, native-compiled, outbox-native, event-driven service. From here: pick what you actually need from the [Reference](/reference/) and ignore the rest — most production services use ~30% of the framework's surface.

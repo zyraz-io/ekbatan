@@ -1,0 +1,55 @@
+---
+// The single layout every page uses.
+//
+// Owns:
+//   - <html> / <head> (meta, title, fonts.css + styles.css)
+//   - the brutalist outer wrapper div (.min-h-screen.text-ink.bg-paper)
+//   - the global <Nav> and <Footer>
+//
+// The page's own content goes in the <slot />. Per-page metadata (title,
+// description, og image) comes through Astro.props.
+import "../styles/fonts.css";
+import "../styles/styles.css";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+
+interface Props {
+    /** <title> + og:title + twitter:title. */
+    title: string;
+    /** <meta name="description"> + og/twitter description. */
+    description?: string;
+    /** Which top-nav item should render as "current". */
+    activeSection?: "concepts" | "learn" | "reference";
+}
+
+const {
+    title,
+    description = "A Java 25+ persistence framework with the transactional outbox pattern built in. State and events committed in one atomic transaction. Spring Boot, Quarkus, Micronaut.",
+    activeSection,
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{title}</title>
+        <meta name="description" content={description} />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={description} />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content={title} />
+        <meta name="twitter:description" content={description} />
+        <!-- Tiny no-op favicon until a real one is designed. Prevents 404s. -->
+        <link rel="icon" href="data:," />
+    </head>
+    <body>
+        <div class="min-h-screen text-ink bg-paper">
+            <Nav activeSection={activeSection} />
+            <slot />
+            <Footer />
+        </div>
+    </body>
+</html>

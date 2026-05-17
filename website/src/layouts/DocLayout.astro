@@ -1,0 +1,186 @@
+---
+// Wrapper layout for MDX pages under /concepts/, /learn/, /reference/.
+//
+// MDX frontmatter (title, description, activeSection) is automatically
+// supplied by Astro on Astro.props.frontmatter — we unpack it here and pass
+// through to BaseLayout so the MDX files only need plain frontmatter, no
+// imports.
+//
+// Adds minimal "prose" styling for MDX-emitted <h1>/<h2>/<h3>/<p>/<pre>/
+// <code>/<ul>/<a>/<blockquote> — the Tailwind bundle is frozen (no
+// @tailwindcss/typography), so the styling lives here as inline CSS scoped
+// to .doc-prose. Brutalist palette: paper bg, ink borders, JetBrains Mono for
+// code, Space Grotesk for headings.
+import BaseLayout from "./BaseLayout.astro";
+
+const { frontmatter } = Astro.props;
+---
+
+<BaseLayout
+    title={frontmatter.title}
+    description={frontmatter.description}
+    activeSection={frontmatter.activeSection}
+>
+    <article class="doc-prose container-px max-w-4xl mx-auto py-12 md:py-20">
+        <header class="mb-12 pb-8 border-b-2 border-ink">
+            <div class="inline-flex items-center gap-3 brut-border bg-ink text-paper font-mono text-[11px] uppercase tracking-widest px-3 py-1.5">
+                <span class="text-yellow">§</span>
+                <span>{frontmatter.activeSection ?? "page"}</span>
+            </div>
+            <h1
+                class="font-display font-bold text-4xl md:text-6xl tracking-tight mt-6 leading-[0.95] text-balance"
+            >
+                {frontmatter.title}
+            </h1>
+            {
+                frontmatter.lead && (
+                    <p class="mt-4 text-lg leading-relaxed text-muted-foreground max-w-2xl">
+                        {frontmatter.lead}
+                    </p>
+                )
+            }
+        </header>
+        <slot />
+    </article>
+</BaseLayout>
+
+<style is:global>
+    .doc-prose {
+        font-family: "DM Sans", system-ui, sans-serif;
+        line-height: 1.7;
+    }
+    .doc-prose h2 {
+        font-family: "Space Grotesk", system-ui, sans-serif;
+        font-size: clamp(1.75rem, 3vw, 2.25rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin-top: 3rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--ink, #0a0a0a);
+    }
+    .doc-prose h3 {
+        font-family: "Space Grotesk", system-ui, sans-serif;
+        font-size: 1.5rem;
+        font-weight: 700;
+        letter-spacing: -0.015em;
+        margin-top: 2rem;
+        margin-bottom: 0.75rem;
+    }
+    .doc-prose h4 {
+        font-family: "Space Grotesk", system-ui, sans-serif;
+        font-size: 1.15rem;
+        font-weight: 600;
+        margin-top: 1.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .doc-prose p {
+        margin-block: 1rem;
+    }
+    .doc-prose a {
+        text-decoration: underline;
+        text-decoration-thickness: 2px;
+        text-underline-offset: 3px;
+        text-decoration-color: var(--brand-orange, #ff6633);
+    }
+    .doc-prose a:hover {
+        background: var(--brand-yellow, #ffd23f);
+        color: var(--ink, #0a0a0a);
+    }
+    .doc-prose ul,
+    .doc-prose ol {
+        margin-block: 1rem;
+        padding-left: 1.5rem;
+    }
+    .doc-prose ul {
+        list-style: square;
+    }
+    .doc-prose ol {
+        list-style: decimal;
+    }
+    .doc-prose li {
+        margin-block: 0.35rem;
+    }
+    .doc-prose blockquote {
+        border-left: 4px solid var(--brand-orange, #ff6633);
+        padding: 0.5rem 1rem;
+        margin: 1.25rem 0;
+        font-style: italic;
+    }
+    /* Inline <code> inside paragraphs */
+    .doc-prose :not(pre) > code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.9em;
+        background: var(--brand-yellow, #ffd23f);
+        padding: 0 0.25rem;
+        border: 1px solid var(--ink, #0a0a0a);
+    }
+    /* Shiki code fences are wrapped in <pre class="astro-code">. */
+    .doc-prose pre {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.85rem;
+        line-height: 1.55;
+        border: 2px solid var(--ink, #0a0a0a);
+        box-shadow: 4px 4px 0 0 var(--ink, #0a0a0a);
+        padding: 1rem 1.25rem;
+        margin: 1.5rem 0;
+        overflow-x: auto;
+        background: #fafafa;
+    }
+    /* The <CodeBlock> component brings its OWN brut-border + brut-shadow on its
+       outer wrapper, so its inner <pre> shouldn't get the standalone-pre chrome
+       above (otherwise you get a box-in-a-box-with-shadow effect). Strip the
+       border/shadow/margin from any <pre> that lives inside a .brut-border
+       wrapper — the CodeBlock's wrapper handles all of that. */
+    .doc-prose .brut-border pre {
+        border: 0;
+        box-shadow: none;
+        margin: 0;
+        background: transparent;
+    }
+    /* Give the CodeBlock outer wrapper the same vertical breathing room standalone
+       fenced blocks get. Restricted to .bg-paper so it doesn't also widen the
+       section-name chip in the header (which uses brut-border + bg-ink and
+       wants no extra vertical margin). */
+    .doc-prose .brut-border.bg-paper {
+        margin: 1.5rem 0;
+    }
+    /* The "compile error" wavy red underline — used to mark identifiers that
+       reference code that doesn't exist yet (e.g. jOOQ-generated classes
+       before codegen runs). Same visual as IntelliJ / VS Code's diagnostic
+       squiggle, so readers recognize it instantly. */
+    .compile-error {
+        text-decoration: underline wavy #ef4444;
+        text-decoration-thickness: 1.5px;
+        text-underline-offset: 3px;
+    }
+    .doc-prose pre code {
+        font-family: inherit;
+        background: transparent;
+        padding: 0;
+        border: 0;
+    }
+    .doc-prose hr {
+        border: 0;
+        border-top: 2px solid var(--ink, #0a0a0a);
+        margin: 2.5rem 0;
+    }
+    .doc-prose table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 1.5rem 0;
+        font-size: 0.9rem;
+    }
+    .doc-prose th,
+    .doc-prose td {
+        border: 2px solid var(--ink, #0a0a0a);
+        padding: 0.5rem 0.75rem;
+        text-align: left;
+        vertical-align: top;
+    }
+    .doc-prose th {
+        background: var(--brand-yellow, #ffd23f);
+        font-family: "Space Grotesk", system-ui, sans-serif;
+        font-weight: 700;
+    }
+</style>

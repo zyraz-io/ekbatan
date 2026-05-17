@@ -1,0 +1,78 @@
+---
+// One card in a section index (Concepts / Learn / Reference).
+//
+// Two modes:
+//   - status="ready"  → renders as an <a>, hover-lifts, fully interactive
+//   - status="draft"  → renders as a <div> (not a link, can't 404), greyed
+//                       out, shows a "soon" tag instead of an order number
+//
+// Keeps the brutalist visual language (brut-border, hover translate, paper
+// background) consistent across all three section indexes.
+interface Props {
+    href: string;
+    title: string;
+    blurb: string;
+    status: "ready" | "draft";
+    /** Optional small order number to show in the corner (e.g. "01"). */
+    index?: string;
+    /** Card density. "compact" is used by the reference page's denser grid. */
+    size?: "default" | "compact";
+}
+const { href, title, blurb, status, index, size = "default" } = Astro.props;
+
+const ready = status === "ready";
+const padClass = size === "compact" ? "p-5 gap-2" : "p-7 gap-3";
+const titleClass =
+    size === "compact"
+        ? "font-mono text-sm font-bold"
+        : "font-display text-2xl font-bold tracking-tight";
+const blurbClass =
+    size === "compact"
+        ? "text-xs leading-relaxed text-muted-foreground"
+        : "text-sm leading-relaxed";
+---
+
+{
+    ready ? (
+        <a
+            href={href}
+            class:list={[
+                "brut-border bg-paper flex flex-col transition-all hover:brut-shadow hover:-translate-y-1",
+                padClass,
+            ]}
+        >
+            {
+                /*
+                 * No chip on the right for ready cards — when every card in a
+                 * grid is ready, repeating "READY" is noise. The order number
+                 * on the left is still useful as a stable visual anchor.
+                 */
+            }
+            <div class="flex items-baseline justify-between">
+                <span class="font-mono text-xs">{index ?? ""}</span>
+            </div>
+            <h3 class={titleClass}>{title}</h3>
+            <p class={blurbClass}>{blurb}</p>
+        </a>
+    ) : (
+        <div
+            class:list={[
+                "brut-border bg-paper flex flex-col cursor-not-allowed select-none opacity-50",
+                padClass,
+            ]}
+            aria-disabled="true"
+            title="Coming soon"
+        >
+            <div class="flex items-baseline justify-between">
+                <span class="font-mono text-xs text-muted-foreground">
+                    {index ?? ""}
+                </span>
+                <span class="font-mono text-[10px] uppercase tracking-widest bg-ink text-paper px-1.5 py-0.5">
+                    soon
+                </span>
+            </div>
+            <h3 class={titleClass}>{title}</h3>
+            <p class={blurbClass}>{blurb}</p>
+        </div>
+    )
+}

@@ -3,8 +3,15 @@ name: CI
 on:
   push:
     branches: [main]
+    # Skip CI when the push only changes `website/**` (those go through deploy-website.yml).
+    # GitHub skips the workflow only if EVERY changed path matches one of these patterns;
+    # a mixed push that also touches Java/Gradle sources will still run CI.
+    paths-ignore:
+      - 'website/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'website/**'
   # Manual "Run workflow" button in the Actions UI (and `gh workflow run ci.yml`). The dropdown
   # lists branches; for re-running CI on a specific PR, use the per-run "Re-run" button instead.
   workflow_dispatch:

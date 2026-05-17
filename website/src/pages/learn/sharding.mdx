@@ -1,0 +1,269 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'Adding a shard'
+activeSection: learn
+lead: 'Take the single-database wallet from the previous lessons to two shards using EmbeddedBitsShardingStrategy. Your action and controller code does not change. Only the model''s ID type and the registry configuration do.'
+---
+
+import StackPicker from '../../components/StackPicker.astro';
+
+<StackPicker />
+
+The conceptual model behind two-axis sharding lives at [Concepts → Sharding strategies](/concepts/sharding/) — read it first if you haven't. This lesson is the mechanical recipe: take the wallet you built in [Your first Action](/learn/your-first-action/) and split it across two Postgres databases, keeping action code unchanged.
+
+We'll use `EmbeddedBitsShardingStrategy` — the shard `(group, member)` lives in 14 bits of the wallet's UUID, so any code with a `Wallet` ID can route to the right database without a lookup table.
+
+```
+   Before                          After
+   ──────                          ─────
+   Wallet                          Wallet
+   id : Id<Wallet>                 id : ShardedId<Wallet>     ← change here
+                                          └─ embeds (group, member)
+
+   one database                    group=0 member=0  group=1 member=0
+   ┌────────────┐                  ┌────────────┐    ┌────────────┐
+   │ wallets    │                  │ wallets    │    │ wallets    │
+   │ eventlog   │                  │ eventlog   │    │ eventlog   │
+   └────────────┘                  └────────────┘    └────────────┘
+                                   (e.g. global)     (e.g. mexico)
+```
+
+## 1. Change the model's ID type
+
+`Id<Wallet>` → `ShardedId<Wallet>`:
+
+```java
+@AutoBuilder
+public final class Wallet extends Model<Wallet, ShardedId<Wallet>, WalletState> {
+    //                              ^^^^^^^^^^^^^^^^ was: Id<Wallet>
+
+    public final UUID ownerId;
+    public final Currency currency;
+    public final BigDecimal balance;
+
+    // constructor unchanged...
+    // copy() unchanged...
+    // deposit() unchanged...
+}
+```
+
+`ShardedId<T>` extends `Id<T>`, so existing call sites that took `Id<Wallet>` keep compiling. The difference: `ShardedId.generate(Wallet.class, shard)` encodes the shard `(group, member)` into the UUID's `rand_b` bits — see [Concepts → Sharding § Self-describing IDs](/concepts/sharding/#three-strategies-in-order-of-weight) for the bit layout.
+
+## 2. Pick the shard at creation
+
+The factory in your `Wallet` (or your `WalletCreateAction`) now takes a `ShardIdentifier` and uses `ShardedId.generate`:
+
+```java
+public static WalletBuilder createWallet(
+        ShardIdentifier shard,
+        UUID ownerId,
+        Currency currency,
+        BigDecimal initialBalance,
+        Instant createdDate) {
+
+    final var id = ShardedId.generate(Wallet.class, shard);   // shard bits live in the ID forever
+
+    return WalletBuilder.wallet()
+            .id(id)
+            .state(OPENED)
+            .ownerId(ownerId)
+            .currency(currency)
+            .balance(initialBalance)
+            .createdDate(createdDate)
+            .withInitialVersion()
+            .withEvent(new WalletCreatedEvent(id, ownerId, currency, initialBalance));
+}
+```
+
+Inside `WalletCreateAction`, decide the shard from business properties:
+
+```java
+public static final ShardIdentifier GLOBAL_SHARD = ShardIdentifier.of(0, 0);
+public static final ShardIdentifier MEXICO_SHARD = ShardIdentifier.of(1, 0);
+
+@EkbatanAction
+public class WalletCreateAction extends Action<WalletCreateAction.Params, Wallet> {
+
+    @Override
+    protected Wallet perform(Principal principal, Params params) {
+        final var shard = params.country().equals("MX") ? MEXICO_SHARD : GLOBAL_SHARD;
+        final var wallet = Wallet.createWallet(shard, params.ownerId(), ...).build();
+        return plan().add(wallet);
+    }
+}
+```
+
+The shard is chosen *once*, at creation. From here on every query / update through `walletRepository` reads the shard out of the ID — no lookup table.
+
+## 3. Wire the second database
+
+<div data-stack="spring">
+
+```yaml
+# application.yml
+ekbatan:
+  sharding:
+    groups:
+      - id: global
+        members:
+          - shardKey: 0
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                username: wallet
+                password: wallet
+      - id: mexico
+        members:
+          - shardKey: 0
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5433/wallet
+                username: wallet
+                password: wallet
+
+# Drop the auto-config Flyway path — the framework runs migrations per shard
+spring:
+  flyway:
+    enabled: false
+```
+
+</div>
+
+<div data-stack="quarkus">
+
+```properties
+# application.properties
+ekbatan.sharding.groups[0].id=global
+ekbatan.sharding.groups[0].members[0].shardKey=0
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl=jdbc:postgresql://localhost:5432/wallet
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username=wallet
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password=wallet
+
+ekbatan.sharding.groups[1].id=mexico
+ekbatan.sharding.groups[1].members[0].shardKey=0
+ekbatan.sharding.groups[1].members[0].configs.primaryConfig.jdbcUrl=jdbc:postgresql://localhost:5433/wallet
+ekbatan.sharding.groups[1].members[0].configs.primaryConfig.username=wallet
+ekbatan.sharding.groups[1].members[0].configs.primaryConfig.password=wallet
+```
+
+</div>
+
+<div data-stack="micronaut">
+
+```yaml
+# application.yml
+ekbatan:
+  sharding:
+    groups:
+      - id: global
+        members:
+          - shardKey: 0
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                username: wallet
+                password: wallet
+      - id: mexico
+        members:
+          - shardKey: 0
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5433/wallet
+                username: wallet
+                password: wallet
+```
+
+</div>
+
+<div data-stack="plain">
+
+Wire the `DatabaseRegistry` programmatically — see [Plain Java wiring § sharding](/reference/di/without-di/).
+
+</div>
+
+The framework runs Flyway migrations against each shard on startup (same set of SQL files, applied independently). No multi-tenant column to add; both shards have the same schema.
+
+## 4. Spin up the second database
+
+```bash
+docker run --rm -d --name wallet-mexico \
+  -p 5433:5432 \
+  -e POSTGRES_USER=wallet \
+  -e POSTGRES_PASSWORD=wallet \
+  -e POSTGRES_DB=wallet \
+  postgres:17
+```
+
+(For real deployments, this is a separate RDS instance / VPC / region — that's exactly the [policy axis](/concepts/sharding/#two-reasons-to-shard-two-axes) the group is for.)
+
+## 5. Run it
+
+Restart your app. Create two wallets:
+
+```bash
+curl -X POST http://localhost:8080/wallets -d '{"country":"US", "ownerId":"...", "currency":"USD", ...}'
+# → wallet on group=0 (global) → port 5432
+
+curl -X POST http://localhost:8080/wallets -d '{"country":"MX", "ownerId":"...", "currency":"MXN", ...}'
+# → wallet on group=1 (mexico) → port 5433
+```
+
+Check both databases:
+
+```sql
+-- on localhost:5432 (global)
+SELECT id, owner_id, currency, balance FROM wallets;
+
+-- on localhost:5433 (mexico)
+SELECT id, owner_id, currency, balance FROM wallets;
+```
+
+The US wallet is in the global DB; the Mexican one is in mexico. Try to deposit to either by ID — the framework reads the shard bits from the URL parameter and routes to the right database automatically:
+
+```bash
+curl -X POST http://localhost:8080/wallets/<mexicanWalletId>/deposit -d '{"amount":10}'
+# → routes to localhost:5433, eventlog.events row appears there
+```
+
+`WalletDepositMoneyAction` and `WalletController` didn't change. The shard routing happens entirely in the framework based on `ShardedId.resolveShardIdentifier()` → `DatabaseRegistry.transactionManager(shard)`.
+
+## 6. (Optional) Cross-shard transfer
+
+A "send money from a US wallet to a Mexican one" action touches two shards. By default the framework rejects it with `CrossShardException`. Opt in:
+
+```java
+@EkbatanAction(allowCrossShard = true)
+public class WalletTransferAction extends Action<WalletTransferAction.Params, Void> {
+
+    @Override
+    protected Void perform(Principal principal, Params params) {
+        final var source = walletRepository.getById(params.sourceId().getValue());
+        final var dest   = walletRepository.getById(params.destId().getValue());
+
+        plan().update(source.withdraw(params.amount()));
+        plan().update(dest.deposit(params.amount()));
+
+        return null;
+    }
+}
+```
+
+**Watch the consistency model carefully**: per-shard atomicity, NOT global atomicity. The source-shard transaction can commit while the destination-shard one rolls back. For real transfers, use a [saga](/concepts/the-dual-write-trap/) — split into `InitiateTransferAction` (source only) + `CompleteTransferAction` (dest only), chained by `@EkbatanEventHandler`, with `RefundTransferAction` as compensation if the dest leg fails. The runnable example: [`ekbatan-examples/spring-boot-wallet-saga-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-saga-gradle-pg).
+
+## What just happened
+
+- **The action code is unchanged.** Sharding is a routing concern handled by the framework, not by your domain layer.
+- **The ID is self-describing.** Any code with a `ShardedId<Wallet>` (a controller param, an outbox row, an event payload) can recover the shard without a directory lookup.
+- **Two databases, two transactions.** The outbox guarantee (state + events atomic) still holds **within** each shard. Cross-shard work is opt-in and uses sagas for cross-shard consistency.
+- **Adding a third shard is the same recipe.** New `ShardIdentifier`, new entry in `application.yml`, new Postgres. No action signature changes anywhere.
+
+## Next
+
+→ **[Compiling to a native binary](/learn/native-image/)** — take everything you've built so far and produce a single statically-linked binary with GraalVM. ~50ms startup, ~50MB image.
+
+## See also
+
+- [Concepts → Sharding strategies](/concepts/sharding/) — the conceptual model behind the two axes and the three strategies
+- [Reference → Sharding](/reference/sharding/) — `ShardedUUID` bit layout, `DatabaseRegistry.effectiveShard`, `ShardingStrategy` API, declarative config
+- [Reference → Multi-database](/reference/multi-database/) — dialect-specific column types and converters
+- [`ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) — the runnable two-shard wallet this lesson is distilled from

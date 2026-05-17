@@ -1,0 +1,159 @@
+---
+// Brutalist code block — three colored "macOS window" dots, filename + language
+// chip in the header, line numbers, 2px ink border, brut-shadow drop.
+//
+// Internally uses Shiki (same highlighter Astro uses for fenced markdown code
+// blocks) so the color scheme matches everywhere on the site — github-light
+// theme, full Java/Kotlin/SQL/YAML/etc. token coloring. We then layer the
+// brutalist chrome and the errorTokens "red squiggle" effect on top of
+// Shiki's output.
+
+import { codeToHtml } from "shiki";
+
+interface Props {
+    /** Shown in the dotted header. */
+    filename: string;
+    /** Both the visual chip on the right AND the Shiki language hint (`java`, `kotlin`, `xml`, `yaml`, `properties`, `bash`, `sql`, ...). */
+    language: string;
+    /** Raw source as a single string; we split on \n for line numbers. */
+    code: string;
+    /** Drop-shadow tint. */
+    shadow?: "default" | "orange" | "yellow" | "grey" | "brown" | "darkblue";
+    /**
+     * Identifiers to render with a red wavy underline (the "compile error"
+     * effect the IDE shows for unresolved symbols). Useful for showing what
+     * jOOQ codegen will eventually produce before it's actually been run.
+     */
+    errorTokens?: readonly string[];
+}
+
+const {
+    filename,
+    language,
+    code,
+    shadow = "default",
+    errorTokens = [],
+} = Astro.props;
+
+// IDE-style breadcrumb: dim the directory part of the path, keep the filename
+// itself at full opacity. Lets us put the whole `src/main/java/.../Foo.java`
+// path in the header without overwhelming the eye.
+const slashIdx = filename.lastIndexOf("/");
+const filenameDir = slashIdx >= 0 ? filename.slice(0, slashIdx + 1) : "";
+const filenameBase = slashIdx >= 0 ? filename.slice(slashIdx + 1) : filename;
+
+const shadowClass =
+    shadow === "orange"
+        ? "brut-shadow-orange"
+        : shadow === "yellow"
+          ? "brut-shadow-yellow"
+          : shadow === "grey" || shadow === "brown" || shadow === "darkblue"
+            ? ""   // applied via inline style below — no class exists in the frozen Lovable bundle
+            : "brut-shadow";
+
+// `grey`, `brown`, `darkblue` aren't in the bundled .brut-shadow-* class set;
+// emit them inline. These let us color-code file roles in the docs:
+//   grey     → ambient/infra files (compose.yaml)
+//   brown    → build descriptors + DB migrations (build.gradle.kts, *.sql)
+//   darkblue → runtime config (application.yml, application.properties)
+const shadowStyle =
+    shadow === "grey"     ? "box-shadow:6px 6px 0 0 #9ca3af"   // Tailwind gray-400
+  : shadow === "brown"    ? "box-shadow:6px 6px 0 0 #92400e"   // Tailwind amber-800, warm brown
+  : shadow === "darkblue" ? "box-shadow:6px 6px 0 0 #1e3a8a"   // Tailwind blue-900
+  : undefined;
+
+function escapeRegex(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Highlight via Shiki. Matches the github-light theme set in astro.config.mjs
+// for markdown fenced blocks, so a `<CodeBlock language="java">` and a
+// ```java fenced block on the same page look identical.
+const shikiHtml = await codeToHtml(code.replace(/\n$/, ""), {
+    lang: language,
+    theme: "github-light",
+});
+
+// Shiki wraps with <pre class="shiki ..."><code>...</code></pre>. Strip those
+// outer tags — we want just the colored span markup so we can re-wrap with
+// our own line-numbered <pre>.
+const codeMatch = shikiHtml.match(/<code[^>]*>([\s\S]*)<\/code>/);
+const inner = codeMatch ? codeMatch[1] : shikiHtml;
+
+// Split into lines. Each line is a row of colored <span style="color:#…"> tokens
+// followed by \n. (When Shiki emits .line wrapper spans we'd need a different
+// split, but with the default the inner content is just plain newline-
+// separated lines.)
+const rawLines = inner.split("\n");
+
+// Apply errorTokens AFTER Shiki, so the red-squiggle span ends up nested inside
+// the Shiki color span. Both CSS effects compose: Shiki provides the color, our
+// .compile-error class adds the wavy underline. We run a literal regex against
+// the Shiki HTML — the tokens we look for (e.g. WALLETS, WalletsRecord) never
+// appear in inline `style="color:#…"` attributes, so no false matches.
+const lines = rawLines.map((line) => {
+    let processed = line;
+    for (const tok of errorTokens) {
+        processed = processed.replace(
+            new RegExp(`\\b${escapeRegex(tok)}\\b`, "g"),
+            `<span class="compile-error">${tok}</span>`,
+        );
+    }
+    return processed;
+});
+---
+
+<div class:list={["brut-border", shadowClass, "bg-paper", "min-w-0"]} style={shadowStyle}>
+    <div
+        class="flex items-center justify-between border-b-2 border-ink px-3 py-2 bg-ink text-paper"
+    >
+        <div
+            class="flex items-center gap-2 font-mono text-[10px] tracking-widest"
+        >
+            <span class="w-2 h-2 bg-[color:var(--brand-orange)]"></span>
+            <span class="w-2 h-2 bg-[color:var(--brand-yellow)]"></span>
+            <span class="w-2 h-2 bg-paper/60"></span>
+            <span class="ml-2">
+                {filenameDir && (
+                    <span style="opacity:0.55">{filenameDir}</span>
+                )}
+                {filenameBase}
+            </span>
+        </div>
+        <span
+            class="font-mono text-[10px] uppercase tracking-widest text-[color:var(--brand-yellow)]"
+            >{language}</span
+        >
+    </div>
+    <pre class="font-mono text-[12px] p-4 overflow-x-auto leading-6 bg-paper"><code>{lines.map((html, i) => (
+            <div class="flex">
+                <span class="select-none w-6 pr-2 text-right text-[color:var(--muted-foreground)] text-[10px]">{i + 1}</span>
+                <span class="flex-1 whitespace-pre" set:html={html} />
+            </div>
+        ))}</code></pre>
+</div>
+
+<style>
+    /* Code lines stay on one line (`white-space: pre` is critical so syntax
+       highlighting and indentation are preserved); the <pre> scrolls
+       horizontally when content exceeds the box. Use a thin macOS-style
+       overlay scrollbar so it doesn't visually compete with the brutalist
+       chrome — narrow, no track, semi-transparent ink thumb, rounded. */
+    pre {
+        scrollbar-width: thin; /* Firefox */
+        scrollbar-color: rgba(10, 10, 10, 0.25) transparent;
+    }
+    pre::-webkit-scrollbar {
+        height: 6px;
+    }
+    pre::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    pre::-webkit-scrollbar-thumb {
+        background: rgba(10, 10, 10, 0.25);
+        border-radius: 3px;
+    }
+    pre::-webkit-scrollbar-thumb:hover {
+        background: rgba(10, 10, 10, 0.45);
+    }
+</style>

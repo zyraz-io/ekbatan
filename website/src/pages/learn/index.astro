@@ -1,0 +1,84 @@
+---
+// /learn/ — step-by-step tutorial. One narrative per topic; per-stack
+// snippets driven by the global StackPicker. Source material is mostly
+// docs/gradle/getting-started.md + docs/maven/getting-started.md +
+// docs/wiring/*.md, plus the 24 runnable wallet projects in
+// ../../../../ekbatan-examples/ that back the code samples.
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import SectionCard from "../../components/SectionCard.astro";
+
+// Prefix the absolute hrefs in the entries data with the deployment base path
+// at render time. Lets the source list stay as readable root-relative paths.
+const linkTo = (p: string) => `${import.meta.env.BASE_URL}${p.replace(/^\//, "")}`;
+
+const lessons = [
+    {
+        href: "/learn/getting-started/",
+        title: "Getting started",
+        blurb: "Add Ekbatan to a new or existing project. Walks through the build descriptor (Gradle or Maven) and the framework's DI wiring (Spring Boot, Quarkus, Micronaut, or plain Java).",
+        status: "ready",
+    },
+    {
+        href: "/learn/your-first-action/",
+        title: "Your first Action",
+        blurb: "Build a wallet deposit Action end-to-end: define the Model, attach an Event, wire the Action, run it inside an ActionExecutor. See the outbox row appear in eventlog.events.",
+        status: "ready",
+    },
+    {
+        href: "/learn/consuming-events/",
+        title: "Consuming events",
+        blurb: "Two paths: an in-process EventHandler (no broker) and Debezium → Kafka with the OutboxToAvro SMT. Run both side by side against the same outbox.",
+        status: "ready",
+    },
+    {
+        href: "/learn/sharding/",
+        title: "Adding a shard",
+        blurb: "Take a single-database service to two shards using EmbeddedBitsShardingStrategy. Your action signatures don't change.",
+        status: "ready",
+    },
+    {
+        href: "/learn/native-image/",
+        title: "Compiling to a native binary",
+        blurb: "Add the ekbatan-native dependency, declare your scan packages, run testNative or quarkusIntTest. The framework's substrate-VM bridges handle Flyway and Jackson for you.",
+        status: "ready",
+    },
+] as const;
+---
+
+<BaseLayout
+    title="Learn · Ekbatan"
+    description="Step-by-step tutorials. Pick your stack, build tool, and database once — the snippets follow you across every lesson."
+    activeSection="learn"
+>
+    <section class="border-b-2 border-ink">
+        <div class="container-px max-w-7xl mx-auto py-20 md:py-28">
+            <div class="inline-flex items-center gap-3 brut-border bg-ink text-paper font-mono text-[11px] uppercase tracking-widest px-3 py-1.5">
+                <span class="text-yellow">§</span><span>Learn</span>
+            </div>
+            <h1 class="font-display font-bold text-5xl md:text-7xl tracking-tight max-w-4xl text-balance mt-6 leading-[0.95]">
+                Pick your stack.
+                <span class="bg-orange text-paper px-2">Once.</span>
+            </h1>
+            <p class="mt-6 max-w-2xl text-lg leading-relaxed">
+                Every lesson uses the same picker. Choose
+                <span class="font-mono bg-yellow px-1">Spring Boot · Gradle · Postgres</span>
+                (or any of the 24 combinations) and every code block in every
+                lesson re-renders to match — no need to mentally translate
+                snippets, and no need to read 24 forks of the same tutorial.
+            </p>
+            <div class="mt-14 grid md:grid-cols-2 gap-5">
+                {
+                    lessons.map((l, i) => (
+                        <SectionCard
+                            href={linkTo(l.href)}
+                            title={l.title}
+                            blurb={l.blurb}
+                            status={l.status}
+                            index={String(i + 1).padStart(2, "0")}
+                        />
+                    ))
+                }
+            </div>
+        </div>
+    </section>
+</BaseLayout>

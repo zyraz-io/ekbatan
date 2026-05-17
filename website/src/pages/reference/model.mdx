@@ -1,0 +1,120 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'Model'
+activeSection: reference
+lead: 'A persistent aggregate that emits domain events. Every state change worth telling the rest of the system about — created, transferred, closed, refunded — gets attached to the Model as a ModelEvent and atomically persisted alongside the domain row when the action commits.'
+---
+
+## Type signature
+
+```java
+package io.ekbatan.core.domain;
+
+public abstract class Model<
+                MODEL extends Model<MODEL, ID, STATE>,
+                ID    extends Comparable<?>,
+                STATE extends Enum<STATE>>
+        implements Persistable<ID> {
+
+    public final ID id;
+    public final List<ModelEvent<MODEL>> events;
+    public final STATE state;
+    public final Instant createdDate;
+    public final Instant updatedDate;
+    public final Long version;
+
+    protected <B extends Builder<ID, B, MODEL, STATE>> Model(Builder<ID, B, MODEL, STATE> builder);
+
+    public ID getId();
+    public Long getVersion();
+    public final boolean isModel();         // always true on Model
+    public abstract Builder<ID, ?, MODEL, STATE> copy();
+    public <E extends Persistable<ID>> E nextVersion();
+
+    public abstract static class Builder<...> { /* see below */ }
+}
+```
+
+The three type parameters use CRTP (Curiously-Recurring Template Pattern) so concrete subclasses see fluent setters that return their concrete builder type, not the abstract parent.
+
+| Parameter | Meaning | Typical value |
+|---|---|---|
+| `MODEL` | The concrete subclass | `Wallet`, `Order`, `Subscription` |
+| `ID` | The identifier type | [`Id<T>`](/reference/) or [`ShardedId<T>`](/concepts/sharding/) |
+| `STATE` | A state-enum for the model's lifecycle | `WalletState` (`OPEN`, `CLOSED`, ...); default `GenericState` |
+
+The companion shape, [`Entity`](/reference/entity/), is for state the persistence layer needs to track but whose changes don't belong in the event stream (caches, lookup tables, audit-only side-effects).
+
+## Construction and mutation
+
+Subclasses are **immutable**. A generated `*Builder` (via `@AutoBuilder` from `ekbatan-annotation-processor`) constructs new instances; mutations produce a new instance via `copy()...build()`:
+
+```java
+@AutoBuilder
+public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+    public final BigDecimal balance;
+    public final Currency currency;
+
+    Wallet(WalletBuilder builder) {
+        super(builder);
+        this.balance  = Validate.notNull(builder.balance,  "balance cannot be null");
+        this.currency = Validate.notNull(builder.currency, "currency cannot be null");
+    }
+
+    @Override
+    public WalletBuilder copy() {
+        return WalletBuilder.wallet()
+                .copyBase(this)
+                .balance(balance)
+                .currency(currency);
+    }
+
+    public Wallet deposit(BigDecimal amount) {
+        var newBalance = balance.add(amount);
+        return copy()
+                .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
+                .balance(newBalance)
+                .build();
+    }
+}
+```
+
+`createdDate` / `updatedDate` are **truncated to microsecond precision** in the constructor — Postgres and MariaDB lose sub-microsecond detail, so the in-memory representation matches what comes back from the DB.
+
+## Events
+
+`events` is an unmodifiable list captured at construction time. Build a new version of the model (via `copy().withEvent(...).build()`) to attach more events. **The framework will not silently re-emit events from a re-read row** — the only way an event enters the eventlog is via an explicit `withEvent(...)` call in `Action.perform`.
+
+## Optimistic locking
+
+`version` is monotonically increasing per row. The repository's `UPDATE` carries `WHERE id=? AND version=?`, and `nextVersion()` delegates to the builder to produce the incremented successor. A stale read raises `StaleRecordException` rather than overwriting — the framework's default retry policy (1 retry after 100ms) absorbs transient conflicts; persistent ones propagate.
+
+## Equality
+
+Two `Model` instances are equal iff their `id`, `state`, `version`, `createdDate`, and `updatedDate` match. **Event lists are intentionally excluded**: two readers of the same DB row produce equal models even if one has events attached and the other doesn't.
+
+## Builder API
+
+The base `Model.Builder` provides:
+
+| Method | Sets |
+|---|---|
+| `id(ID)` | The primary identifier |
+| `withEvent(ModelEvent<M>)` | Attaches one event; flushed to the eventlog on commit |
+| `events(List<ModelEvent<M>>)` | Replaces the events list wholesale |
+| `state(STATE)` | The lifecycle state |
+| `createdDate(Instant)` | The insertion instant |
+| `updatedDate(Instant)` | The last-modified instant |
+| `withInitialVersion()` | Sets `version = 1` (for first inserts) |
+| `version(Long)` | Sets the version explicitly (must be ≥ 1) |
+| `increaseVersion()` | `version++` (used by `nextVersion`) |
+| `copyBase(M)` | Copies id, state, timestamps, version, **and events** from an existing model |
+| `build()` | Returns the configured model; subclasses provide the concrete type |
+
+## See also
+
+- [Concepts → Models and Entities](/concepts/models-and-entities/) — why two shapes, when to use each
+- [Entity](/reference/entity/) — the sibling shape that doesn't emit events
+- [ModelEvent](/reference/model-event/) — the event payload type attached via `withEvent`
+- [Concepts → The outbox: atomic state + events](/concepts/outbox/) — how attached events become outbox rows
+- Source: [`ekbatan-core/src/main/java/io/ekbatan/core/domain/Model.java`](https://github.com/zyraz-io/ekbatan/blob/main/ekbatan-core/src/main/java/io/ekbatan/core/domain/Model.java)

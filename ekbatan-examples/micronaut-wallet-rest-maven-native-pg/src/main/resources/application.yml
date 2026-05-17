@@ -36,17 +36,3 @@ ekbatan:
   local-event-handler:
     handling:
       enabled: true
-
-# micronaut-flyway: runs migrations on application startup. The datasource it binds to is
-# `flyway.datasources.default` — coords here are pulled from `ekbatan.sharding.*` via
-# property expressions (single source of truth). `EkbatanShardFlywayCustomizer` additionally
-# overrides the dataSource programmatically inside `FluentConfiguration.customize(...)` —
-# symmetric with the Quarkus wallet's customizer, and a single place to extend Flyway
-# behaviour later (locations, callbacks, etc.) without touching YAML.
-flyway:
-  datasources:
-    default:
-      enabled: true
-      url: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl}
-      user: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username}
-      password: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password}

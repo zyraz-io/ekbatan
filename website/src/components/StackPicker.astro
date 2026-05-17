@@ -1,0 +1,302 @@
+---
+// Persistent stack/build/dialect picker for the /learn/ tutorial.
+//
+// Three dimensions:
+//   - stack: spring | quarkus | micronaut | plain
+//   - build: gradle | maven
+//   - db:    pg | mariadb | mysql
+//
+// Renders three rows of brutalist toggle buttons. Selecting a value writes
+// data-active-{stack,build,db} on <body> and persists the choice in
+// localStorage so it carries across page navigations. Any element with
+// data-stack="…"/data-build="…"/data-db="…" anywhere in the page is shown
+// only when its requested value matches the active value (or is unset).
+//
+// Vanilla JS — no framework runtime, no hydration cost. The whole component
+// adds <2 KB to the page including the script.
+
+const rows = [
+    {
+        label: "Stack",
+        dim: "stack",
+        options: [
+            { id: "spring", label: "Spring Boot" },
+            { id: "quarkus", label: "Quarkus" },
+            { id: "micronaut", label: "Micronaut" },
+            { id: "plain", label: "Plain Java" },
+        ],
+    },
+    {
+        label: "Build",
+        dim: "build",
+        options: [
+            { id: "gradle", label: "Gradle" },
+            { id: "maven", label: "Maven" },
+        ],
+    },
+    {
+        label: "Database",
+        dim: "db",
+        options: [
+            { id: "pg", label: "PostgreSQL" },
+            { id: "mariadb", label: "MariaDB" },
+            { id: "mysql", label: "MySQL" },
+        ],
+    },
+] as const;
+
+// Per-combination link to the matching ekbatan-examples project. Rendered as an extra
+// row at the bottom of the picker; only the entry matching the current picker state
+// is visible (visibility is toggled by the same data-stack/build/db rules as the
+// per-stack content blocks in MDX).
+const examples = [
+    { stack: "spring", build: "gradle", db: "pg",      slug: "spring-boot-wallet-rest-gradle-pg" },
+    { stack: "spring", build: "gradle", db: "mariadb", slug: "spring-boot-wallet-rest-gradle-mariadb" },
+    { stack: "spring", build: "gradle", db: "mysql",   slug: "spring-boot-wallet-rest-gradle-mysql" },
+    { stack: "spring", build: "maven",  db: "pg",      slug: "spring-boot-wallet-rest-maven-pg" },
+    { stack: "spring", build: "maven",  db: "mariadb", slug: "spring-boot-wallet-rest-maven-mariadb" },
+    { stack: "spring", build: "maven",  db: "mysql",   slug: "spring-boot-wallet-rest-maven-mysql" },
+    { stack: "quarkus", build: "gradle", db: "pg",      slug: "quarkus-wallet-rest-gradle-pg" },
+    { stack: "quarkus", build: "gradle", db: "mariadb", slug: "quarkus-wallet-rest-gradle-mariadb" },
+    { stack: "quarkus", build: "gradle", db: "mysql",   slug: "quarkus-wallet-rest-gradle-mysql" },
+    { stack: "quarkus", build: "maven",  db: "pg",      slug: "quarkus-wallet-rest-maven-pg" },
+    { stack: "quarkus", build: "maven",  db: "mariadb", slug: "quarkus-wallet-rest-maven-mariadb" },
+    { stack: "quarkus", build: "maven",  db: "mysql",   slug: "quarkus-wallet-rest-maven-mysql" },
+    { stack: "micronaut", build: "gradle", db: "pg",      slug: "micronaut-wallet-rest-gradle-pg" },
+    { stack: "micronaut", build: "gradle", db: "mariadb", slug: "micronaut-wallet-rest-gradle-mariadb" },
+    { stack: "micronaut", build: "gradle", db: "mysql",   slug: "micronaut-wallet-rest-gradle-mysql" },
+    { stack: "micronaut", build: "maven",  db: "pg",      slug: "micronaut-wallet-rest-maven-pg" },
+    { stack: "micronaut", build: "maven",  db: "mariadb", slug: "micronaut-wallet-rest-maven-mariadb" },
+    { stack: "micronaut", build: "maven",  db: "mysql",   slug: "micronaut-wallet-rest-maven-mysql" },
+] as const;
+---
+
+<!-- Sticky-state sentinel: 1px tall, sits immediately above the picker. The
+     IntersectionObserver below watches this element with a `-57px` top rootMargin;
+     when the sentinel scrolls past the 57px viewport line (where the picker sticks)
+     it stops intersecting and we toggle `is-stuck` on the picker. -->
+<div class="sticky-sentinel" aria-hidden="true"></div>
+
+<aside
+    class="brut-border bg-paper sticky"
+    aria-label="Stack picker"
+>
+    <div class="container-px max-w-7xl mx-auto py-3 grid gap-2">
+        {
+            rows.map((row) => (
+                <div class="flex items-center gap-4 flex-wrap">
+                    <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground w-20 shrink-0">
+                        {row.label}
+                    </span>
+                    <div class="flex gap-0 brut-border min-w-0 overflow-x-auto picker-row-scroll">
+                        {row.options.map((opt, i) => (
+                            <button
+                                type="button"
+                                data-picker-dim={row.dim}
+                                data-picker-value={opt.id}
+                                class:list={[
+                                    "font-mono text-[10px] uppercase tracking-widest px-2.5 py-1 bg-paper text-ink shrink-0",
+                                    i < row.options.length - 1 && "border-r-2 border-ink",
+                                ]}
+                                aria-pressed="false"
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ))
+        }
+        <div class="flex items-center gap-4 flex-wrap example-row">
+            <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground w-20 shrink-0">
+                Example
+            </span>
+            <span class="font-mono text-[10px] whitespace-nowrap">
+                {examples.map((e) => (
+                    <span data-stack={e.stack} data-build={e.build} data-db={e.db}>
+                        → <a href={`https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/${e.slug}`}>{e.slug}</a>
+                    </span>
+                ))}
+                <span data-stack="plain">
+                    no scaffolded example — see <a href={`${import.meta.env.BASE_URL}reference/di/without-di/`}>Plain Java wiring</a>
+                </span>
+            </span>
+        </div>
+    </div>
+</aside>
+
+<style>
+    /* The Tailwind bundle is frozen and doesn't include the arbitrary-value utilities
+       `top-[57px]` or `z-40`, so apply them here. Stick just below the global nav
+       (sticky top-0, ~57px tall). z-index sits below the nav (z-50) so the nav still
+       paints on top, and above the page content. */
+    aside {
+        top: 57px;
+        z-index: 40;
+    }
+
+    /* `is-stuck` is toggled by the IntersectionObserver below when sticky activates.
+       Approach: KEEP the aside at its narrow in-flow width so the inner picker buttons
+       stay in the exact same horizontal position. Achieve the "full-viewport bar"
+       look entirely through a ::before pseudo-element that paints behind the aside,
+       providing a paper background that opaquely covers scrolling content, plus the
+       top/bottom ink lines that extend edge-to-edge. The aside's own borders are
+       made transparent so only the pseudo's borders are visible.
+       Selector names `.brut-border` to bump specificity above DocLayout's global
+       `.doc-prose .brut-border.bg-paper` rule (specificity 0,3,0). */
+    aside.brut-border.is-stuck {
+        border-color: transparent;
+    }
+    aside.is-stuck::before {
+        content: "";
+        position: absolute;
+        top: -2px;
+        bottom: -2px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100vw;
+        background: var(--paper, #fafafa);
+        border-top: 2px solid var(--ink, #0a0a0a);
+        border-bottom: 2px solid var(--ink, #0a0a0a);
+        z-index: -1;
+        pointer-events: none;
+    }
+
+    /* Sentinel for sticky-state detection. 1px tall, takes no visible space (negative
+       margin pulls subsequent content back up). */
+    .sticky-sentinel {
+        height: 1px;
+        margin-bottom: -1px;
+        pointer-events: none;
+    }
+
+    /* When a button row is wider than the viewport (e.g. the 4-button Stack
+       row on phones), the inner container scrolls horizontally instead of
+       wrapping to a second row. Use a thin macOS-style overlay scrollbar —
+       narrow, no track, semi-transparent ink thumb, rounded. Same treatment
+       as the CodeBlock pre so the page has one consistent scrollbar idiom. */
+    .picker-row-scroll {
+        scrollbar-width: thin; /* Firefox */
+        scrollbar-color: rgba(10, 10, 10, 0.25) transparent;
+    }
+    .picker-row-scroll::-webkit-scrollbar {
+        height: 6px;
+    }
+    .picker-row-scroll::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .picker-row-scroll::-webkit-scrollbar-thumb {
+        background: rgba(10, 10, 10, 0.25);
+        border-radius: 3px;
+    }
+    .picker-row-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(10, 10, 10, 0.45);
+    }
+
+    /* The `::before` pseudo above uses `width: 100vw` so its paper-colored background
+       and ink lines reach the viewport edges in the stuck state. On platforms where
+       the vertical scrollbar takes layout space (Windows, some Linux setups), 100vw
+       is wider than the visible viewport by the scrollbar width — that overshoots
+       on the right and triggers a horizontal scrollbar. Clip it on body. `clip` is
+       safe with sticky descendants (unlike `hidden`, which would re-parent the
+       containing block and break our position:sticky aside). */
+    :global(html),
+    :global(body) {
+        overflow-x: clip;
+    }
+</style>
+
+<script is:inline>
+    // Picker state lives on <body> as data-active-{dim} attributes so MDX-
+    // authored content can target a selection with plain CSS data attributes:
+    //   <div data-stack="spring">…spring snippet…</div>
+    //   <div data-build="gradle">…gradle snippet…</div>
+    //   <div data-stack="spring" data-build="gradle">…combined…</div>
+    //
+    // Visibility rule: an element is hidden when ANY of its data-stack/-build/
+    // -db attributes is set AND does not match the active body attribute.
+    (function () {
+        const DIMS = ["stack", "build", "db"];
+        const DEFAULTS = { stack: "spring", build: "gradle", db: "pg" };
+        const STORAGE_KEY = "ekbatan.stackPicker";
+
+        function read() {
+            try {
+                return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") };
+            } catch {
+                return { ...DEFAULTS };
+            }
+        }
+        function write(state) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+        function apply(state) {
+            for (const d of DIMS) {
+                document.body.dataset["active" + d[0].toUpperCase() + d.slice(1)] = state[d];
+            }
+            document.querySelectorAll("[data-picker-dim]").forEach((btn) => {
+                const dim = btn.getAttribute("data-picker-dim");
+                const val = btn.getAttribute("data-picker-value");
+                const active = state[dim] === val;
+                btn.classList.toggle("bg-ink", active);
+                btn.classList.toggle("text-paper", active);
+                btn.classList.toggle("bg-paper", !active);
+                btn.classList.toggle("text-ink", !active);
+                btn.setAttribute("aria-pressed", String(active));
+            });
+            document.querySelectorAll("[data-stack],[data-build],[data-db]").forEach((el) => {
+                let visible = true;
+                for (const d of DIMS) {
+                    const want = el.getAttribute("data-" + d);
+                    if (want && want !== state[d]) {
+                        visible = false;
+                        break;
+                    }
+                }
+                el.toggleAttribute("hidden", !visible);
+            });
+        }
+        const state = read();
+        // The picker is inline near the top of the page, ABOVE the MDX content
+        // blocks it filters. Without a DOMContentLoaded guard, the initial
+        // apply() would run before those blocks are parsed and find zero
+        // matches — the picker buttons would highlight correctly but the
+        // content blocks would all stay visible.
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", () => apply(state));
+        } else {
+            apply(state);
+        }
+        // Click delegation works regardless of when buttons are parsed, so
+        // this can register eagerly.
+        document.addEventListener("click", (e) => {
+            const btn = e.target instanceof Element ? e.target.closest("[data-picker-dim]") : null;
+            if (!btn) return;
+            const dim = btn.getAttribute("data-picker-dim");
+            const val = btn.getAttribute("data-picker-value");
+            if (!dim || !val) return;
+            state[dim] = val;
+            write(state);
+            apply(state);
+        });
+
+        // Detect when the picker enters its stuck state via a sentinel above it.
+        // The observer's root viewport is the real viewport shrunk by -57px on top
+        // (matching the picker's sticky offset). The sentinel intersects this root
+        // while above the 57px line; when scrolled past, it stops intersecting and
+        // we know the picker is now pinned. Using sentinel + isIntersecting (rather
+        // than threshold:[1] on the picker itself) avoids a Safari/Firefox quirk
+        // where the threshold callback doesn't fire reliably on the un-stick transition.
+        const picker = document.querySelector('aside[aria-label="Stack picker"]');
+        const sentinel = document.querySelector(".sticky-sentinel");
+        if (picker && sentinel && "IntersectionObserver" in window) {
+            const stickyObserver = new IntersectionObserver(
+                ([entry]) => {
+                    picker.classList.toggle("is-stuck", !entry.isIntersecting);
+                },
+                { rootMargin: "-57px 0px 0px 0px" },
+            );
+            stickyObserver.observe(sentinel);
+        }
+    })();
+</script>

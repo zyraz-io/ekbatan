@@ -1,0 +1,239 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'Domain classes & the `@Ekbatan*` annotations'
+activeSection: reference
+lead: 'Four annotations and five domain classes — that''s everything you write to wire up Ekbatan in a DI-managed app. The annotations are pure markers; your classes don''t depend on Spring, Quarkus, or Micronaut. The same source compiles and runs identically against all three.'
+---
+
+What each DI container does *under the hood* to find these annotated classes — Spring's auto-config + AOT processor, Quarkus' Jandex build steps, Micronaut's compile-time visitor — lives on the per-framework pages: [spring.md](/reference/di/spring-boot/), [quarkus.md](/reference/di/quarkus/), [micronaut.md](/reference/di/micronaut/). If you don't use a DI container at all, the same domain classes work without the annotations — see [wiring/without-di.md](/reference/di/without-di/).
+
+## The four annotations
+
+| Annotation | Apply to | What it tells the DI integration |
+|---|---|---|
+| **`@EkbatanAction`** | An `Action<P, R>` subclass | Discover this class, register it as a framework-private singleton, and add it to `ActionRegistry` so `ActionExecutor.execute(...)` can find it. |
+| **`@EkbatanRepository`** | An `AbstractRepository<…>` subclass | Discover and register as a managed DI bean; inject into `RepositoryRegistry` keyed by domain class. |
+| **`@EkbatanEventHandler`** | An `EventHandler<E>` implementation | Register as a managed DI bean; add to `EventHandlerRegistry` (only effective when the local-event-handler module is on the classpath). |
+| **`@EkbatanDistributedJob`** | A `DistributedJob` subclass | Register as a managed DI bean; add to `JobRegistry` (only effective when the distributed-jobs module is on the classpath). |
+
+All four are pure markers (`@Target(TYPE) @Retention(RUNTIME)`, no parameters) defined in `io.ekbatan.di:annotations`. They carry no behavior themselves; they exist so each DI integration can find your classes without classpath scanning every type.
+
+> `@AutoBuilder` (used on `Model`/`Entity` subclasses) is *not* one of the `@Ekbatan*` DI annotations — it's a compile-time builder generator, completely independent of DI. See [Models and Entities → @AutoBuilder](/concepts/models-and-entities/#autobuilder--generated-builders).
+
+## The five domain classes
+
+The running example: a `Wallet` model that supports deposits and closes, an action that performs deposits, a repository, an in-process event handler that reacts to deposits, and a daily report job. Five classes, five annotations (`@AutoBuilder` + four `@Ekbatan*`).
+
+### Wallet — the Model
+
+```java
+@AutoBuilder
+public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+
+    public final UUID ownerId;
+    public final Currency currency;
+    public final BigDecimal balance;
+
+    Wallet(WalletBuilder builder) {
+        super(builder);
+        this.ownerId  = Validate.notNull(builder.ownerId,  "ownerId cannot be null");
+        this.currency = Validate.notNull(builder.currency, "currency cannot be null");
+        this.balance  = Validate.notNull(builder.balance,  "balance cannot be null");
+    }
+
+    public static WalletBuilder createWallet(UUID ownerId, Currency currency, BigDecimal balance, Instant createdDate) {
+        final var id = Id.random(Wallet.class);
+        return WalletBuilder.wallet()
+                .id(id)
+                .state(OPENED)
+                .ownerId(ownerId)
+                .currency(currency)
+                .balance(balance)
+                .createdDate(createdDate)
+                .withInitialVersion()
+                .withEvent(new WalletCreatedEvent(id, ownerId, currency, balance));
+    }
+
+    @Override
+    public WalletBuilder copy() {
+        return WalletBuilder.wallet()
+                .copyBase(this)
+                .ownerId(ownerId)
+                .currency(currency)
+                .balance(balance);
+    }
+
+    public Wallet deposit(BigDecimal amount) {
+        Validate.notNull(amount, "amount cannot be null");
+        Validate.isTrue(amount.compareTo(BigDecimal.ZERO) > 0, "Deposit amount must be positive");
+
+        final var newBalance = balance.add(amount);
+        return copy()
+                .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
+                .balance(newBalance)
+                .build();
+    }
+
+    public Wallet close() {
+        if (state.equals(CLOSED)) {
+            return this;
+        }
+        return copy()
+                .withEvent(new WalletClosedEvent(id))
+                .state(CLOSED)
+                .build();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        if (!super.equals(o)) return false;
+        Wallet wallet = (Wallet) o;
+        return ownerId.equals(wallet.ownerId)
+                && currency.equals(wallet.currency)
+                && balance.compareTo(wallet.balance) == 0;
+    }
+}
+```
+
+### WalletDepositAction — the Action
+
+`@EkbatanAction` registers it with `ActionRegistry`. Constructor params are resolved by the DI container.
+
+```java
+@EkbatanAction
+public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
+
+    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
+
+    private final WalletRepository walletRepository;
+
+    public WalletDepositAction(Clock clock, WalletRepository walletRepository) {
+        super(clock);
+        this.walletRepository = walletRepository;
+    }
+
+    @Override
+    protected Wallet perform(Principal principal, Params params) {
+        var wallet  = walletRepository.getById(params.walletId().getValue());
+        var updated = wallet.deposit(params.amount());
+        return plan().update(updated);
+    }
+}
+```
+
+### WalletRepository — the Repository
+
+`@EkbatanRepository` registers it as a managed bean and into `RepositoryRegistry`.
+
+```java
+@EkbatanRepository
+public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
+
+    public WalletRepository(DatabaseRegistry databaseRegistry) {
+        super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry);
+    }
+
+    @Override
+    public Wallet fromRecord(WalletsRecord r) {
+        return WalletBuilder.wallet()
+                .id(Id.of(Wallet.class, r.getId()))
+                .version(r.getVersion())
+                .state(WalletState.valueOf(r.getState()))
+                .ownerId(r.getOwnerId())
+                .currency(Currency.getInstance(r.getCurrency()))
+                .balance(r.getBalance())
+                .createdDate(r.getCreatedDate())
+                .updatedDate(r.getUpdatedDate())
+                .build();
+    }
+
+    @Override
+    public WalletsRecord toRecord(Wallet w) {
+        return new WalletsRecord(
+                w.id.getValue(), w.version, w.state.name(),
+                w.ownerId, w.currency.getCurrencyCode(), w.balance,
+                w.createdDate, w.updatedDate);
+    }
+}
+```
+
+### WalletMoneyDepositedEventHandler — the EventHandler
+
+`@EkbatanEventHandler` registers it with `EventHandlerRegistry`. Only effective when the local-event-handler module is on the classpath.
+
+```java
+@EkbatanEventHandler
+public class WalletMoneyDepositedEventHandler implements EventHandler<WalletMoneyDepositedEvent> {
+
+    private final NotificationService notificationService;
+
+    public WalletMoneyDepositedEventHandler(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
+
+    @Override public String name()                                { return "wallet-deposit-notification"; }
+    @Override public Class<WalletMoneyDepositedEvent> eventType() { return WalletMoneyDepositedEvent.class; }
+
+    @Override
+    public void handle(EventEnvelope<WalletMoneyDepositedEvent> envelope) {
+        notificationService.notifyDeposit(envelope.event.modelId, envelope.event.amount);
+    }
+}
+```
+
+### DailyWalletReportJob — the DistributedJob
+
+`@EkbatanDistributedJob` registers it with `JobRegistry`. Only effective when the distributed-jobs module is on the classpath.
+
+```java
+@EkbatanDistributedJob
+public class DailyWalletReportJob extends DistributedJob {
+
+    private final ReportService reportService;
+
+    public DailyWalletReportJob(ReportService reportService) {
+        this.reportService = reportService;
+    }
+
+    @Override public String name()       { return "daily-wallet-report"; }
+    @Override public Schedule schedule() { return Schedules.daily(LocalTime.of(2, 0)); }
+
+    @Override
+    public void execute(ExecutionContext ctx) {
+        reportService.generateAndSend();
+    }
+}
+```
+
+## What gets exposed as injectable beans
+
+Once these five classes are on your classpath and your DI container is wired up (per [spring.md](/reference/di/spring-boot/), [quarkus.md](/reference/di/quarkus/), or [micronaut.md](/reference/di/micronaut/)), the following beans are available for `@Inject` / `@Autowired` anywhere in your application:
+
+| Bean | Always available | Notes |
+|---|---|---|
+| `ActionExecutor` | yes | The thing application code calls |
+| `DatabaseRegistry` | yes | Direct shard / DSLContext access if you need it |
+| `RepositoryRegistry` | yes | Cross-type repository lookup |
+| `Clock` | yes | Defaults to `Clock.systemUTC()`, overridable in tests |
+| Each `@EkbatanRepository` instance | yes | Inject by its concrete class |
+| `EventHandlerRegistry` | only with local-event-handler on classpath | |
+| `EventFanoutJob` | only with local-event-handler on classpath | Auto-registered into `JobRegistry` |
+| `EventHandlingJob` | only with `ekbatan.local-event-handler.handling.enabled=true` | Opt-in (off by default) |
+| `JobRegistry` | only with distributed-jobs on classpath | |
+| `EventPersister` | not auto-registered — define your own bean to override the executor's default `SingleTableJsonEventPersister` (e.g. for encrypted payloads or an alternate sink) | |
+
+The `Action` instances are intentionally **not** exposed as DI beans — see the per-framework pages for the rationale.
+
+## See also
+
+- [Wiring with Spring Boot](/reference/di/spring-boot/) — how Spring discovers and wires these classes (auto-config, AOT, native-image)
+- [Wiring with Quarkus](/reference/di/quarkus/) — Quarkus-specific (Jandex, build steps, classloader safety, HikariCP RMR)
+- [Wiring with Micronaut](/reference/di/micronaut/) — Micronaut-specific (`EkbatanStereotypeVisitor`, transitive-jar processing)
+- [Wiring without DI](/reference/di/without-di/) — the same domain classes wired manually, no annotations needed
+- [Models and Entities](/concepts/models-and-entities/) — the framework concepts behind `@AutoBuilder`, mutations, events
+- [Actions, ActionPlan, ActionExecutor](/concepts/actions/) — what `@EkbatanAction` classes do
+- [Repositories on JOOQ](/reference/repository/) — what `@EkbatanRepository` classes do
+- [Listen-to-yourself: in-process event handlers](/reference/events/local-event-handler/) — what `@EkbatanEventHandler` consumes
+- [Distributed background jobs](/reference/jobs/distributed-jobs/) — what `@EkbatanDistributedJob` schedules

@@ -1,0 +1,110 @@
+---
+// /reference/ — the API and convention reference. Dense, exhaustive,
+// lookup-oriented. Voice: assume the reader already knows what they want
+// and wants the exact signature/property/path.
+//
+// Source material is the per-module READMEs (ekbatan-core/README.md,
+// ekbatan-events/README.md, etc.), docs/database/*.md, docs/runtime/*.md,
+// docs/events/*.md, docs/jobs/*.md, and selected sections from AGENTS.md.
+//
+// The groups[] registry below is the single source of truth for what's
+// linked from here. Flip a status to "ready" when the matching .mdx ships.
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import SectionCard from "../../components/SectionCard.astro";
+
+// Prefix the absolute hrefs in `groups[]` below with the deployment base path
+// at render time. Lets us keep the data structure (which lists ~22 entries) as
+// readable root-relative paths regardless of where the site is deployed.
+const linkTo = (p: string) => `${import.meta.env.BASE_URL}${p.replace(/^\//, "")}`;
+
+const groups = [
+    {
+        title: "Core primitives",
+        entries: [
+            { href: "/reference/action/", title: "Action", blurb: "Two-phase lifecycle, perform() signature, plan(), retry semantics.", status: "ready" },
+            { href: "/reference/action-plan/", title: "ActionPlan", blurb: "Staging API — add(), update(), getStagedChanges().", status: "ready" },
+            { href: "/reference/action-executor/", title: "ActionExecutor", blurb: "Builder, namespace, registry wiring, execute() variants.", status: "ready" },
+            { href: "/reference/model/", title: "Model<T, S>", blurb: "Immutable domain object, copy().withEvent(), version + id.", status: "ready" },
+            { href: "/reference/entity/", title: "Entity<T>", blurb: "Persisted, version-tracked, no events.", status: "ready" },
+            { href: "/reference/model-event/", title: "ModelEvent", blurb: "Marker interface, namespace + event type resolution.", status: "ready" },
+        ],
+    },
+    {
+        title: "Persistence",
+        entries: [
+            { href: "/reference/repository/", title: "Repository", blurb: "@EkbatanRepository, getById/getAll, shard routing.", status: "ready" },
+            { href: "/reference/transaction-manager/", title: "TransactionManager", blurb: "inTransaction(shard, fn), readonly variants, isolation.", status: "ready" },
+            { href: "/reference/sharding/", title: "Sharding", blurb: "ShardedUUID, EmbeddedBitsShardingStrategy, policy axes.", status: "ready" },
+            { href: "/reference/outbox-schema/", title: "Outbox schema", blurb: "eventlog.events DDL, dialect specifics, indexes.", status: "ready" },
+            { href: "/reference/keyed-locks/", title: "Keyed locks", blurb: "PG / MariaDB / MySQL providers, lease semantics.", status: "ready" },
+            { href: "/reference/multi-database/", title: "Multi-database", blurb: "Routing actions across multiple databases.", status: "ready" },
+        ],
+    },
+    {
+        title: "DI integration",
+        entries: [
+            { href: "/reference/di/spring-boot/", title: "Spring Boot", blurb: "ekbatan-spring-boot-starter, auto-config, multi-shard.", status: "ready" },
+            { href: "/reference/di/quarkus/", title: "Quarkus", blurb: "ekbatan-quarkus, FlywayConfigurationCustomizer, build-time.", status: "ready" },
+            { href: "/reference/di/micronaut/", title: "Micronaut", blurb: "ekbatan-micronaut, @Named(\"default\"), AOT-friendly.", status: "ready" },
+            { href: "/reference/di/without-di/", title: "Plain Java", blurb: "Manual wiring without a DI container.", status: "ready" },
+            { href: "/reference/annotations/", title: "Annotations", blurb: "@EkbatanAction, @EkbatanRepository, @EkbatanEventHandler, @EkbatanDistributedJob.", status: "ready" },
+        ],
+    },
+    {
+        title: "Runtime",
+        entries: [
+            { href: "/reference/runtime/native-image/", title: "Native image", blurb: "GraalVM Features, substrate-VM bridges, scan packages.", status: "ready" },
+            { href: "/reference/runtime/observability/", title: "Observability", blurb: "Spans, metrics, tracing through the action lifecycle.", status: "ready" },
+            { href: "/reference/jobs/distributed-jobs/", title: "Distributed jobs", blurb: "@EkbatanDistributedJob, db-scheduler facade, cluster-exclusive runs.", status: "ready" },
+            { href: "/reference/events/local-event-handler/", title: "Local event handler", blurb: "EventFanoutJob + EventHandlingJob, in-process dispatch.", status: "ready" },
+            { href: "/reference/events/streaming/", title: "Streaming (Debezium)", blurb: "OutboxToAvro / OutboxToProtobuf SMTs, topic routing.", status: "ready" },
+        ],
+    },
+] as const;
+---
+
+<BaseLayout
+    title="Reference · Ekbatan"
+    description="API and conventions reference. Class signatures, method semantics, dialect specifics, configuration keys."
+    activeSection="reference"
+>
+    <section class="border-b-2 border-ink">
+        <div class="container-px max-w-7xl mx-auto py-20 md:py-28">
+            <div class="inline-flex items-center gap-3 brut-border bg-ink text-paper font-mono text-[11px] uppercase tracking-widest px-3 py-1.5">
+                <span class="text-yellow">§</span><span>Reference</span>
+            </div>
+            <h1 class="font-display font-bold text-5xl md:text-7xl tracking-tight max-w-4xl text-balance mt-6 leading-[0.95]">
+                Every class.
+                <span class="bg-yellow px-2">Every config.</span>
+            </h1>
+            <p class="mt-6 max-w-2xl text-lg leading-relaxed">
+                Lookup-oriented. Each page is one class or one subsystem,
+                with signatures, semantics, dialect specifics, and pointers
+                to the source. If you already know what you're looking for,
+                start here.
+            </p>
+            <div class="mt-14 space-y-14">
+                {
+                    groups.map((g) => (
+                        <div>
+                            <h2 class="font-display text-3xl font-bold tracking-tight border-b-2 border-ink pb-2 mb-6">
+                                {g.title}
+                            </h2>
+                            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {g.entries.map((e) => (
+                                    <SectionCard
+                                        href={linkTo(e.href)}
+                                        title={e.title}
+                                        blurb={e.blurb}
+                                        status={e.status}
+                                        size="compact"
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    ))
+                }
+            </div>
+        </div>
+    </section>
+</BaseLayout>

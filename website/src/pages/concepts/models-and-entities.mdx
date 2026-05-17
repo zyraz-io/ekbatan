@@ -1,0 +1,250 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'Models and Entities'
+activeSection: concepts
+lead: 'Two flavors of persistable domain object. Both are immutable, both are version-tracked, both end up in tables with a `state` column that supports soft delete. The difference is whether mutations to them produce events.'
+---
+
+|                                                          | `Model` | `Entity` |
+|----------------------------------------------------------|:-------:|:--------:|
+| `id`, `state`, `version`                                 |   yes   |   yes    |
+| `created_date` / `updated_date` managed by the framework |   yes   |    no    |
+| Mutations emit `ModelEvent`s                             |   yes   |    no    |
+
+Choose **`Model`** when a mutation should be recorded as an event — for downstream consumers, listen-to-yourself patterns within the same service, audit and compliance trails, or any other reason a discrete record of *what happened* is valuable.
+
+Choose **`Entity`** when the current state alone is sufficient and the history of individual mutations is not needed — lookup tables, configuration records, auxiliary references that participate in an action but don't need their own event trail.
+
+`Entity` does not ship framework-managed `created_date` / `updated_date` columns, but a subclass is free to add its own timestamp columns to the underlying table — the framework simply will not populate or track them automatically.
+
+## A Model
+
+A `Model` is a generic class parameterized by `<MODEL, ID, STATE>`. Fields are `public final`; mutations return a new instance via the builder. Events are accumulated through `withEvent(...)` on the builder:
+
+```java
+@AutoBuilder
+public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+
+    public final UUID ownerId;
+    public final Currency currency;
+    public final BigDecimal balance;
+
+    Wallet(WalletBuilder builder) {
+        super(builder);
+        this.ownerId  = Validate.notNull(builder.ownerId,  "ownerId cannot be null");
+        this.currency = Validate.notNull(builder.currency, "currency cannot be null");
+        this.balance  = Validate.notNull(builder.balance,  "balance cannot be null");
+    }
+
+    public static WalletBuilder createWallet(UUID ownerId, Currency currency, BigDecimal balance, Instant now) {
+        final var id = Id.random(Wallet.class);
+        return WalletBuilder.wallet()
+                .id(id)
+                .state(OPENED)
+                .ownerId(ownerId)
+                .currency(currency)
+                .balance(balance)
+                .createdDate(now)
+                .withInitialVersion()
+                .withEvent(new WalletCreatedEvent(id, ownerId, currency, balance));
+    }
+
+    @Override
+    public WalletBuilder copy() {
+        return WalletBuilder.wallet()
+                .copyBase(this)
+                .ownerId(ownerId)
+                .currency(currency)
+                .balance(balance);
+    }
+
+    public Wallet deposit(BigDecimal amount) {
+        Validate.notNull(amount, "amount cannot be null");
+        Validate.isTrue(amount.compareTo(BigDecimal.ZERO) > 0, "Deposit amount must be positive");
+
+        final var newBalance = balance.add(amount);
+        return copy()
+                .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
+                .balance(newBalance)
+                .build();
+    }
+
+    public Wallet close() {
+        if (state.equals(CLOSED)) {
+            return this;
+        }
+        return copy()
+                .withEvent(new WalletClosedEvent(id))
+                .state(CLOSED)
+                .build();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        if (!super.equals(o)) return false;
+        Wallet wallet = (Wallet) o;
+        return ownerId.equals(wallet.ownerId)
+                && currency.equals(wallet.currency)
+                && balance.compareTo(wallet.balance) == 0;
+    }
+}
+```
+
+Two patterns to call out:
+
+- **`createWallet(...)`** — a static factory on the model that builds a *new* aggregate, sets `withInitialVersion()`, and attaches a `WalletCreatedEvent`. Use this when you mean "create a new wallet, record that it was created."
+- **`copy()`** — returns a builder pre-populated with the current state via `copyBase(this)`. Mutators (`deposit`, `close`, etc.) build on top of `copy()`, change one or more fields, attach an event, and `build()` a new instance. The previous instance is untouched.
+
+## ModelEvent
+
+`ModelEvent<M>` is an abstract parent for domain events. Subclasses carry domain-specific fields:
+
+```java
+public class WalletMoneyDepositedEvent extends ModelEvent<Wallet> {
+    public final BigDecimal amount;
+    public final BigDecimal newBalance;
+
+    public WalletMoneyDepositedEvent(ModelId<UUID> walletId, BigDecimal amount, BigDecimal newBalance) {
+        super(walletId.getId().toString(), Wallet.class);
+        this.amount = amount;
+        this.newBalance = newBalance;
+    }
+}
+```
+
+Events are persisted via Jackson — the public final fields are serialized as JSON in `eventlog.events.payload`.
+
+### Deserialization (for in-process handlers)
+
+When events are read back from the outbox by the local-event-handler dispatch job to invoke a typed `EventHandler<E>`, Jackson reconstructs them. If your event has constructor parameters or non-default field names, add a `@JsonCreator` constructor:
+
+```java
+public class WidgetCreatedEvent extends ModelEvent<Widget> {
+    public final String name;
+    public final String color;
+
+    public WidgetCreatedEvent(Id<Widget> widgetId, String name, String color) {
+        super(widgetId.getValue().toString(), Widget.class);
+        this.name = name;
+        this.color = color;
+    }
+
+    @JsonCreator
+    private WidgetCreatedEvent(
+            @JsonProperty("modelId") String modelId,
+            @JsonProperty("modelName") String modelName,
+            @JsonProperty("name") String name,
+            @JsonProperty("color") String color) {
+        super(modelId, Widget.class);
+        this.name = name;
+        this.color = color;
+    }
+}
+```
+
+Without the `@JsonCreator`, Jackson can't rebuild the event and the dispatch job will fail to invoke the handler. Streaming-only consumers (Debezium → Kafka) don't need this — they read JSON directly off the broker.
+
+## Optimistic locking, always
+
+Every persistable carries a `version`. Updates always include `WHERE version = ?`:
+
+```sql
+UPDATE wallets
+SET balance = ?, version = ?
+WHERE id = ? AND version = ?
+```
+
+If another transaction got there first, zero rows are affected and Ekbatan throws `StaleRecordException`. The action's transaction unwinds. The default `ExecutionConfiguration` retries the whole action once with a 100ms delay (tunable — see [Actions](/concepts/actions/#retries-on-optimistic-lock-conflicts)).
+
+The framework's own write path takes **no pessimistic row locks**. Concurrent conflicts surface as `StaleRecordException` rather than blocked threads. When pessimistic locking is genuinely required, use [`KeyedLockProvider`](/reference/keyed-locks/), or issue `SELECT ... FOR UPDATE` directly through the `DSLContext`.
+
+## Soft deletion
+
+By default, records are never physically removed. Their `state` flips to `DELETED` and queries automatically filter them out, keeping the history of every row intact. When a physical delete is genuinely required — to honor an erasure request or purge expired data — applications can issue the `DELETE` directly through the JOOQ repository.
+
+## `@AutoBuilder` — generated builders
+
+Domain classes use the builder pattern. Writing the builder by hand is repetitive — it just mirrors the model's fields. The `@AutoBuilder` annotation processor eliminates the boilerplate at compile time:
+
+```java
+@AutoBuilder
+public final class Widget extends Model<Widget, Id<Widget>, WidgetState> {
+    public final String name;
+    public final String color;
+    // … constructor, factories, copy(), business methods
+}
+```
+
+The processor generates `WidgetBuilder` in the same package:
+
+```java
+@Generated("io.ekbatan.core.processor.AutoBuilderProcessor")
+public final class WidgetBuilder
+        extends Model.Builder<Id<Widget>, WidgetBuilder, Widget, WidgetState> {
+
+    String name;
+    String color;
+
+    private WidgetBuilder() {}
+
+    public static WidgetBuilder widget() { return new WidgetBuilder(); }
+
+    public WidgetBuilder name(String name)   { this.name = name; return this; }
+    public String        name()              { return this.name; }
+
+    public WidgetBuilder color(String color) { this.color = color; return this; }
+    public String        color()             { return this.color; }
+
+    @Override
+    public Widget build() { return new Widget(this); }
+}
+```
+
+What's generated:
+
+- A `final` class named `<ModelName>Builder` extending `Model.Builder` (or `Entity.Builder`) with the right type parameters.
+- **Package-private** fields for each non-static field declared on the model.
+- A fluent setter for each field — assigns and returns `this`.
+- A getter with the same name as the field.
+- A private constructor and a static factory named after the model in lower camel case (e.g. `widget()` for `Widget`, `walletAccount()` for `WalletAccount`).
+- A `build()` override that calls `new ModelClass(this)`.
+
+What's *not* generated — write these on the model yourself:
+
+- The model class and its constructor (with validation).
+- Business methods (`deposit()`, `close()`, etc.).
+- The `copy()` method.
+- Factory methods like `createWallet(...)` that set up a fresh aggregate plus its initial event.
+- Custom setter behavior — if you need conditional defaults or computed fields on the builder, write the builder by hand instead.
+
+The annotation has source retention; nothing of `@AutoBuilder` survives in the bytecode.
+
+## Inherited builder methods
+
+Both `Model.Builder` and `Entity.Builder` provide a shared set of methods on the base. They use a self-type pattern (`B self()`) so the return type stays as the concrete builder — `WalletBuilder`, not `Model.Builder`.
+
+| Method | On Model.Builder | On Entity.Builder |
+|---|:-:|:-:|
+| `id(ID)` | yes | yes |
+| `state(STATE)` | yes | yes |
+| `version(Long)` / `withInitialVersion()` / `increaseVersion()` | yes | yes |
+| `withEvent(ModelEvent)` / `events(List<ModelEvent>)` | yes | — |
+| `createdDate(Instant)` / `updatedDate(Instant)` | yes | — |
+| `copyBase(M)` | yes | yes |
+
+`copyBase(this)` is what `model.copy()` typically returns first — it pre-populates the builder with the model's id, state, version, events list (model only), createdDate (model only), and updatedDate (model only) so domain code only has to override the fields that changed.
+
+## Naming conventions
+
+- **Model class** — singular noun: `Wallet`, `Order`, `Subscription`.
+- **State enum** — named `<Model>State` with `UPPER_SNAKE` values: `WalletState.OPENED`, `OrderState.SHIPPED`. The framework's default `GenericState` (with `ACTIVE` / `DELETED`) is also fine for entities or simple models that don't need a richer state machine.
+- **Event class** — `<Model><Verb>Event`: `WalletCreatedEvent`, `WalletMoneyDepositedEvent`, `OrderShippedEvent`. (Matches the `[Verb]ed` convention — events describe something that already happened.)
+- **Action class** — `<Model><Verb>Action`: `WalletCreateAction`, `WalletDepositMoneyAction`, `OrderShipAction`. (Note: action verbs are imperative — they describe intent, not history.)
+
+## See also
+
+- [Actions, ActionPlan, ActionExecutor](/concepts/actions/) — how Models and Entities flow through `perform()` into the database
+- [Repositories on JOOQ](/reference/repository/) — how a Model becomes a row and back
+- [The outbox: atomic state + events](/concepts/outbox/) — where the events emitted by Models end up

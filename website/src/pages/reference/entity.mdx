@@ -1,0 +1,113 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'Entity'
+activeSection: reference
+lead: 'A persistent aggregate that does NOT emit events. Use Entity when the persistence layer needs optimistic-locked rows whose changes don''t carry domain meaning worth recording — caches, lookup tables, idempotency markers, audit-only side-effects.'
+---
+
+## Type signature
+
+```java
+package io.ekbatan.core.domain;
+
+public abstract class Entity<
+                ENTITY extends Entity<ENTITY, ID, STATE>,
+                ID     extends Comparable<?>,
+                STATE  extends Enum<STATE>>
+        implements Persistable<ID> {
+
+    public final ID id;
+    public final STATE state;
+    public final Long version;
+
+    protected <B extends Builder<ID, B, ENTITY, STATE>> Entity(Builder<ID, B, ENTITY, STATE> builder);
+
+    public ID getId();
+    public Long getVersion();
+    public final boolean isModel();         // always false on Entity
+    public abstract Entity.Builder<ID, ?, ENTITY, STATE> copy();
+    public <E extends Persistable<ID>> E nextVersion();
+
+    public abstract static class Builder<...> { /* see below */ }
+}
+```
+
+The framework's other persistent shape is [`Model`](/reference/model/), which **does** emit events. [`Action`](/reference/action/) code stages additions and updates of either kind on the implicit [`ActionPlan`](/reference/action-plan/); [`ActionExecutor`](/reference/action-executor/) writes the domain row and (only for `Model`) extracts events into the eventlog atomically.
+
+## When to use Entity vs Model
+
+| You're persisting... | Use |
+|---|---|
+| Domain aggregates whose mutations describe business events worth recording (Wallet, Order, Subscription, Account) | [`Model`](/reference/model/) |
+| Lookup tables that rarely change and don't drive event consumers (Currency, Country, RateCard, FeatureFlag) | `Entity` |
+| Idempotency markers / dedup tables (RequestSeen, ProcessedMessage) | `Entity` |
+| Caches of derived data that don't need to be in the event stream (BalanceSnapshot, LeaderboardEntry) | `Entity` |
+| Audit-only side-effects (RawApiCallLog) | `Entity` |
+
+The rule of thumb: **if a downstream consumer of the eventlog would care about this change, it's a Model. Otherwise it's an Entity.**
+
+## Differences from Model
+
+| Property | `Model` | `Entity` |
+|---|---|---|
+| Emits events | ✓ (via `withEvent(...)`) | ✗ |
+| `events` field | `List<ModelEvent<MODEL>>` | (none) |
+| `createdDate` / `updatedDate` fields | ✓ | ✗ |
+| Equality includes timestamps | ✓ | ✗ |
+| Equality includes events | ✗ (excluded by design) | n/a |
+| `isModel()` returns | `true` | `false` |
+| Builder has `withEvent(...)` | ✓ | ✗ |
+| Persisted alongside outbox rows | ✓ | ✗ (no outbox rows are written for Entity changes) |
+
+Both have `id`, `state`, `version`, optimistic-locking semantics, and the same `nextVersion()` / `copy()` / `copyBase()` / `withInitialVersion()` / `increaseVersion()` builder surface.
+
+## Construction and mutation
+
+Subclasses are **immutable** with a generated `*Builder` via `@AutoBuilder` from `ekbatan-annotation-processor`. Mutations produce a new instance via `copy()...build()`; the builder threads the version forward so `nextVersion()` returns the properly-versioned successor for the repository's optimistic-locked update:
+
+```java
+@AutoBuilder
+public final class Currency extends Entity<Currency, Id<Currency>, GenericState> {
+    public final String code;
+    public final String displayName;
+
+    Currency(CurrencyBuilder builder) {
+        super(builder);
+        this.code        = Validate.notBlank(builder.code,        "code cannot be blank");
+        this.displayName = Validate.notBlank(builder.displayName, "displayName cannot be blank");
+    }
+
+    @Override
+    public CurrencyBuilder copy() {
+        return CurrencyBuilder.currency()
+                .copyBase(this)
+                .code(code)
+                .displayName(displayName);
+    }
+}
+```
+
+## Equality
+
+Two `Entity` instances are equal iff their `id`, `state`, and `version` match — **there's no event list and no timestamps to consider**, so the equality surface is narrower than `Model`'s. Two readers of the same row at the same version produce equal entities.
+
+## Builder API
+
+The base `Entity.Builder` provides:
+
+| Method | Sets |
+|---|---|
+| `id(ID)` | The primary identifier |
+| `state(STATE)` | The lifecycle state |
+| `withInitialVersion()` | Sets `version = 1` (for first inserts) |
+| `version(Long)` | Sets the version explicitly (must be ≥ 1) |
+| `increaseVersion()` | `version++` (used by `nextVersion`) |
+| `copyBase(E)` | Copies id, state, and version from an existing entity |
+| `build()` | Returns the configured entity; subclasses provide the concrete type |
+
+## See also
+
+- [Concepts → Models and Entities](/concepts/models-and-entities/) — why two shapes
+- [Model](/reference/model/) — the sibling shape that emits events
+- [ActionPlan](/reference/action-plan/) — `.add(entity)` / `.update(entity)` stage either Model or Entity
+- Source: [`ekbatan-core/src/main/java/io/ekbatan/core/domain/Entity.java`](https://github.com/zyraz-io/ekbatan/blob/main/ekbatan-core/src/main/java/io/ekbatan/core/domain/Entity.java)

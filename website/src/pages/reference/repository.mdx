@@ -1,0 +1,211 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'Repositories on JOOQ'
+activeSection: reference
+lead: 'Each persistable type has a repository that knows how to convert it to and from a JOOQ record. Repositories extend either `ModelRepository` (for Models) or `EntityRepository` (for Entities), both of which build on `AbstractRepository`. The base class supplies the full CRUD surface; the concrete subclass only implements `fromRecord` and `toRecord`.'
+---
+
+```java
+@EkbatanRepository
+public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
+
+    public WalletRepository(DatabaseRegistry databaseRegistry) {
+        super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry);
+    }
+
+    @Override
+    public Wallet fromRecord(WalletsRecord record) {
+        return wallet()
+                .id(Id.of(Wallet.class, record.getId()))
+                .version(record.getVersion())
+                .state(WalletState.valueOf(record.getState()))
+                .ownerId(record.getOwnerId())
+                .currency(Currency.getInstance(record.getCurrency()))
+                .balance(record.getBalance())
+                .createdDate(record.getCreatedDate())
+                .updatedDate(record.getUpdatedDate())
+                .build();
+    }
+
+    @Override
+    public WalletsRecord toRecord(Wallet model) {
+        return new WalletsRecord(
+                model.id.getValue(),
+                model.version,
+                model.state.name(),
+                model.ownerId,
+                model.currency.getCurrencyCode(),
+                model.balance,
+                model.createdDate,
+                model.updatedDate);
+    }
+}
+```
+
+## Inherited CRUD surface
+
+```java
+public abstract class AbstractRepository<PERSISTABLE, RECORD, TABLE, DB_ID> {
+
+    // Subclass contract
+    public abstract PERSISTABLE fromRecord(RECORD record);
+    public abstract RECORD toRecord(PERSISTABLE domainObject);
+
+    // Writes
+    public PERSISTABLE add(PERSISTABLE domainObject);
+    public List<PERSISTABLE> addAll(Collection<PERSISTABLE> domainObjects);
+    public PERSISTABLE update(PERSISTABLE domainObject);
+    public List<PERSISTABLE> updateAll(Collection<PERSISTABLE> domainObjects);
+
+    // Reads
+    public Optional<PERSISTABLE> findById(DB_ID id);
+    public PERSISTABLE getById(DB_ID id);                         // throws if missing
+    public List<PERSISTABLE> findAllByIds(Collection<DB_ID> ids);
+    public List<PERSISTABLE> findAll();
+    public Optional<PERSISTABLE> findOneWhere(Condition condition);
+    public List<PERSISTABLE> findAllWhere(Condition condition);
+
+    // Counts and existence
+    public long count();
+    public long countWhere(Condition condition);
+    public boolean existsById(DB_ID id);
+    public boolean existsWhere(Condition condition);
+
+    // Direct DSLContext access — see "Custom queries" below
+    protected DSLContext db();
+    protected DSLContext readonlyDb();
+    protected Optional<DSLContext> txDb();
+    protected DSLContext txDbElseDb();
+}
+```
+
+Each inherited method:
+
+- Applies optimistic locking automatically (writes include `WHERE version = ?` and increment).
+- Filters soft-deleted records (`WHERE state <> 'DELETED'`) on reads.
+- Routes to the right shard via the configured `ShardingStrategy` — for ID-based reads (`findById`, `existsById`), via `effectiveShard(id)`; for condition-based reads (`findAllWhere`, `count`, `findOneWhere`), via scatter-gather across all shards (see [Sharding](/reference/sharding/)).
+- Resolves the dialect per-shard, so mixed-dialect setups are theoretically supported.
+
+Pagination caveat: there is **no** `findAll(offset, limit)` or `findAllWhere(condition, offset, limit)`. Offset/limit pagination doesn't work correctly across shards. Sharded systems should use cursor-based (keyset/temporal) pagination, implemented in concrete repository subclasses.
+
+## Custom queries
+
+When the inherited CRUD methods aren't enough, drop down to JOOQ. To pull a `DSLContext` for the right shard, use one of four helper families. Each family has overloads for *no argument* (default shard), *id*, *persistable*, *shard identifier* — and `db()` / `readonlyDb()` also expose `dbs()` / `readonlyDbs()` for scatter-gather across all shards.
+
+```java
+// --- db() — primary writes / strongly-consistent reads ---
+protected DSLContext             db();
+protected DSLContext             db(DB_ID id);                  // shard derived from id
+protected DSLContext             db(PERSISTABLE p);              // shard derived from entity
+protected DSLContext             db(ShardIdentifier shard);
+protected Collection<DSLContext> dbs();                          // every shard (scatter-gather)
+
+// --- readonlyDb() — replica reads ---
+protected DSLContext             readonlyDb();
+protected DSLContext             readonlyDb(DB_ID id);
+protected DSLContext             readonlyDb(ShardIdentifier shard);
+protected Collection<DSLContext> readonlyDbs();
+
+// --- txDb() — the active transaction's connection, if one is open ---
+protected Optional<DSLContext> txDb();
+protected Optional<DSLContext> txDb(DB_ID id);
+protected Optional<DSLContext> txDb(PERSISTABLE p);
+protected Optional<DSLContext> txDb(ShardIdentifier shard);
+
+// --- txDbElseDb() — transaction connection if open, primary otherwise ---
+protected DSLContext txDbElseDb();
+protected DSLContext txDbElseDb(DB_ID id);
+protected DSLContext txDbElseDb(PERSISTABLE p);
+protected DSLContext txDbElseDb(ShardIdentifier shard);
+```
+
+### Picking the right one
+
+| You want to… | Use |
+|---|---|
+| Read rows that don't have to see writes from the *current* transaction | `readonlyDb(...)` — pulls from the replica |
+| Read rows that *must* reflect uncommitted writes from the current action | `txDbElseDb(...)` — reuses the action's transactional connection if one is open |
+| Insert / update / delete | `txDbElseDb(...)` — atomically joins the action's transaction when called from inside `Action.perform()` or `tm.inTransaction(...)`; falls back to primary outside |
+| Scatter-gather a query across every shard | `readonlyDbs()` (or `dbs()` for primary), then `.flatMap` over the resulting `Collection<DSLContext>` |
+| Assert "we must already be in a transaction" and fail loudly otherwise | `txDb(...).orElseThrow(...)` |
+
+### Examples
+
+A list query that doesn't need read-after-write consistency — pulls from the replica:
+
+```java
+public List<Wallet> findAllByOwnerId(UUID ownerId) {
+    return readonlyDb()
+            .selectFrom(WALLETS)
+            .where(WALLETS.OWNER_ID.eq(ownerId))
+            .fetch(this::fromRecord);
+}
+```
+
+A custom batch update — uses `txDbElseDb` so it joins the action's transaction when called from inside one, and goes to primary otherwise:
+
+```java
+public void markAllSettled(Collection<UUID> walletIds) {
+    if (walletIds.isEmpty()) return;
+    txDbElseDb()
+            .update(WALLETS)
+            .set(WALLETS.STATE, "SETTLED")
+            .where(WALLETS.ID.in(walletIds))
+            .execute();
+}
+```
+
+A scatter-gather across every shard — useful for admin counts:
+
+```java
+public long totalActiveWallets() {
+    return readonlyDbs().stream()
+            .mapToLong(db -> db.selectCount()
+                    .from(WALLETS)
+                    .where(WALLETS.STATE.eq("ACTIVE"))
+                    .fetchOne(0, long.class))
+            .sum();
+}
+```
+
+An idempotent INSERT — when the same logical row could be inserted twice (e.g. a worker re-reading from a lagging replica), prefer letting the database handle the conflict over catching the exception in code:
+
+```java
+txDbElseDb(shard)
+        .insertInto(NOTIFICATIONS, NOTIF_ID, EVENT_ID, HANDLER_NAME)
+        .values(/* … */)
+        .onConflictDoNothing()         // PG: ON CONFLICT DO NOTHING ; MySQL/MariaDB: INSERT IGNORE
+        .execute();
+```
+
+`onConflictDoNothing()` translates cross-dialect, so you don't need to dispatch on `dialect.family()` yourself.
+
+## Soft delete in custom queries
+
+The inherited CRUD methods auto-apply `WHERE state <> 'DELETED'`. When you write raw JOOQ via `db()` / `txDbElseDb()` etc., **soft-delete filtering becomes your responsibility** — add the predicate explicitly if you want it.
+
+The simpler predicate-based helpers (`findAllWhere`, `findOneWhere`, `existsWhere`, `countWhere`) preserve soft-delete filtering and shard routing automatically and may avoid the need to drop into raw JOOQ.
+
+## Discovery via `@EkbatanRepository`
+
+When you're using a DI integration (Spring Boot starter, Quarkus extension, Micronaut), add `@EkbatanRepository` to the repository class. The integration discovers the class at startup, registers it as a managed bean, and adds it to the framework's `RepositoryRegistry` keyed by its domain class.
+
+```java
+@EkbatanRepository
+public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> { … }
+```
+
+Without DI — wiring everything by hand — register the repository directly:
+
+```java
+var repositoryRegistry = RepositoryRegistry.Builder.repositoryRegistry()
+        .withModelRepository(Wallet.class, walletRepo)
+        .build();
+```
+
+## See also
+
+- [Actions, ActionPlan, ActionExecutor](/concepts/actions/) — where repository writes happen via the action lifecycle
+- [Sharding](/reference/sharding/) — how `effectiveShard(...)` resolves the right database
+- [Multi-database (PostgreSQL / MySQL / MariaDB)](/reference/multi-database/) — dialect-specific column types and JOOQ converters
+- [Wiring with Spring Boot](/reference/di/spring-boot/) / [Quarkus](/reference/di/quarkus/) / [Micronaut](/reference/di/micronaut/) — `@EkbatanRepository` discovery

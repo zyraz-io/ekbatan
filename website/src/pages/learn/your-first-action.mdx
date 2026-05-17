@@ -1,0 +1,325 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'Your first Action'
+activeSection: learn
+lead: 'Build a wallet deposit Action end-to-end: define the Model, attach an Event, write the Action, wire it into your HTTP layer, and watch the outbox row appear in eventlog.events after the commit.'
+---
+
+import StackPicker from '../../components/StackPicker.astro';
+
+<StackPicker />
+
+This lesson builds on [Getting started](/learn/getting-started/) — Ekbatan is on the classpath, Flyway has created your tables, and the framework is wired. Now we'll write actual domain code: a `Wallet` model that emits a `WalletMoneyDepositedEvent` and a `WalletDepositMoneyAction` that updates the balance.
+
+The shape of the surface, before we type a line:
+
+```
+           HTTP POST /wallets/{id}/deposit
+                        ▼
+            WalletController.deposit(...)
+                        ▼
+            ActionExecutor.execute(
+                principal,
+                WalletDepositMoneyAction.class,
+                new Params(id, amount, ...))
+                        ▼
+        ┌─── Phase 1 — perform() ─────────────────┐
+        │  walletRepository.getById(id)           │
+        │  wallet.deposit(amount)                 │
+        │      ↳ attaches WalletMoneyDepositedEvent│
+        │  plan().update(updated)                 │
+        └─────────────────────────────────────────┘
+                        ▼
+        ┌─── Phase 2 — persistChanges() ──────────┐
+        │  one transaction, one shard:             │
+        │     UPDATE wallets  WHERE id=? AND v=?   │
+        │     INSERT eventlog.events  (1 row)      │
+        │  commit                                  │
+        └─────────────────────────────────────────┘
+```
+
+## 1. Define the event
+
+Domain events are pure data carriers. They go in their own package so the event stream is grep-able:
+
+```java
+package io.example.wallet.model.events;
+
+import io.ekbatan.core.domain.Id;
+import io.ekbatan.core.domain.ModelEvent;
+import io.example.wallet.model.Wallet;
+import java.math.BigDecimal;
+
+public final class WalletMoneyDepositedEvent extends ModelEvent<Wallet> {
+
+    public final BigDecimal amount;
+    public final BigDecimal newBalance;
+
+    public WalletMoneyDepositedEvent(Id<Wallet> walletId, BigDecimal amount, BigDecimal newBalance) {
+        super(walletId.getValue().toString(), Wallet.class);
+        this.amount     = amount;
+        this.newBalance = newBalance;
+    }
+}
+```
+
+The two `super(...)` args (`modelId` as a string, `modelClass`) feed the outbox columns `model_id` and `model_name` so downstream consumers can correlate without inspecting the payload. See [ModelEvent](/reference/model-event/) for the full surface.
+
+## 2. Define the model
+
+The `Wallet` model is immutable, version-tracked, and emits events via `withEvent(...)`:
+
+```java
+package io.example.wallet.model;
+
+import io.ekbatan.core.domain.Id;
+import io.ekbatan.core.domain.Model;
+import io.ekbatan.core.processor.AutoBuilder;
+import io.example.wallet.model.events.WalletMoneyDepositedEvent;
+import java.math.BigDecimal;
+import java.util.Currency;
+import java.util.UUID;
+import org.apache.commons.lang3.Validate;
+
+@AutoBuilder
+public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+
+    public final UUID ownerId;
+    public final Currency currency;
+    public final BigDecimal balance;
+
+    Wallet(WalletBuilder builder) {
+        super(builder);
+        this.ownerId  = Validate.notNull(builder.ownerId,  "ownerId cannot be null");
+        this.currency = Validate.notNull(builder.currency, "currency cannot be null");
+        this.balance  = Validate.notNull(builder.balance,  "balance cannot be null");
+    }
+
+    @Override
+    public WalletBuilder copy() {
+        return WalletBuilder.wallet()
+                .copyBase(this)
+                .ownerId(ownerId)
+                .currency(currency)
+                .balance(balance);
+    }
+
+    public Wallet deposit(BigDecimal amount) {
+        Validate.isTrue(amount.compareTo(BigDecimal.ZERO) > 0, "Deposit amount must be positive");
+        final var newBalance = balance.add(amount);
+        return copy()
+                .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
+                .balance(newBalance)
+                .build();
+    }
+}
+```
+
+`@AutoBuilder` (from `ekbatan-annotation-processor`) generates `WalletBuilder` at compile time — `wallet()`, fluent setters, and a `build()` that calls the package-private constructor. **Don't** write the builder by hand.
+
+`deposit(amount)` is the only place this event ever gets attached. That's the whole discipline — events are produced inside the model, consumed inside the action's `perform()`, and persisted by the framework.
+
+## 3. Write the action
+
+The action does three things in `perform()`: read, mutate, stage. **No DB writes happen here** — the executor opens the transaction *after* `perform()` returns.
+
+```java
+package io.example.wallet.action;
+
+import io.ekbatan.core.action.Action;
+import io.ekbatan.core.domain.Id;
+import io.ekbatan.di.EkbatanAction;
+import io.example.wallet.model.Wallet;
+import io.example.wallet.repository.WalletRepository;
+import java.math.BigDecimal;
+import java.security.Principal;
+import java.time.Clock;
+
+@EkbatanAction
+public class WalletDepositMoneyAction extends Action<WalletDepositMoneyAction.Params, Wallet> {
+
+    public record Params(Id<Wallet> walletId, BigDecimal amount, String recipient) {}
+
+    private final WalletRepository walletRepository;
+
+    public WalletDepositMoneyAction(Clock clock, WalletRepository walletRepository) {
+        super(clock);
+        this.walletRepository = walletRepository;
+    }
+
+    @Override
+    protected Wallet perform(Principal principal, Params params) {
+        final var wallet  = walletRepository.getById(params.walletId().getValue());
+        final var updated = wallet.deposit(params.amount());
+        return plan().update(updated);
+    }
+}
+```
+
+`@EkbatanAction` marks the class for compile-time discovery — the generated `ActionRegistry` finds it, so the executor can route `execute(WalletDepositMoneyAction.class, params)` calls without runtime reflection. See [Action](/reference/action/) and [Annotations](/reference/annotations/).
+
+## 4. Expose it over HTTP
+
+<div data-stack="spring">
+
+```java
+@RestController
+@RequestMapping("/wallets")
+public class WalletController {
+
+    private final ActionExecutor executor;
+    private final WalletRepository walletRepository;
+
+    public WalletController(ActionExecutor executor, WalletRepository walletRepository) {
+        this.executor = executor;
+        this.walletRepository = walletRepository;
+    }
+
+    public record DepositRequest(BigDecimal amount, String recipient) {}
+
+    @PostMapping("/{id}/deposit")
+    public ResponseEntity<?> deposit(@PathVariable UUID id, @RequestBody DepositRequest body) throws Exception {
+        final var wallet = executor.execute(
+                () -> "rest-user",
+                WalletDepositMoneyAction.class,
+                new WalletDepositMoneyAction.Params(Id.of(Wallet.class, id), body.amount(), body.recipient()));
+        return ResponseEntity.ok(WalletResponse.from(wallet));
+    }
+}
+```
+
+</div>
+
+<div data-stack="quarkus">
+
+```java
+@Path("/wallets")
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
+public class WalletResource {
+
+    @Inject ActionExecutor executor;
+    @Inject WalletRepository walletRepository;
+
+    public record DepositRequest(BigDecimal amount, String recipient) {}
+
+    @POST
+    @Path("/{id}/deposit")
+    public Response deposit(@PathParam("id") UUID id, DepositRequest body) throws Exception {
+        final var wallet = executor.execute(
+                () -> "rest-user",
+                WalletDepositMoneyAction.class,
+                new WalletDepositMoneyAction.Params(Id.of(Wallet.class, id), body.amount(), body.recipient()));
+        return Response.ok(WalletResponse.from(wallet)).build();
+    }
+}
+```
+
+</div>
+
+<div data-stack="micronaut">
+
+```java
+@Controller("/wallets")
+public class WalletController {
+
+    private final ActionExecutor executor;
+    private final WalletRepository walletRepository;
+
+    public WalletController(ActionExecutor executor, WalletRepository walletRepository) {
+        this.executor = executor;
+        this.walletRepository = walletRepository;
+    }
+
+    @Serdeable
+    public record DepositRequest(BigDecimal amount, String recipient) {}
+
+    @Post("/{id}/deposit")
+    public HttpResponse<WalletResponse> deposit(UUID id, @Body DepositRequest body) throws Exception {
+        final var wallet = executor.execute(
+                () -> "rest-user",
+                WalletDepositMoneyAction.class,
+                new WalletDepositMoneyAction.Params(Id.of(Wallet.class, id), body.amount(), body.recipient()));
+        return HttpResponse.ok(WalletResponse.from(wallet));
+    }
+}
+```
+
+`@Serdeable` is `micronaut-serde-jackson`'s compile-time alternative to Jackson's runtime reflection — the records need it to round-trip on the wire.
+
+</div>
+
+<div data-stack="plain">
+
+Plain-Java consumers call the executor directly — no HTTP layer:
+
+```java
+public class Main {
+    public static void main(String[] args) throws Exception {
+        // Wire up executor, repositories, etc. — see /reference/di/without-di/
+        ActionExecutor executor = ...;
+
+        final var walletId = Id.of(Wallet.class, UUID.fromString(args[0]));
+        final var amount   = new BigDecimal(args[1]);
+
+        final var updated = executor.execute(
+                () -> "cli-user",
+                WalletDepositMoneyAction.class,
+                new WalletDepositMoneyAction.Params(walletId, amount, "self"));
+
+        System.out.println("New balance: " + updated.balance);
+    }
+}
+```
+
+</div>
+
+The `() -> "rest-user"` lambda is the `java.security.Principal` — replace with whatever your auth layer hands you (Spring's `Authentication`, Quarkus's `SecurityIdentity`, JWT subject, etc.).
+
+## 5. Run a deposit
+
+<div data-stack="spring" data-build="gradle"><code>./gradlew bootRun</code></div>
+<div data-stack="spring" data-build="maven"><code>./mvnw spring-boot:run</code></div>
+<div data-stack="quarkus" data-build="gradle"><code>./gradlew quarkusDev</code></div>
+<div data-stack="quarkus" data-build="maven"><code>./mvnw quarkus:dev</code></div>
+<div data-stack="micronaut" data-build="gradle"><code>./gradlew run</code></div>
+<div data-stack="micronaut" data-build="maven"><code>./mvnw mn:run</code></div>
+<div data-stack="plain" data-build="gradle"><code>./gradlew run --args="&lt;walletId&gt; 10.00"</code></div>
+<div data-stack="plain" data-build="maven"><code>./mvnw exec:java -Dexec.args="&lt;walletId&gt; 10.00"</code></div>
+
+Then hit the endpoint (skip if Plain Java):
+
+```bash
+curl -X POST http://localhost:8080/wallets/<walletId>/deposit \
+     -H 'Content-Type: application/json' \
+     -d '{"amount": 10.00, "recipient": "+1234567890"}'
+```
+
+## 6. Look at the outbox
+
+```sql
+SELECT id, action_id, namespace, model_name, event_type, payload
+FROM eventlog.events
+ORDER BY created_date DESC
+LIMIT 5;
+```
+
+You should see one row with `event_type = 'WalletMoneyDepositedEvent'`, `model_name = 'Wallet'`, and the payload `{"amount": 10.00, "newBalance": ...}`. The matching `wallets` row also shows the new balance and `version + 1`. Both changed inside **one** transaction — see [Outbox schema](/reference/outbox-schema/) for what each column means.
+
+## What just happened
+
+- **One** database transaction touched two tables (`wallets` UPDATE + `eventlog.events` INSERT). The outbox guarantee is structural — no second commit you could forget.
+- The action code never opened a transaction. The `ActionExecutor` did, after `perform()` returned.
+- The event payload doesn't include any infrastructure concern (no Kafka topic, no broker reference). It's pure domain.
+- The next time you `deposit(...)` the same wallet, the optimistic-lock `WHERE version = ?` check will use the new version. A concurrent stale read raises `StaleRecordException` and the framework retries Phase 1 once (default config — see [ActionExecutor](/reference/action-executor/#retries)).
+
+## Next
+
+→ **[Consuming events](/learn/consuming-events/)** — turn that outbox row into action. Two paths: in-process `EventHandler`s (no broker) and Debezium → Kafka (with the `OutboxToAvro` SMT).
+
+## See also
+
+- [Concepts → Actions, ActionPlan, ActionExecutor](/concepts/actions/) — the two-phase lifecycle
+- [Concepts → The outbox: atomic state + events](/concepts/outbox/) — what just got written and why
+- [Reference → Action](/reference/action/), [ActionPlan](/reference/action-plan/), [Model](/reference/model/), [ModelEvent](/reference/model-event/)
+- [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) — the runnable project this lesson is distilled from (and 23 more like it for other stacks/builds/dialects)

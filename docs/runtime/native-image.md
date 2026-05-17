@@ -58,11 +58,11 @@ If you're writing a Spring Boot / Quarkus / Micronaut app — **use the framewor
 |---|---|---|---|
 | Spring Boot | `org.springframework.boot:spring-boot-starter-flyway` | `@FlywayDataSource @Bean DataSource` | [`spring-boot-wallet-rest-gradle-pg`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-pg) |
 | Quarkus | `io.quarkus:quarkus-flyway` | `implements io.quarkus.flyway.FlywayConfigurationCustomizer` | [`quarkus-wallet-rest-gradle-pg`](../../ekbatan-examples/quarkus-wallet-rest-gradle-pg) |
-| Micronaut | `io.micronaut.flyway:micronaut-flyway` | `@Named("default") implements io.micronaut.flyway.FlywayConfigurationCustomizer` | [`micronaut-wallet-rest-gradle-pg`](../../ekbatan-examples/micronaut-wallet-rest-gradle-pg) |
+| Micronaut | `io.micronaut.flyway:micronaut-flyway` | `@Context` bean that calls `Flyway.configure()...migrate()` directly | [`micronaut-wallet-rest-gradle-pg`](../../ekbatan-examples/micronaut-wallet-rest-gradle-pg) |
 
 Full wiring details for each — including the exact dep coordinates to use and to avoid — live in the wiring docs:
 - [Wiring with Quarkus § Flyway](../wiring/quarkus.md#flyway--use-quarkus-flyway--a-flywayconfigurationcustomizer)
-- [Wiring with Micronaut § Flyway](../wiring/micronaut.md#flyway--use-micronaut-flyway--a-flywayconfigurationcustomizer)
+- [Wiring with Micronaut § Flyway](../wiring/micronaut.md#flyway--programmatic-context-bean)
 - [Wiring with Spring Boot § Flyway](../wiring/spring.md#flyway--use-spring-boot-starter-flyway--a-flywaydatasource-bean)
 
 ### Pattern B — raw Flyway via `FlywayHelper` (framework's own tests; opt-in for non-framework apps)

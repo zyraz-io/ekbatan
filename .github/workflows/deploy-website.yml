@@ -1,0 +1,54 @@
+# Builds the Astro site under `website/` and deploys it to GitHub Pages on
+# every push to `main` that touches the website. The site ends up at
+#     https://zyraz-io.github.io/ekbatan/
+# so `BASE=/ekbatan/` is passed to the build — see `website/astro.config.mjs`
+# and `website/src/lib/remark-base-path.mjs` for how that prefix flows through
+# to every internal link in the rendered HTML.
+name: Deploy website to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+  # Lets you trigger a deploy manually from the Actions tab without pushing.
+  workflow_dispatch:
+
+# Required for `actions/deploy-pages` to publish through OIDC.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Don't cancel in-flight runs — a half-deployed Pages site is worse than waiting
+# for the previous one to finish first.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: withastro/action@v3
+        with:
+          path: website
+          node-version: 22
+          package-manager: npm@latest
+        env:
+          # Astro reads this in `website/astro.config.mjs` and `remark-base-path`
+          # uses it to prefix every `/concepts/...`, `/learn/...`, `/reference/...`
+          # link in the rendered HTML so they resolve under the project-page subpath.
+          BASE: /ekbatan/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

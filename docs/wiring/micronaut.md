@@ -297,27 +297,23 @@ In `io.ekbatan.micronaut`:
 | `@EkbatanEventHandler` | Same lifting; only effective when the local-event-handler module is on the classpath (`@Requires(classes = ...)`). |
 | `@EkbatanDistributedJob` | Same lifting; only effective when ekbatan-distributed-jobs is on the classpath. |
 
-### Flyway — use `micronaut-flyway` + a `FlywayConfigurationCustomizer`
+### Flyway — programmatic `@Context` bean
 
-Don't run Flyway by hand from a `@Context @PostConstruct` bean (that's what the framework's own tests at `ekbatan-integration-tests/di/micronaut` do via `FlywayHelper`, because they use raw Flyway with no framework extension wrapping it — see [GraalVM native-image § two patterns](../runtime/native-image.md#flyway-on-native--two-patterns)). For a real Micronaut app, **use `micronaut-flyway`** and let an `EkbatanShardFlywayCustomizer` (a `@Singleton @Named("default")` bean) override the dataSource from `ekbatan.sharding.*`.
+Skip the `micronaut-flyway` auto-wiring path. It works, but it forces you to declare a `flyway.datasources.default` block in `application.yml` with `${ekbatan.sharding...}` placeholder interpolation chasing back into Ekbatan's config — duplicating the source of truth and burying a `FlywayConfigurationCustomizer` override on top to fix it. Cleaner: construct `Flyway` directly from the typed `ShardingConfig` in a `@Context` bean.
 
-**Dependencies** — pull the Micronaut extension, NOT raw `flyway-core`:
+**Dependencies** — pull the Micronaut extension anyway (it brings the BOM-pinned flyway-core and ships substrate-VM Flyway scanning needed for native-image), but don't add a `flyway:` block in YAML.
 
 ```kotlin
 // build.gradle.kts
 dependencies {
-    // ✅ The Micronaut extension. Pulls flyway-core transitively at Micronaut's BOM-pinned
-    //    version, runs Flyway as a `@Singleton` migration runner, integrates with
-    //    `flyway.datasources.{name}.*` config keys, and ships substrate-VM Flyway scanning.
+    // The Micronaut extension. Pulls flyway-core transitively at Micronaut's BOM-pinned
+    // version and ships substrate-VM hints for native-image. We don't use its auto-wired
+    // `Flyway` beans (no `flyway:` block in application.yml) — the @Context bean below
+    // calls `Flyway.configure()...migrate()` itself.
     implementation("io.micronaut.flyway:micronaut-flyway")
 
-    // ✅ Database-specific Flyway plugin (BOM-managed; no version needed).
+    // Database-specific Flyway plugin (BOM-managed; no version needed).
     implementation("org.flywaydb:flyway-database-postgresql")   // or flyway-mysql for MariaDB/MySQL
-
-    // ❌ Don't add `org.flywaydb:flyway-core` directly. micronaut-flyway brings the right
-    //    version and wires the customizer hook for you; pulling flyway-core independently
-    //    bypasses the framework's qualifier-based customizer lookup (`Qualifiers.byName`)
-    //    and you lose the substrate-VM hints on native.
 }
 ```
 
@@ -333,48 +329,26 @@ dependencies {
 </dependency>
 ```
 
-```yaml
-# application.yml — derived from ekbatan.sharding.* via property placeholders.
-# The customizer below overrides these programmatically too (belt and braces).
-flyway:
-  datasources:
-    default:
-      enabled: true
-      url: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl}
-      user: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username}
-      password: ${ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password}
-```
-
 ```java
-@Singleton
-@Named("default")
-public class EkbatanShardFlywayCustomizer implements FlywayConfigurationCustomizer {
+@Context
+public class EkbatanFlywayMigrator {
 
-    private final ShardingConfig shardingConfig;
-
-    public EkbatanShardFlywayCustomizer(ShardingConfig shardingConfig) {
-        this.shardingConfig = shardingConfig;
-    }
-
-    // Required because FlywayConfigurationCustomizer extends io.micronaut.core.naming.Named.
-    @Override
-    @NonNull
-    public String getName() {
-        return "default";
-    }
-
-    @Override
-    public void customizeFluentConfiguration(FluentConfiguration configuration) {
+    public EkbatanFlywayMigrator(ShardingConfig shardingConfig) {
         var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
-        configuration.dataSource(primary.jdbcUrl, primary.username, primary.password);
+        Flyway.configure()
+                .dataSource(primary.jdbcUrl, primary.username, primary.password)
+                .load()
+                .migrate();
     }
 }
 ```
 
 Why this shape:
-- **Both `@Named("default")` and `getName()` return `"default"`.** Micronaut uses `Qualifiers.byName("default")` to look up the customizer for the Flyway instance keyed `flyway.datasources.default`. The `getName()` method is required because the interface extends `io.micronaut.core.naming.Named` — both have to agree on `"default"`.
-- **Single source of truth.** Connection coordinates live under `ekbatan.sharding.*`; the YAML placeholders + customizer both read from the same tree.
-- **Native works.** `micronaut-flyway` handles substrate-VM Flyway scanning; no need for `FlywayHelper`.
+- **`@Context` is eager.** Micronaut instantiates `@Context` beans during application startup, before lazy `@Singleton` beans (including Ekbatan's `DatabaseRegistry`). The constructor calls `.migrate()` synchronously — so by the time anything else touches the database, the schema is in place.
+- **Single source of truth.** Connection coordinates live only in `ekbatan.sharding.*`. No YAML `flyway:` block, no placeholder interpolation, no `FlywayConfigurationCustomizer` override to maintain.
+- **Native works.** Keeping `micronaut-flyway` on the classpath preserves its substrate-VM Flyway scanning hints — no `FlywayHelper` shim needed.
+
+If you'd rather use the auto-wired customizer path (`@Singleton @Named("default") FlywayConfigurationCustomizer` bound to a `flyway.datasources.default` YAML block), that still works — it's just more moving parts.
 
 See [`ekbatan-examples/micronaut-wallet-rest-gradle-pg`](../../ekbatan-examples/micronaut-wallet-rest-gradle-pg) for the full runnable shape (and its `-mariadb`/`-mysql`/`-native-*`/`-maven-*` variants).
 

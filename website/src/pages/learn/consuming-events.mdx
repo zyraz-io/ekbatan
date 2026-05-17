@@ -1,0 +1,264 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'Consuming events'
+activeSection: learn
+lead: 'After Your first Action committed, there''s a row in eventlog.events. Now consume it. Two paths: the local-event-handler module (no broker required) and Debezium → Kafka (CDC). Run both side by side against the same outbox.'
+---
+
+import StackPicker from '../../components/StackPicker.astro';
+
+<StackPicker />
+
+The outbox is **just a table**. Anything that reads it can consume it. This lesson sets up both common paths.
+
+```
+                    eventlog.events  (delivered = false)
+                          │
+              ┌───────────┴────────────────┐
+              ▼                            ▼
+   Local event handler             Debezium CDC
+   (EventFanoutJob +               (WAL → Kafka topic)
+    EventHandlingJob —
+    poll the DB, cluster-exclusive)
+              │                            │
+   handler.handle(envelope)        SMT routes per event_type
+   on whichever JVM runs                   │
+   the handling job                        ▼
+              │                       Kafka consumers anywhere
+              ▼                       (warehouse, billing, …)
+   another action / projection
+```
+
+You don't pick one. They can run simultaneously against the same outbox — the local handler's `delivered=true` flip generates an UPDATE row that the Debezium SMTs drop (only INSERTs ship to Kafka), so neither sees the other's noise.
+
+## Path A — Local event handler (start here)
+
+The fastest path: no broker, no CDC, no Kafka cluster. The `ekbatan-events:local-event-handler` module ships two `DistributedJob`s — `EventFanoutJob` materializes per-handler delivery rows in `event_notifications`; `EventHandlingJob` polls those rows and calls your typed handler beans. Both jobs are cluster-exclusive (one cluster member runs each); the handler runs in whichever JVM is currently running `EventHandlingJob`, with retries, backoff, and dead-lettering handled automatically.
+
+### A.1 Add the module
+
+<div data-stack="spring" data-build="gradle">
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    // Pulled transitively by ekbatan-spring-boot-starter — explicit line not needed.
+}
+```
+
+The Spring Boot starter already pulls `ekbatan-local-event-handler`. Nothing to add.
+
+</div>
+
+<div data-stack="spring" data-build="maven">
+
+The Spring Boot starter already pulls `ekbatan-local-event-handler` transitively. Nothing to add.
+
+</div>
+
+<div data-stack="quarkus" data-build="gradle">
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.0.3")
+}
+```
+
+</div>
+
+<div data-stack="quarkus" data-build="maven">
+
+```xml
+<dependency>
+  <groupId>io.github.zyraz-io</groupId>
+  <artifactId>ekbatan-local-event-handler</artifactId>
+  <version>0.0.3</version>
+</dependency>
+```
+
+</div>
+
+<div data-stack="micronaut" data-build="gradle">
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.0.3")
+}
+```
+
+</div>
+
+<div data-stack="micronaut" data-build="maven">
+
+```xml
+<dependency>
+  <groupId>io.github.zyraz-io</groupId>
+  <artifactId>ekbatan-local-event-handler</artifactId>
+  <version>0.0.3</version>
+</dependency>
+```
+
+</div>
+
+<div data-stack="plain" data-build="gradle">
+
+```kotlin
+dependencies {
+    implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-distributed-jobs:0.0.3")  // pulls the job runtime
+}
+```
+
+</div>
+
+<div data-stack="plain" data-build="maven">
+
+```xml
+<dependency>
+  <groupId>io.github.zyraz-io</groupId>
+  <artifactId>ekbatan-local-event-handler</artifactId>
+  <version>0.0.3</version>
+</dependency>
+```
+
+</div>
+
+### A.2 Write the handler
+
+```java
+package io.example.wallet.handler;
+
+import io.ekbatan.di.EkbatanEventHandler;
+import io.ekbatan.events.localeventhandler.EventEnvelope;
+import io.ekbatan.events.localeventhandler.EventHandler;
+import io.example.wallet.model.events.WalletMoneyDepositedEvent;
+
+@EkbatanEventHandler
+public class WalletMoneyDepositedNotifier implements EventHandler<WalletMoneyDepositedEvent> {
+
+    @Override
+    public String name() {
+        // Cluster-stable identifier; stored in event_notifications.handler_name.
+        // Renaming this would re-deliver all past events.
+        return "wallet-money-deposited-notifier";
+    }
+
+    @Override
+    public Class<WalletMoneyDepositedEvent> eventType() {
+        return WalletMoneyDepositedEvent.class;
+    }
+
+    @Override
+    public void handle(EventEnvelope<WalletMoneyDepositedEvent> envelope) {
+        final var event = envelope.event;
+        System.out.printf("Deposited %s to wallet %s — new balance %s%n",
+                event.amount, event.modelId, event.newBalance);
+        // For real apps: dispatch another action via injected ActionExecutor,
+        // call an SMS API, write a projection, etc.
+    }
+}
+```
+
+Three required methods:
+- **`name()`** — cluster-stable handler identifier. Stored in `event_notifications.handler_name`. **Don't rename casually** — a rename re-delivers every historical event the new name hasn't seen.
+- **`eventType()`** — what payload class this handler accepts. Drives JSON deserialization.
+- **`handle(envelope)`** — your business logic. `envelope.event` is the typed payload; `envelope.actionParams` is the JSON of the source action's params (handy for routing concerns you don't want polluting the event payload).
+
+Per the [listen-to-yourself pattern](/concepts/the-dual-write-trap/), the handler can dispatch its own actions via an injected `ActionExecutor` to record its work in the same outbox.
+
+### A.3 Run
+
+Restart your app. The next deposit you POST will produce both a `WalletMoneyDepositedEvent` row **and** a console line from the handler within ~1s (the polling interval). Check `eventlog.event_notifications` to see the handler-specific delivery record:
+
+```sql
+SELECT event_id, handler_name, state, attempts, updated_date
+FROM eventlog.event_notifications
+WHERE handler_name = 'wallet-money-deposited-notifier'
+ORDER BY created_date DESC;
+```
+
+`state = 'SUCCEEDED'` means the handler returned without throwing. Retries, backoff, expiry, and dead-lettering all happen automatically — see [Local event handler](/reference/events/local-event-handler/).
+
+## Path B — Debezium CDC → Kafka
+
+When you need fan-out beyond your own application (other services, a data lake, an analytics warehouse), tail the outbox with Debezium. The framework ships two Kafka Connect SMTs that turn outbox rows into Avro or Protobuf messages on per-event-type topics.
+
+### B.1 Set up Debezium
+
+Point a Debezium Postgres source connector at the database. Capture only the outbox table:
+
+```json
+{
+  "name": "wallet-outbox",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "wallet",
+    "database.password": "wallet",
+    "database.dbname": "wallet",
+    "schema.include.list": "eventlog",
+    "table.include.list": "eventlog.events",
+    "plugin.name": "pgoutput",
+
+    "transforms": "outbox",
+    "transforms.outbox.type": "io.ekbatan.events.streaming.debeziumsmt.avro.OutboxToAvroSmt",
+    "transforms.outbox.schema.registry.url": "http://schema-registry:8081"
+  }
+}
+```
+
+The `OutboxToAvroSmt`:
+- **Drops UPDATE rows** (i.e., the `delivered=true` flip from Path A). Only INSERTs reach Kafka.
+- **Routes by `event_type`** — `WalletMoneyDepositedEvent` lands on the `wallet.money-deposited` topic, `WalletCreatedEvent` on `wallet.created`, etc.
+- **Encodes the payload as Avro** with a schema registered in Confluent Schema Registry.
+
+For Protobuf, swap `OutboxToAvroSmt` → `OutboxToProtobufSmt`. See [Streaming (Debezium)](/reference/events/streaming/) for the full SMT options.
+
+### B.2 Consume from Kafka
+
+Any Kafka consumer in any language can subscribe. Example with the Avro consumer in Java:
+
+```java
+var props = new Properties();
+props.put("bootstrap.servers", "kafka:9092");
+props.put("group.id", "warehouse");
+props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+props.put("value.deserializer", "io.confluent.kafka.serializers.KafkaAvroDeserializer");
+props.put("schema.registry.url", "http://schema-registry:8081");
+props.put("specific.avro.reader", "true");
+
+try (var consumer = new KafkaConsumer<String, WalletMoneyDepositedEvent>(props)) {
+    consumer.subscribe(List.of("wallet.money-deposited"));
+    while (true) {
+        for (var record : consumer.poll(Duration.ofSeconds(1))) {
+            System.out.printf("Got deposit: %s%n", record.value());
+        }
+    }
+}
+```
+
+The Avro schema is auto-registered by the SMT on first publish — your consumer just deserializes it.
+
+## What just happened
+
+- **Path A** keeps event delivery inside your application — same database, no broker, no external infrastructure to operate. Pick it when all consumers are part of your own app deployment.
+- **Path B** turns events into cross-service contracts. The outbox row is the immutable record; the Kafka topic is one of many possible projections of it.
+- Both write the same outbox row. The dual-write trap is structurally impossible — there's only one write inside the action's transaction, and everything else reads from it.
+
+If you start with Path A and later add Path B, **no application code changes**. The Debezium connector starts tailing the same table from now on; backfill earlier events by configuring `snapshot.mode`.
+
+## Next
+
+→ **[Adding a shard](/learn/sharding/)** — take the single-database wallet to two shards using `EmbeddedBitsShardingStrategy`. Your action signatures don't change.
+
+## See also
+
+- [Concepts → The outbox: atomic state + events](/concepts/outbox/) — the schema and the "why two paths"
+- [Reference → Local event handler](/reference/events/local-event-handler/) — `EventHandler` API, retry/expiry config, `EventEnvelope` shape
+- [Reference → Streaming (Debezium)](/reference/events/streaming/) — `OutboxToAvro` / `OutboxToProtobuf` SMT options, topic naming, snapshot modes
+- [Reference → Outbox schema](/reference/outbox-schema/) — `eventlog.events` + `eventlog.event_notifications` DDL
+- [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) — runs the in-process `WalletMoneyDepositedEventHandler` end-to-end with an integration test that asserts the notification row appears

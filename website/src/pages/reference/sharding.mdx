@@ -1,0 +1,322 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'Sharding'
+activeSection: reference
+lead: 'Sharding is opt-in and has zero overhead when disabled. Single-database deployments can ignore this page entirely. When you need to scale writes horizontally — or when policy forces data to live on specific infrastructure — Ekbatan gives you a two-level addressing scheme, self-describing IDs, and shard-aware repositories without changing your action or model code.'
+---
+
+## Two axes: group + member
+
+A `ShardIdentifier` is a numeric `(group, member)` pair:
+
+- **Group** — a *policy axis*. Boundaries forced on you from the outside. Regulatory residency ("Mexico data stays in Mexico"), tenant isolation contracts, business-domain separation. Group cardinality is driven by external constraints; you don't choose how many. 8 bits, up to 256 groups.
+- **Member** — a *performance axis*. Horizontal scaling within a single policy boundary. You add members when one database can't handle the write throughput. Member cardinality is driven by capacity planning. 6 bits, up to 64 members per group.
+
+Naturally, members of the same group share network locality and failure domain (same region, VPC, availability zone). Cross-member queries within a group are scatter-gather across every member, so intra-group latency directly affects them. Names like `global-eu-1`, `global-eu-2`, `global-eu-3` reflect this convention. The framework doesn't enforce it — JDBC URLs are opaque to it — but it's the shape the design assumes.
+
+```java
+public static final ShardIdentifier GLOBAL_SHARD  = ShardIdentifier.of(0, 0);
+public static final ShardIdentifier MEXICO_SHARD  = ShardIdentifier.of(1, 0);
+public static final ShardIdentifier MEXICO_2      = ShardIdentifier.of(1, 1);
+```
+
+`ShardIdentifier.DEFAULT == ShardIdentifier.of(0, 0)`. Unregistered shards fall back to the default — see [`DatabaseRegistry.effectiveShard`](#unregistered-shards-fall-back-to-default) below.
+
+## Self-describing IDs: `ShardedUUID`
+
+`ShardedUUID` is a UUID v7 with the shard's `(group, member)` bits embedded inside `rand_b`:
+
+```
+ShardedUUID
+┌──────────────────────────────────────────────────────────────┐
+│ MSB: [48-bit timestamp][4-bit version=7][12-bit rand_a]      │
+│ LSB: [2-bit variant][8-bit GROUP][6-bit MEMBER][48-bit rand] │
+└──────────────────────────────────────────────────────────────┘
+```
+
+The shard can be recovered from the ID at any time without a lookup table:
+
+```java
+ShardedId<Wallet> id = ShardedId.generate(Wallet.class, MEXICO_SHARD);
+ShardIdentifier shard = id.resolveShardIdentifier();   // group=1, member=0
+```
+
+Domain entity IDs use `ShardedId<T>`. Event IDs (`eventlog.events.id`) stay as regular UUIDs — events are co-located with their model and don't need independent shard routing.
+
+## Sharded models
+
+A model that participates in sharding declares its ID type as `ShardedId<T>` instead of `Id<T>`:
+
+```java
+@AutoBuilder
+public final class Wallet extends Model<Wallet, ShardedId<Wallet>, WalletState> {
+
+    public final UUID ownerId;
+    public final Currency currency;
+    public final BigDecimal balance;
+
+    Wallet(WalletBuilder builder) {
+        super(builder);
+        this.ownerId  = Validate.notNull(builder.ownerId,  "ownerId cannot be null");
+        this.currency = Validate.notNull(builder.currency, "currency cannot be null");
+        this.balance  = Validate.notNull(builder.balance,  "balance cannot be null");
+    }
+
+    public static WalletBuilder createWallet(
+            ShardIdentifier shard, UUID ownerId, Currency currency, BigDecimal balance, Instant now) {
+        final var id = ShardedId.generate(Wallet.class, shard);   // shard bits encoded into the UUID
+        return WalletBuilder.wallet()
+                .id(id)
+                .state(OPENED)
+                .ownerId(ownerId)
+                .currency(currency)
+                .balance(balance)
+                .createdDate(now)
+                .withInitialVersion()
+                .withEvent(new WalletCreatedEvent(id, ownerId, currency, balance));
+    }
+
+    @Override
+    public WalletBuilder copy() {
+        return WalletBuilder.wallet()
+                .copyBase(this)
+                .ownerId(ownerId)
+                .currency(currency)
+                .balance(balance);
+    }
+
+    public Wallet deposit(BigDecimal amount) {
+        Validate.isTrue(amount.compareTo(BigDecimal.ZERO) > 0, "Deposit amount must be positive");
+        final var newBalance = balance.add(amount);
+        return copy()
+                .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
+                .balance(newBalance)
+                .build();
+    }
+}
+```
+
+The shard is chosen *at creation time*, typically inside an Action that maps business input to a shard:
+
+```java
+@EkbatanAction
+public class WalletCreateAction extends Action<WalletCreateAction.Params, Wallet> {
+
+    public record Params(String countryCode, UUID ownerId, Currency currency, BigDecimal balance) {}
+
+    @Override
+    protected Wallet perform(Principal principal, Params params) {
+        var shard = switch (params.countryCode()) {
+            case "MX" -> MEXICO_SHARD;
+            case "AU" -> AUSTRALIA_SHARD;
+            default   -> GLOBAL_SHARD;
+        };
+        var wallet = createWallet(shard, params.ownerId(), params.currency(), params.balance(), clock.instant()).build();
+        return plan().add(wallet);
+    }
+}
+```
+
+After this, the shard travels with the wallet's ID. Every subsequent read or update finds its way back to the correct database without any explicit shard parameter.
+
+## Sharded repositories
+
+Opt the repository into sharding by passing a `ShardingStrategy` to `super(...)`. The bundled `EmbeddedBitsShardingStrategy` decodes the shard from the UUID's embedded bits:
+
+```java
+@EkbatanRepository
+public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
+
+    public WalletRepository(DatabaseRegistry databaseRegistry) {
+        super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry, new EmbeddedBitsShardingStrategy());
+    }
+
+    @Override
+    public Wallet fromRecord(WalletsRecord record) {
+        return WalletBuilder.wallet()
+                .id(ShardedId.of(Wallet.class, ShardedUUID.from(record.getId())))   // ← only repo line that differs from a non-sharded repo
+                .version(record.getVersion())
+                .state(WalletState.valueOf(record.getState()))
+                .ownerId(record.getOwnerId())
+                .currency(Currency.getInstance(record.getCurrency()))
+                .balance(record.getBalance())
+                .createdDate(record.getCreatedDate())
+                .updatedDate(record.getUpdatedDate())
+                .build();
+    }
+
+    @Override
+    public WalletsRecord toRecord(Wallet w) {
+        return new WalletsRecord(
+                w.id.getValue().value(), w.version, w.state.name(),
+                w.ownerId, w.currency.getCurrencyCode(), w.balance,
+                w.createdDate, w.updatedDate);
+    }
+}
+```
+
+With the strategy in place, all CRUD methods route automatically:
+
+```java
+walletRepository.findById(walletId);      // routes to the wallet's shard (decoded from the ID)
+walletRepository.update(updatedWallet);   // routes to the wallet's shard
+walletRepository.findAllByIds(ids);       // groups IDs by shard, queries each shard once
+walletRepository.findAll();               // scatter-gathers across all shards
+```
+
+Custom queries that drop into raw JOOQ can target a specific shard using the ID-aware accessors:
+
+```java
+public List<Wallet> findAllByOwnerOnSameShardAs(ShardedId<Wallet> walletId, UUID ownerId) {
+    return readonlyDb(walletId.getValue())            // routes to the wallet's shard
+            .selectFrom(WALLETS)
+            .where(WALLETS.OWNER_ID.eq(ownerId))
+            .fetch(this::fromRecord);
+}
+```
+
+The same accessors come in `db(id)`, `txDb(id)`, and `txDbElseDb(id)` flavors, plus `db(persistable)` / `txDb(persistable)` overloads when the full domain object is on hand instead of the raw ID. To run a query against *every* shard, `dbs()` and `readonlyDbs()` return the full collection of `DSLContext`s.
+
+## Custom sharding strategies
+
+`EmbeddedBitsShardingStrategy` is the default, and most applications can use it as-is. A custom `ShardingStrategy` is only needed when the bundled default does not match the domain model. For example:
+
+- **Column-based** — the shard is derived from a non-ID column on the entity (country code, tenant ID, region).
+- **Hash-based** — hash one or more columns and modulo by the member count.
+- **Range-based** — partition by ID ranges (e.g. wallets `0..1M` on shard A, `1M..2M` on shard B).
+- **Lookup-table** — read the shard mapping from a separate table or external config service.
+
+The interface has three methods:
+
+```java
+public interface ShardingStrategy<DB_ID> {
+    boolean usesShardAwareId();
+    Optional<ShardIdentifier> resolveShardIdentifierById(DB_ID id);
+    Optional<ShardIdentifier> resolveShardIdentifier(Persistable<?> persistable);
+}
+```
+
+A column-based example that routes by a country code:
+
+```java
+public final class CountryCodeShardingStrategy implements ShardingStrategy<UUID> {
+
+    @Override public boolean usesShardAwareId() { return false; }   // raw UUIDs do not encode the shard
+
+    @Override
+    public Optional<ShardIdentifier> resolveShardIdentifierById(UUID id) {
+        return Optional.empty();   // the ID alone is not enough
+    }
+
+    @Override
+    public Optional<ShardIdentifier> resolveShardIdentifier(Persistable<?> p) {
+        if (p instanceof CountryAware ca) {
+            return Optional.of(switch (ca.countryCode()) {
+                case "MX" -> ShardIdentifier.of(1, 0);
+                case "AU" -> ShardIdentifier.of(2, 0);
+                default   -> ShardIdentifier.of(0, 0);
+            });
+        }
+        return Optional.empty();
+    }
+}
+```
+
+When `usesShardAwareId()` returns `false`, ID-only methods like `findById(id)` are rejected — without inspecting the entity, the framework cannot know which shard to query. In that case, use condition-based reads (`findAllWhere`, `findOneWhere`) which scatter-gather across all shards, or work from the persistable directly via `db(persistable)` / `txDb(persistable)` in custom queries.
+
+## Declarative configuration
+
+Rather than wiring `TransactionManager`s by hand, describe the shard topology as a YAML tree and feed it to `DatabaseRegistry.fromConfig(config)`:
+
+```yaml
+sharding:
+  defaultShard:
+    group: 0
+    member: 0
+
+  groups:
+    - group: 0
+      name: global
+      members:
+        - member: 0
+          name: global-eu-1
+          configs:
+            primaryConfig:                # required
+              jdbcUrl: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
+              username: wallets_app
+              password: ${EU_1_PASSWORD}
+              maximumPoolSize: 20
+              leakDetectionThreshold: 30000
+            secondaryConfig:              # optional, but encouraged
+              jdbcUrl: jdbc:postgresql://global-eu-1-ro.example.com:5432/wallets
+              username: wallets_app_ro
+              password: ${EU_1_RO_PASSWORD}
+              maximumPoolSize: 20
+            lockConfig:                   # user-defined; consumed by your own code
+              jdbcUrl: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
+              username: wallets_lock
+              password: ${EU_1_LOCK_PASSWORD}
+              maximumPoolSize: 50
+              leakDetectionThreshold: 0   # locks may sit idle while held; disable
+
+        - member: 1
+          name: global-eu-2
+          configs:
+            primaryConfig: { … }
+            secondaryConfig: { … }
+
+    - group: 1
+      name: mexico
+      members:
+        - member: 0
+          name: mexico-cdmx-1
+          configs:
+            primaryConfig: { … }
+            secondaryConfig: { … }
+```
+
+About the `configs:` map of each member:
+
+- **`primaryConfig` is required.** Every member must have one; missing it fails the build at startup.
+- **`secondaryConfig` is optional but encouraged.** If absent, non-transactional reads transparently fall back to `primaryConfig`. If present, they go to the replica, offloading primary.
+- **Any other named entry is user-defined.** `lockConfig`, `analyticsConfig`, `auditConfig`, etc. The framework doesn't consume them; your code reaches for them via `member.configFor("lockConfig")`. Use this to colocate, for example, a dedicated `KeyedLockProvider` connection pool with the data shard it serves (see [Pessimistic locking](/reference/keyed-locks/)).
+
+```java
+ShardMemberConfig member = …;
+DataSourceConfig  primary   = member.primaryConfig();                  // required, non-null
+Optional<DataSourceConfig> secondary = member.secondaryConfig();       // empty if absent
+Optional<DataSourceConfig> lock      = member.configFor("lockConfig"); // user-defined
+```
+
+## Unregistered shards fall back to default
+
+`DatabaseRegistry.effectiveShard(shard)` quietly returns the default shard for any `ShardIdentifier` not explicitly registered. So a wallet routed to an Australia shard that hasn't been deployed yet will fall through to the default. This makes incremental rollouts safe — encode the future shard in IDs first, register the database later, no migration needed in between.
+
+## Cross-shard actions
+
+Cross-shard actions are **rejected by default**. If an action plans changes that span shards, the executor throws `CrossShardException`. Opt in per call:
+
+```java
+var config = ExecutionConfiguration.Builder.executionConfiguration()
+        .allowCrossShard(true)
+        .build();
+
+executor.execute(principal, MyAction.class, params, config);
+```
+
+When enabled, each involved shard gets its own transaction, and the action's row in `eventlog.events` is duplicated to every shard with the same UUID so each shard contains the full action context.
+
+This is **not 2PC**. Each shard commits independently — partial failures are possible. The cross-shard switch is opt-in for that reason; pick it consciously when the operation is genuinely cross-region/cross-tenant and you've designed your domain to be eventually consistent.
+
+## What sharding does not provide
+
+- **Cross-shard foreign keys.** Each shard is a self-contained schema.
+- **Offset/limit pagination.** Doesn't work correctly across shards. Use cursor-based (keyset / temporal) pagination in concrete repository subclasses.
+- **Distributed transactions.** No 2PC. Each shard commits independently.
+
+## See also
+
+- [Repositories on JOOQ](/reference/repository/) — `db(id)` / `readonlyDb(id)` / `txDbElseDb(id)` are the shard-aware accessors
+- [Actions](/concepts/actions/) — `allowCrossShard` is a per-call `ExecutionConfiguration` knob
+- [The outbox: atomic state + events](/concepts/outbox/) — how events are duplicated across shards in cross-shard mode
+- [Pessimistic locking via `KeyedLockProvider`](/reference/keyed-locks/) — the canonical user of the user-defined `configs.<name>` slot

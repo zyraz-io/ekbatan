@@ -1,0 +1,2177 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: "Getting started"
+activeSection: learn
+description: "End-to-end first-day setup: scaffold, start a database, wire deps, write a model + repository, generate jOOQ classes, run. Pick stack/build/dialect once; every step adapts."
+lead: "Set your stack, build tool, and database once with the picker below. Every snippet adapts — and your choice carries to every other lesson under /learn/."
+---
+
+import StackPicker from '../../components/StackPicker.astro';
+import CodeBlock from '../../components/CodeBlock.astro';
+
+<StackPicker />
+
+## 1. Scaffold a project
+
+Skip if you already have a project; otherwise start one.
+
+<div data-stack="spring">
+
+[**start.spring.io**](https://start.spring.io) → pick Java 25, your build tool, and add **Web** + **JDBC API** + **Flyway Migration** + your DB driver. Or via CLI:
+
+```bash
+curl https://start.spring.io/starter.zip \
+    -d type=gradle-project-kotlin -d language=java -d javaVersion=25 \
+    -d artifactId=wallet -d groupId=io.example \
+    -d dependencies=web,jdbc,flyway,postgresql \
+    -o wallet.zip && unzip wallet.zip -d wallet && cd wallet
+```
+
+</div>
+
+<div data-stack="quarkus">
+
+```bash
+# Install: brew install quarkusio/tap/quarkus
+quarkus create app io.example:wallet:0.1.0 \
+    --extension=rest-jackson,jdbc-postgresql,flyway,jooq
+cd wallet
+```
+
+Or via [code.quarkus.io](https://code.quarkus.io) with the same extensions.
+
+</div>
+
+<div data-stack="micronaut">
+
+```bash
+# Install: brew install --cask micronaut-projects/tap/mn
+mn create-app io.example.wallet --jdk=25 --build=gradle \
+    --features=postgres,flyway,data-jdbc,serialization-jackson
+cd wallet
+```
+
+Or via [micronaut.io/launch](https://micronaut.io/launch) with the same features.
+
+</div>
+
+<div data-stack="plain">
+
+```bash
+mkdir wallet && cd wallet
+gradle init --type basic --dsl kotlin
+mkdir -p src/main/java/io/example/wallet
+mkdir -p src/main/resources/db/migration
+```
+
+No scaffolder — you build the project structure manually. The framework works fine without a DI container; see [Plain Java wiring](/reference/di/without-di/).
+
+</div>
+
+## 2. Start a database
+
+Drop a `compose.yaml` in the project root. `docker compose up -d wallet-db` and you have a database in ~10 seconds.
+
+<div data-db="pg">
+
+<CodeBlock filename="compose.yaml" language="yaml" shadow="grey" code={`services:
+  wallet-db:
+    image: postgres:17
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet
+      POSTGRES_DB: wallet`} />
+
+</div>
+<div data-db="mariadb">
+
+<CodeBlock filename="compose.yaml" language="yaml" shadow="grey" code={`services:
+  wallet-db:
+    image: mariadb:11
+    ports: ["3306:3306"]
+    environment:
+      MARIADB_USER: wallet
+      MARIADB_PASSWORD: wallet
+      MARIADB_DATABASE: wallet
+      MARIADB_ROOT_PASSWORD: root
+    volumes:
+      # Runs as root on first init — grants the wallet user cross-database access so
+      # V0000 below can CREATE DATABASE eventlog.
+      - "./src/main/resources/mariadb_init.sql:/docker-entrypoint-initdb.d/mariadb_init.sql:ro"`} />
+
+</div>
+<div data-db="mysql">
+
+<CodeBlock filename="compose.yaml" language="yaml" shadow="grey" code={`services:
+  wallet-db:
+    image: mysql:9
+    ports: ["3306:3306"]
+    environment:
+      MYSQL_USER: wallet
+      MYSQL_PASSWORD: wallet
+      MYSQL_DATABASE: wallet
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - "./src/main/resources/mysql_init.sql:/docker-entrypoint-initdb.d/mysql_init.sql:ro"`} />
+
+</div>
+## 3. Add dependencies
+
+Add the framework, your JDBC driver, and the framework-native Flyway extension.
+
+<div data-stack="spring" data-build="gradle" data-db="pg">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.postgresql:postgresql")
+    runtimeOnly("org.jooq:jooq:3.20.10")  // see "(1) Override jOOQ version" below
+}`} />
+
+</div>
+<div data-stack="spring" data-build="gradle" data-db="mariadb">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.mariadb.jdbc:mariadb-java-client")
+    runtimeOnly("org.jooq:jooq:3.20.10")  // see "(1) Override jOOQ version" below
+}`} />
+
+</div>
+<div data-stack="spring" data-build="gradle" data-db="mysql">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("com.mysql:mysql-connector-j")
+    runtimeOnly("org.jooq:jooq:3.20.10")  // see "(1) Override jOOQ version" below
+}`} />
+
+</div>
+<div data-stack="spring" data-build="maven" data-db="pg">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-spring-boot-starter</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-flyway</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+</dependency>`} />
+
+</div>
+<div data-stack="spring" data-build="maven" data-db="mariadb">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-spring-boot-starter</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-flyway</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.mariadb.jdbc</groupId>
+    <artifactId>mariadb-java-client</artifactId>
+</dependency>`} />
+
+</div>
+<div data-stack="spring" data-build="maven" data-db="mysql">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-spring-boot-starter</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-flyway</artifactId>
+</dependency>
+<dependency>
+    <groupId>com.mysql</groupId>
+    <artifactId>mysql-connector-j</artifactId>
+</dependency>`} />
+
+</div>
+<div data-stack="quarkus" data-build="gradle" data-db="pg">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("io.quarkus:quarkus-jdbc-postgresql")
+    implementation("io.quarkus:quarkus-flyway")
+}`} />
+
+</div>
+<div data-stack="quarkus" data-build="gradle" data-db="mariadb">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("io.quarkus:quarkus-jdbc-mariadb")
+    implementation("io.quarkus:quarkus-flyway")
+}`} />
+
+</div>
+<div data-stack="quarkus" data-build="gradle" data-db="mysql">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("io.quarkus:quarkus-jdbc-mysql")
+    implementation("io.quarkus:quarkus-flyway")
+}`} />
+
+</div>
+<div data-stack="quarkus" data-build="maven" data-db="pg">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-quarkus</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-jdbc-postgresql</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-flyway</artifactId>
+</dependency>`} />
+
+</div>
+<div data-stack="quarkus" data-build="maven" data-db="mariadb">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-quarkus</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-jdbc-mariadb</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-flyway</artifactId>
+</dependency>`} />
+
+</div>
+<div data-stack="quarkus" data-build="maven" data-db="mysql">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-quarkus</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-jdbc-mysql</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-flyway</artifactId>
+</dependency>`} />
+
+</div>
+<div data-stack="micronaut" data-build="gradle" data-db="pg">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-micronaut:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.3")  // CRITICAL — see "(5) Micronaut needs the AP line"
+
+    implementation("io.micronaut.flyway:micronaut-flyway")
+    implementation("io.micronaut.sql:micronaut-jdbc-hikari")
+    runtimeOnly("org.postgresql:postgresql")
+}`} />
+
+</div>
+<div data-stack="micronaut" data-build="gradle" data-db="mariadb">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-micronaut:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.3")  // CRITICAL — see "(5) Micronaut needs the AP line"
+
+    implementation("io.micronaut.flyway:micronaut-flyway")
+    implementation("io.micronaut.sql:micronaut-jdbc-hikari")
+    runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
+}`} />
+
+</div>
+<div data-stack="micronaut" data-build="gradle" data-db="mysql">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-micronaut:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.3")  // CRITICAL — see "(5) Micronaut needs the AP line"
+
+    implementation("io.micronaut.flyway:micronaut-flyway")
+    implementation("io.micronaut.sql:micronaut-jdbc-hikari")
+    runtimeOnly("com.mysql:mysql-connector-j")
+}`} />
+
+</div>
+<div data-stack="micronaut" data-build="maven" data-db="pg">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-micronaut</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.micronaut.flyway</groupId>
+    <artifactId>micronaut-flyway</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.micronaut.sql</groupId>
+    <artifactId>micronaut-jdbc-hikari</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+    <scope>runtime</scope>
+</dependency>`} />
+
+</div>
+<div data-stack="micronaut" data-build="maven" data-db="mariadb">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-micronaut</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.micronaut.flyway</groupId>
+    <artifactId>micronaut-flyway</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.micronaut.sql</groupId>
+    <artifactId>micronaut-jdbc-hikari</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.mariadb.jdbc</groupId>
+    <artifactId>mariadb-java-client</artifactId>
+    <scope>runtime</scope>
+</dependency>`} />
+
+</div>
+<div data-stack="micronaut" data-build="maven" data-db="mysql">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-micronaut</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.micronaut.flyway</groupId>
+    <artifactId>micronaut-flyway</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.micronaut.sql</groupId>
+    <artifactId>micronaut-jdbc-hikari</artifactId>
+</dependency>
+<dependency>
+    <groupId>com.mysql</groupId>
+    <artifactId>mysql-connector-j</artifactId>
+    <scope>runtime</scope>
+</dependency>`} />
+
+</div>
+<div data-stack="plain" data-build="gradle" data-db="pg">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-core:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("org.flywaydb:flyway-core:11.0.0")
+    implementation("org.postgresql:postgresql:42.7.4")
+}`} />
+
+</div>
+<div data-stack="plain" data-build="gradle" data-db="mariadb">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-core:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("org.flywaydb:flyway-core:11.0.0")
+    implementation("org.mariadb.jdbc:mariadb-java-client:3.4.1")
+}`} />
+
+</div>
+<div data-stack="plain" data-build="gradle" data-db="mysql">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
+    implementation("io.github.zyraz-io:ekbatan-core:0.0.3")
+    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+
+    implementation("org.flywaydb:flyway-core:11.0.0")
+    implementation("com.mysql:mysql-connector-j:9.1.0")
+}`} />
+
+</div>
+<div data-stack="plain" data-build="maven" data-db="pg">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-core</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>org.flywaydb</groupId>
+    <artifactId>flyway-core</artifactId>
+    <version>11.0.0</version>
+</dependency>
+<dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+    <version>42.7.4</version>
+</dependency>`} />
+
+</div>
+<div data-stack="plain" data-build="maven" data-db="mariadb">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-core</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>org.flywaydb</groupId>
+    <artifactId>flyway-core</artifactId>
+    <version>11.0.0</version>
+</dependency>
+<dependency>
+    <groupId>org.mariadb.jdbc</groupId>
+    <artifactId>mariadb-java-client</artifactId>
+    <version>3.4.1</version>
+</dependency>`} />
+
+</div>
+<div data-stack="plain" data-build="maven" data-db="mysql">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <dependencies> -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-core</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-annotation-processor</artifactId>
+    <version>0.0.3</version>
+</dependency>
+<dependency>
+    <groupId>org.flywaydb</groupId>
+    <artifactId>flyway-core</artifactId>
+    <version>11.0.0</version>
+</dependency>
+<dependency>
+    <groupId>com.mysql</groupId>
+    <artifactId>mysql-connector-j</artifactId>
+    <version>9.1.0</version>
+</dependency>`} />
+
+</div>
+
+<div data-stack="spring">
+
+**(1) Override jOOQ version (Spring Boot only).** Spring Boot 4.x's BOM pins jOOQ to 3.19.x; Ekbatan needs 3.20.x. The `runtimeOnly("org.jooq:jooq:3.20.10")` line in the Gradle snippet (or a `<jooq.version>` property override in Maven) forces the newer version on your classpath.
+
+</div>
+
+<div data-stack="micronaut">
+
+**(5) Micronaut needs the annotation-processor line.** The `ekbatan-micronaut` jar ships an `EkbatanStereotypeVisitor` that runs at compile time and lifts your `@Ekbatan*`-annotated classes to `@Singleton`. **Without the `annotationProcessor(...)` line above**, the build succeeds but at runtime Micronaut finds no `BeanDefinition` for your actions / repositories / handlers.
+
+</div>
+
+## 4. Sneak peek — a Model and a Repository
+
+Define a `Wallet` model and a `WalletRepository`. **There's a catch in the repository** — see the red squiggles.
+
+<CodeBlock filename="src/main/java/io/example/wallet/model/Wallet.java" language="java" shadow="yellow" code={`@AutoBuilder
+public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+
+    public final UUID ownerId;
+    public final Currency currency;
+    public final BigDecimal balance;
+
+    Wallet(WalletBuilder builder) {
+        super(builder);
+        this.ownerId  = Validate.notNull(builder.ownerId,  "ownerId");
+        this.currency = Validate.notNull(builder.currency, "currency");
+        this.balance  = Validate.notNull(builder.balance,  "balance");
+    }
+
+    @Override
+    public WalletBuilder copy() {
+        return WalletBuilder.wallet().copyBase(this)
+                .ownerId(ownerId).currency(currency).balance(balance);
+    }
+}`} />
+
+<CodeBlock filename="src/main/java/io/example/wallet/repository/WalletRepository.java" language="java" shadow="orange" errorTokens={["WALLETS", "WalletsRecord", "Wallets"]} code={`@EkbatanRepository
+public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
+
+    public WalletRepository(DatabaseRegistry databaseRegistry) {
+        super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry);
+    }
+
+    @Override
+    public Wallet fromRecord(WalletsRecord r) {
+        return WalletBuilder.wallet()
+                .id(Id.of(Wallet.class, r.getId()))
+                .version(r.getVersion())
+                .state(WalletState.valueOf(r.getState()))
+                .ownerId(r.getOwnerId())
+                .currency(Currency.getInstance(r.getCurrency()))
+                .balance(r.getBalance())
+                .createdDate(r.getCreatedDate())
+                .updatedDate(r.getUpdatedDate())
+                .build();
+    }
+
+    @Override
+    public WalletsRecord toRecord(Wallet w) {
+        return new WalletsRecord(
+                w.id.getValue(), w.version, w.state.name(),
+                w.ownerId, w.currency.getCurrencyCode(), w.balance,
+                w.createdDate, w.updatedDate);
+    }
+}`} />
+
+The repository references `WALLETS`, `Wallets`, and `WalletsRecord` — jOOQ-generated classes that **don't exist yet**. Build fails. Three steps to fix that: add a migration, wire jOOQ codegen, run it. Then the repository compiles.
+
+## 5. Add a Flyway migration
+
+Flyway runs every `V*.sql` in `src/main/resources/db/migration/` on first boot — in numeric order — and the jOOQ codegen plugin (step 6) replays them against a throwaway container to discover the schema. **Ekbatan does NOT bundle V0001/V0002 inside its jars** — you write them, or copy verbatim from any `ekbatan-examples/*-{pg,mariadb,mysql}/src/main/resources/db/migration/`.
+
+Where the framework's outbox tables live differs by dialect. **PostgreSQL** has true schemas inside a database, so V0001 just does `CREATE SCHEMA eventlog` at the top — no separate database-creation migration is needed. **MariaDB and MySQL** treat "schema" and "database" as synonyms, so the `eventlog` namespace must be its own database, created by `V0000__create_eventlog_database.sql` *before* V0001 writes into it.
+
+Files Flyway will run on first boot:
+
+<div data-db="pg">
+
+| File | What it is |
+|---|---|
+| `V0001__eventlog.sql` | the framework's outbox tables — `eventlog.events`, `eventlog.event_notifications` (starts with `CREATE SCHEMA eventlog`) |
+| `V0002__scheduled_tasks.sql` | db-scheduler's required table; the local-event-handler module depends on it |
+| `V0003__wallets.sql` | your domain tables |
+
+</div>
+
+<div data-db="mariadb">
+
+| File | What it is |
+|---|---|
+| `V0000__create_eventlog_database.sql` | makes the `eventlog` database exist before V0001 writes into it |
+| `V0001__eventlog.sql` | the framework's outbox tables — `eventlog.events`, `eventlog.event_notifications` |
+| `V0002__scheduled_tasks.sql` | db-scheduler's required table; the local-event-handler module depends on it |
+| `V0003__wallets.sql` | your domain tables |
+
+</div>
+
+<div data-db="mysql">
+
+| File | What it is |
+|---|---|
+| `V0000__create_eventlog_database.sql` | makes the `eventlog` database exist before V0001 writes into it |
+| `V0001__eventlog.sql` | the framework's outbox tables — `eventlog.events`, `eventlog.event_notifications` |
+| `V0002__scheduled_tasks.sql` | db-scheduler's required table; the local-event-handler module depends on it |
+| `V0003__wallets.sql` | your domain tables |
+
+</div>
+
+### 5a. `V0000__create_eventlog_database.sql` *(MariaDB / MySQL only)*
+
+<div data-db="pg">
+
+Skip this — Postgres uses a schema (created inside V0001) instead of a separate database.
+
+</div>
+
+<div data-db="mariadb">
+
+<CodeBlock filename="src/main/resources/db/migration/V0000__create_eventlog_database.sql" language="sql" shadow="yellow" code={`-- MariaDB / MySQL: "schema" and "database" are synonyms here. Ekbatan's
+-- eventlog tables live in their own database; create it explicitly. This works
+-- only because the connecting user has cross-database GRANTs from the
+-- mariadb_init.sql / mysql_init.sql in step 2.
+CREATE DATABASE IF NOT EXISTS eventlog;`} />
+
+</div>
+
+<div data-db="mysql">
+
+<CodeBlock filename="src/main/resources/db/migration/V0000__create_eventlog_database.sql" language="sql" shadow="orange" code={`-- MariaDB / MySQL: "schema" and "database" are synonyms here. Ekbatan's
+-- eventlog tables live in their own database; create it explicitly. This works
+-- only because the connecting user has cross-database GRANTs from the
+-- mariadb_init.sql / mysql_init.sql in step 2.
+CREATE DATABASE IF NOT EXISTS eventlog;`} />
+
+</div>
+
+### 5b. `V0001__eventlog.sql` — Ekbatan's outbox tables
+
+The framework reads/writes two tables: `eventlog.events` (the outbox itself) and `eventlog.event_notifications` (per-handler delivery rows used by the local-event-handler module).
+
+<div data-db="pg">
+
+<CodeBlock filename="src/main/resources/db/migration/V0001__eventlog.sql" language="sql" shadow="orange" code={`CREATE SCHEMA IF NOT EXISTS eventlog;
+
+CREATE TABLE eventlog.events (
+    id              UUID         PRIMARY KEY,
+    namespace       VARCHAR(255) NOT NULL,
+    action_id       UUID         NOT NULL,
+    action_name     VARCHAR(255) NOT NULL,
+    action_params   JSONB        NOT NULL,
+    started_date    TIMESTAMP    NOT NULL,
+    completion_date TIMESTAMP    NOT NULL,
+    model_id        VARCHAR(255),
+    model_type      VARCHAR(255),
+    event_type      VARCHAR(255),
+    payload         JSONB,
+    event_date      TIMESTAMP    NOT NULL,
+    delivered       BOOLEAN      NOT NULL
+);
+
+CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
+
+CREATE INDEX events_undelivered
+    ON eventlog.events (event_date)
+    WHERE delivered = FALSE;
+
+CREATE TABLE eventlog.event_notifications (
+    id              UUID         PRIMARY KEY,
+    event_id        UUID         NOT NULL,
+    handler_name    VARCHAR(255) NOT NULL,
+    namespace       VARCHAR(255) NOT NULL,
+    action_id       UUID         NOT NULL,
+    action_name     VARCHAR(255) NOT NULL,
+    action_params   JSONB        NOT NULL,
+    started_date    TIMESTAMP    NOT NULL,
+    completion_date TIMESTAMP    NOT NULL,
+    model_id        VARCHAR(255),
+    model_type      VARCHAR(255),
+    event_type      VARCHAR(255) NOT NULL,
+    payload         JSONB,
+    event_date      TIMESTAMP    NOT NULL,
+    state           VARCHAR(24)  NOT NULL,
+    attempts        INT          NOT NULL DEFAULT 0,
+    next_retry_at   TIMESTAMP    NOT NULL,
+    created_date    TIMESTAMP    NOT NULL,
+    updated_date    TIMESTAMP    NOT NULL,
+    UNIQUE (event_id, handler_name)
+);
+
+CREATE INDEX event_notifications_due
+    ON eventlog.event_notifications (next_retry_at)
+    WHERE state IN ('PENDING', 'FAILED');`} />
+
+</div>
+<div data-db="mariadb">
+
+<CodeBlock filename="src/main/resources/db/migration/V0001__eventlog.sql" language="sql" shadow="orange" code={`CREATE TABLE eventlog.events (
+    id              UUID         PRIMARY KEY,
+    namespace       VARCHAR(255) NOT NULL,
+    action_id       UUID         NOT NULL,
+    action_name     VARCHAR(255) NOT NULL,
+    action_params   JSON         NOT NULL,
+    started_date    DATETIME(6)  NOT NULL,
+    completion_date DATETIME(6)  NOT NULL,
+    model_id        VARCHAR(255),
+    model_type      VARCHAR(255),
+    event_type      VARCHAR(255),
+    payload         JSON,
+    event_date      DATETIME(6)  NOT NULL,
+    delivered       BOOLEAN      NOT NULL
+);
+
+CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
+-- MariaDB doesn't support partial indexes; the polling query filters
+-- delivered = FALSE at the predicate level instead.
+CREATE INDEX events_pending_fanout ON eventlog.events (event_date);
+
+CREATE TABLE eventlog.event_notifications (
+    id              UUID         PRIMARY KEY,
+    event_id        UUID         NOT NULL,
+    handler_name    VARCHAR(255) NOT NULL,
+    namespace       VARCHAR(255) NOT NULL,
+    action_id       UUID         NOT NULL,
+    action_name     VARCHAR(255) NOT NULL,
+    action_params   JSON         NOT NULL,
+    started_date    DATETIME(6)  NOT NULL,
+    completion_date DATETIME(6)  NOT NULL,
+    model_id        VARCHAR(255),
+    model_type      VARCHAR(255),
+    event_type      VARCHAR(255) NOT NULL,
+    payload         JSON,
+    event_date      DATETIME(6)  NOT NULL,
+    state           VARCHAR(24)  NOT NULL,
+    attempts        INT          NOT NULL DEFAULT 0,
+    next_retry_at   DATETIME(6)  NOT NULL,
+    created_date    DATETIME(6)  NOT NULL,
+    updated_date    DATETIME(6)  NOT NULL,
+    UNIQUE (event_id, handler_name)
+);
+
+CREATE INDEX event_notifications_due ON eventlog.event_notifications (next_retry_at);`} />
+
+</div>
+<div data-db="mysql">
+
+<CodeBlock filename="src/main/resources/db/migration/V0001__eventlog.sql" language="sql" shadow="orange" code={`CREATE TABLE eventlog.events (
+    id              CHAR(36)     CHARACTER SET ascii NOT NULL,
+    namespace       VARCHAR(255) NOT NULL,
+    action_id       CHAR(36)     CHARACTER SET ascii NOT NULL,
+    action_name     VARCHAR(255) NOT NULL,
+    action_params   JSON         NOT NULL,
+    started_date    DATETIME(6)  NOT NULL,
+    completion_date DATETIME(6)  NOT NULL,
+    model_id        VARCHAR(255),
+    model_type      VARCHAR(255),
+    event_type      VARCHAR(255),
+    payload         JSON,
+    event_date      DATETIME(6)  NOT NULL,
+    delivered       BOOLEAN      NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
+-- MySQL doesn't support partial indexes; the polling query filters
+-- delivered = FALSE at the predicate level instead.
+CREATE INDEX events_pending_fanout ON eventlog.events (event_date);
+
+CREATE TABLE eventlog.event_notifications (
+    id              CHAR(36)     CHARACTER SET ascii NOT NULL,
+    event_id        CHAR(36)     CHARACTER SET ascii NOT NULL,
+    handler_name    VARCHAR(255) NOT NULL,
+    namespace       VARCHAR(255) NOT NULL,
+    action_id       CHAR(36)     CHARACTER SET ascii NOT NULL,
+    action_name     VARCHAR(255) NOT NULL,
+    action_params   JSON         NOT NULL,
+    started_date    DATETIME(6)  NOT NULL,
+    completion_date DATETIME(6)  NOT NULL,
+    model_id        VARCHAR(255),
+    model_type      VARCHAR(255),
+    event_type      VARCHAR(255) NOT NULL,
+    payload         JSON,
+    event_date      DATETIME(6)  NOT NULL,
+    state           VARCHAR(24)  NOT NULL,
+    attempts        INT          NOT NULL DEFAULT 0,
+    next_retry_at   DATETIME(6)  NOT NULL,
+    created_date    DATETIME(6)  NOT NULL,
+    updated_date    DATETIME(6)  NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE (event_id, handler_name)
+);
+
+CREATE INDEX event_notifications_due ON eventlog.event_notifications (next_retry_at);`} />
+
+</div>
+
+### 5c. `V0002__scheduled_tasks.sql` — db-scheduler's table
+
+Required when `ekbatan-distributed-jobs` is on the classpath. The Spring Boot starter pulls it transitively; on Quarkus/Micronaut/Plain Java it's opt-in.
+
+<div data-db="pg">
+
+<CodeBlock filename="src/main/resources/db/migration/V0002__scheduled_tasks.sql" language="sql" shadow="orange" code={`-- db-scheduler's required schema (verbatim from its repo). Required when
+-- ekbatan-distributed-jobs is on the classpath — which the Ekbatan Spring
+-- Boot starter pulls transitively, and which the local-event-handler module
+-- depends on. Ekbatan intentionally steps off its always-TIMESTAMP rule
+-- here because db-scheduler owns this table's schema.
+create table scheduled_tasks (
+    task_name text not null,
+    task_instance text not null,
+    task_data bytea,
+    execution_time timestamp with time zone not null,
+    picked BOOLEAN not null,
+    picked_by text,
+    last_success timestamp with time zone,
+    last_failure timestamp with time zone,
+    consecutive_failures INT,
+    last_heartbeat timestamp with time zone,
+    version BIGINT not null,
+    priority SMALLINT,
+    PRIMARY KEY (task_name, task_instance)
+);
+
+CREATE INDEX execution_time_idx ON scheduled_tasks (execution_time);
+CREATE INDEX last_heartbeat_idx ON scheduled_tasks (last_heartbeat);
+CREATE INDEX priority_execution_time_idx ON scheduled_tasks (priority desc, execution_time asc);`} />
+
+</div>
+
+<div data-db="mariadb">
+
+<CodeBlock filename="src/main/resources/db/migration/V0002__scheduled_tasks.sql" language="sql" shadow="yellow" code={`-- db-scheduler's required schema (verbatim from its repo). Required when
+-- ekbatan-distributed-jobs is on the classpath. db-scheduler owns this
+-- table's schema; the type choices are db-scheduler's, not Ekbatan's.
+create table scheduled_tasks (
+    task_name VARCHAR(100) NOT NULL,
+    task_instance VARCHAR(100) NOT NULL,
+    task_data BLOB,
+    execution_time TIMESTAMP(6) NOT NULL,
+    picked BOOLEAN NOT NULL,
+    picked_by VARCHAR(50),
+    last_success TIMESTAMP(6) NULL,
+    last_failure TIMESTAMP(6) NULL,
+    consecutive_failures INT,
+    last_heartbeat TIMESTAMP(6) NULL,
+    version BIGINT NOT NULL,
+    priority SMALLINT,
+    PRIMARY KEY (task_name, task_instance),
+    INDEX execution_time_idx (execution_time),
+    INDEX last_heartbeat_idx (last_heartbeat),
+    INDEX priority_execution_time_idx (priority, execution_time)
+);`} />
+
+</div>
+
+<div data-db="mysql">
+
+<CodeBlock filename="src/main/resources/db/migration/V0002__scheduled_tasks.sql" language="sql" shadow="orange" code={`-- db-scheduler's required schema (verbatim from its repo). Required when
+-- ekbatan-distributed-jobs is on the classpath. db-scheduler owns this
+-- table's schema; the type choices are db-scheduler's, not Ekbatan's.
+create table scheduled_tasks (
+    task_name VARCHAR(100) NOT NULL,
+    task_instance VARCHAR(100) NOT NULL,
+    task_data BLOB,
+    execution_time TIMESTAMP(6) NOT NULL,
+    picked BOOLEAN NOT NULL,
+    picked_by VARCHAR(50),
+    last_success TIMESTAMP(6) NULL,
+    last_failure TIMESTAMP(6) NULL,
+    consecutive_failures INT,
+    last_heartbeat TIMESTAMP(6) NULL,
+    version BIGINT NOT NULL,
+    priority SMALLINT,
+    PRIMARY KEY (task_name, task_instance),
+    INDEX execution_time_idx (execution_time),
+    INDEX last_heartbeat_idx (last_heartbeat),
+    INDEX priority_execution_time_idx (priority, execution_time)
+);`} />
+
+</div>
+
+### 5d. `V0003__wallets.sql` — your domain tables
+
+
+
+<div data-db="pg">
+
+<CodeBlock filename="src/main/resources/db/migration/V0003__wallets.sql" language="sql" shadow="yellow" code={`CREATE TABLE wallets (
+    id            UUID         PRIMARY KEY,
+    version       BIGINT       NOT NULL,
+    state         VARCHAR(24)  NOT NULL,
+    owner_id      UUID         NOT NULL,
+    currency      CHAR(3)      NOT NULL,
+    balance       NUMERIC(20,4) NOT NULL,
+    created_date  TIMESTAMPTZ  NOT NULL,
+    updated_date  TIMESTAMPTZ  NOT NULL
+);
+CREATE INDEX wallets_owner_id ON wallets (owner_id);`} />
+
+</div>
+<div data-db="mariadb">
+
+<CodeBlock filename="src/main/resources/db/migration/V0003__wallets.sql" language="sql" shadow="orange" code={`CREATE TABLE wallets (
+    id            UUID            PRIMARY KEY,
+    version       BIGINT          NOT NULL,
+    state         VARCHAR(24)     NOT NULL,
+    owner_id      UUID            NOT NULL,
+    currency      CHAR(3)         NOT NULL,
+    balance       DECIMAL(20,4)   NOT NULL,
+    created_date  DATETIME(6)     NOT NULL,
+    updated_date  DATETIME(6)     NOT NULL
+);
+CREATE INDEX wallets_owner_id ON wallets (owner_id);`} />
+
+</div>
+<div data-db="mysql">
+
+<CodeBlock filename="src/main/resources/db/migration/V0003__wallets.sql" language="sql" shadow="yellow" code={`CREATE TABLE wallets (
+    id            CHAR(36)        PRIMARY KEY,
+    version       BIGINT          NOT NULL,
+    state         VARCHAR(24)     NOT NULL,
+    owner_id      CHAR(36)        NOT NULL,
+    currency      CHAR(3)         NOT NULL,
+    balance       DECIMAL(20,4)   NOT NULL,
+    created_date  DATETIME(6)     NOT NULL,
+    updated_date  DATETIME(6)     NOT NULL
+);
+CREATE INDEX wallets_owner_id ON wallets (owner_id);`} />
+
+</div>
+
+On first boot Flyway runs them in order: V0000 (MariaDB/MySQL only) → V0001 (eventlog) → V0002 (scheduled_tasks) → V0003 (wallets). The same set is what jOOQ codegen (step 6) reads against its throwaway container — so what your code references and what the database has are guaranteed to match.
+## 6. Wire jOOQ codegen
+
+Every repository references generated classes (the `WALLETS` constant, the `WalletsRecord` POJO, the `Wallets` table type). jOOQ generates them at build time by reading a real DB schema.
+
+<div data-build="gradle" data-db="pg">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`import org.jooq.meta.jaxb.ForcedType
+
+plugins {
+    id("dev.monosoul.jooq-docker") version "8.0.9"
+}
+
+tasks {
+    generateJooqClasses {
+        // public = your domain tables; eventlog = framework outbox (generated so app code
+        // can query it with type safety — backfill, debugging, custom monitoring).
+        schemas.set(listOf("public", "eventlog"))
+        basePackageName.set("io.example.wallet.generated.jooq")
+        migrationLocations.setFromFilesystem("src/main/resources/db/migration")
+        outputDirectory.set(project.layout.buildDirectory.dir("generated-jooq"))
+        // Defensive: stops Flyway from interpreting literal $\{...} in CHECK/DEFAULT
+        // clauses as missing placeholders during the codegen migration pass.
+        flywayProperties.put("flyway.placeholderReplacement", "false")
+        // Skip generating a record for Flyway's own bookkeeping table.
+        includeFlywayTable.set(false)
+        // 'public' is the default schema → call sites read Tables.WALLETS, not Public.WALLETS.
+        outputSchemaToDefault.add("public")
+        // 'public' is a Java keyword — rename the generated subpackages.
+        schemaToPackageMapping.put("public", "public_schema")
+        schemaToPackageMapping.put("eventlog", "eventlog_schema")
+        usingJavaConfig {
+            // jOOQ defaults: TIMESTAMP→LocalDateTime, JSONB→String. Model.createdDate is
+            // Instant and outbox payloads are ObjectNode — without these, step 7 won't compile.
+            database.withForcedTypes(
+                ForcedType()
+                    .withUserType("java.time.Instant")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.InstantConverter")
+                    .withIncludeTypes("TIMESTAMP")
+                    .withIncludeExpression(".*"),
+                ForcedType()
+                    .withUserType("tools.jackson.databind.node.ObjectNode")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONBObjectNodeConverter")
+                    .withIncludeTypes("JSONB")
+                    .withIncludeExpression(".*"),
+            )
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir(tasks.generateJooqClasses.flatMap { it.outputDirectory })
+        }
+    }
+}`} />
+
+</div>
+<div data-build="gradle" data-db="mariadb">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`import org.jooq.meta.jaxb.ForcedType
+
+plugins {
+    id("dev.monosoul.jooq-docker") version "8.0.9"
+}
+
+// Codegen container: MariaDB connected as root because V0000 needs CREATE DATABASE privilege.
+// The wallet user only has access to its own DB; the runtime mariadb_init.sql grants
+// cross-DB rights at runtime, but the codegen container doesn't run that script.
+jooq {
+    withContainer {
+        image {
+            name = "mariadb:11.8"
+            envVars = mapOf(
+                "MARIADB_ROOT_PASSWORD" to "root",
+                "MARIADB_DATABASE" to "wallet",
+            )
+        }
+        db {
+            username = "root"
+            password = "root"
+            name = "wallet"
+            port = 3306
+            jdbc {
+                schema = "jdbc:mariadb"
+                driverClassName = "org.mariadb.jdbc.Driver"
+            }
+        }
+    }
+}
+
+tasks {
+    generateJooqClasses {
+        // MariaDB has no schemas (schema = database). Only the 'wallet' DB is generated;
+        // the eventlog tables are accessed via the framework's own field constants.
+        schemas.set(listOf("wallet"))
+        basePackageName.set("io.example.wallet.generated.jooq")
+        migrationLocations.setFromFilesystem("src/main/resources/db/migration")
+        outputDirectory.set(project.layout.buildDirectory.dir("generated-jooq"))
+        flywayProperties.put("flyway.placeholderReplacement", "false")
+        includeFlywayTable.set(false)
+        // 'wallet' is the default schema → call sites read Tables.WALLETS, not Wallet.WALLETS.
+        outputSchemaToDefault.add("wallet")
+        usingJavaConfig {
+            // jOOQ defaults: DATETIME/TIMESTAMP→LocalDateTime, JSON→String. Model.createdDate
+            // is Instant and outbox payloads are ObjectNode — without these, step 7 won't compile.
+            database.withForcedTypes(
+                ForcedType()
+                    .withUserType("java.time.Instant")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.InstantConverter")
+                    .withIncludeTypes("(?i:DATETIME|TIMESTAMP)")
+                    .withIncludeExpression(".*"),
+                // Note: no 'B' in JSONObjectNodeConverter (vs. Postgres's JSONBObjectNodeConverter).
+                ForcedType()
+                    .withUserType("tools.jackson.databind.node.ObjectNode")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter")
+                    .withIncludeTypes("(?i:JSON)")
+                    .withIncludeExpression(".*"),
+                // No UUID converter — MariaDB 10.7+ has a native UUID type that jOOQ maps
+                // to java.util.UUID directly. Contrast with MySQL below.
+            )
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir(tasks.generateJooqClasses.flatMap { it.outputDirectory })
+        }
+    }
+}`} />
+
+</div>
+<div data-build="gradle" data-db="mysql">
+
+<CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`import org.jooq.meta.jaxb.ForcedType
+
+plugins {
+    id("dev.monosoul.jooq-docker") version "8.0.9"
+}
+
+// Codegen container: MySQL connected as root because V0000 needs CREATE DATABASE privilege.
+// The wallet user only has access to its own DB; the runtime mysql_init.sql grants
+// cross-DB rights at runtime, but the codegen container doesn't run that script.
+jooq {
+    withContainer {
+        image {
+            name = "mysql:9.4.0"
+            envVars = mapOf(
+                "MYSQL_ROOT_PASSWORD" to "root",
+                "MYSQL_DATABASE" to "wallet",
+            )
+        }
+        db {
+            username = "root"
+            password = "root"
+            name = "wallet"
+            port = 3306
+            jdbc {
+                schema = "jdbc:mysql"
+                driverClassName = "com.mysql.cj.jdbc.Driver"
+            }
+        }
+    }
+}
+
+tasks {
+    generateJooqClasses {
+        // MySQL has no schemas (schema = database). Only the 'wallet' DB is generated;
+        // the eventlog tables are accessed via the framework's own field constants.
+        schemas.set(listOf("wallet"))
+        basePackageName.set("io.example.wallet.generated.jooq")
+        migrationLocations.setFromFilesystem("src/main/resources/db/migration")
+        outputDirectory.set(project.layout.buildDirectory.dir("generated-jooq"))
+        flywayProperties.put("flyway.placeholderReplacement", "false")
+        includeFlywayTable.set(false)
+        outputSchemaToDefault.add("wallet")
+        usingJavaConfig {
+            database.withForcedTypes(
+                ForcedType()
+                    .withUserType("java.time.Instant")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.InstantConverter")
+                    .withIncludeTypes("(?i:DATETIME|TIMESTAMP)")
+                    .withIncludeExpression(".*"),
+                ForcedType()
+                    .withUserType("tools.jackson.databind.node.ObjectNode")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter")
+                    .withIncludeTypes("(?i:JSON)")
+                    .withIncludeExpression(".*"),
+                // MySQL has no native UUID type — UUID columns are CHAR(36) ASCII. The converter
+                // maps them back to java.util.UUID so app code stays dialect-agnostic. Scope to
+                // 'id' / '*_id' columns so unrelated CHAR(36) columns aren't bound to UUID.
+                ForcedType()
+                    .withUserType("java.util.UUID")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.mysql.UuidStringConverter")
+                    .withIncludeTypes("CHAR\\\\(36\\\\)")
+                    .withIncludeExpression(".*\\\\.id|.*_id"),
+            )
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir(tasks.generateJooqClasses.flatMap { it.outputDirectory })
+        }
+    }
+}`} />
+
+</div>
+<div data-build="maven" data-db="pg">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <build><plugins> -->
+<plugin>
+    <groupId>org.jooq</groupId>
+    <artifactId>jooq-codegen-maven</artifactId>
+    <version>3.20.10</version>
+    <executions><execution><goals><goal>generate</goal></goals></execution></executions>
+    <configuration>
+        <jdbc>
+            <driver>org.postgresql.Driver</driver>
+            <url>jdbc:postgresql://localhost:5432/wallet</url>
+            <user>wallet</user>
+            <password>wallet</password>
+        </jdbc>
+        <generator>
+            <database>
+                <name>org.jooq.meta.postgres.PostgresDatabase</name>
+                <includes>.*</includes>
+                <excludes>flyway_schema_history</excludes>
+                <!-- public = your domain tables; eventlog = framework outbox (generated so
+                     app code can query it). outputSchemaToDefault keeps SQL refs unqualified
+                     (INSERT INTO wallets, not public_schema.wallets). 'public' is renamed
+                     because it's a Java keyword and can't be a package name. -->
+                <schemata>
+                    <schema>
+                        <inputSchema>public</inputSchema>
+                        <outputSchema>public_schema</outputSchema>
+                        <outputSchemaToDefault>true</outputSchemaToDefault>
+                    </schema>
+                    <schema>
+                        <inputSchema>eventlog</inputSchema>
+                        <outputSchema>eventlog_schema</outputSchema>
+                    </schema>
+                </schemata>
+                <!-- jOOQ defaults: TIMESTAMP→LocalDateTime, JSONB→String. Model.createdDate
+                     is Instant and outbox payloads are ObjectNode — without these, step 7
+                     won't compile. -->
+                <forcedTypes>
+                    <forcedType>
+                        <userType>java.time.Instant</userType>
+                        <converter>io.ekbatan.core.persistence.jooq.converter.InstantConverter</converter>
+                        <includeTypes>TIMESTAMP</includeTypes>
+                        <includeExpression>.*</includeExpression>
+                    </forcedType>
+                    <forcedType>
+                        <userType>tools.jackson.databind.node.ObjectNode</userType>
+                        <converter>io.ekbatan.core.persistence.jooq.converter.JSONBObjectNodeConverter</converter>
+                        <includeTypes>JSONB</includeTypes>
+                        <includeExpression>.*</includeExpression>
+                    </forcedType>
+                </forcedTypes>
+            </database>
+            <target>
+                <packageName>io.example.wallet.generated.jooq</packageName>
+            </target>
+        </generator>
+    </configuration>
+</plugin>`} />
+
+</div>
+<div data-build="maven" data-db="mariadb">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <build><plugins> -->
+<plugin>
+    <groupId>org.jooq</groupId>
+    <artifactId>jooq-codegen-maven</artifactId>
+    <version>3.20.10</version>
+    <executions><execution><goals><goal>generate</goal></goals></execution></executions>
+    <configuration>
+        <jdbc>
+            <driver>org.mariadb.jdbc.Driver</driver>
+            <url>jdbc:mariadb://localhost:3306/wallet</url>
+            <user>wallet</user>
+            <password>wallet</password>
+        </jdbc>
+        <generator>
+            <database>
+                <name>org.jooq.meta.mariadb.MariaDBDatabase</name>
+                <includes>.*</includes>
+                <!-- Skip Flyway's bookkeeping table and db-scheduler's table (the framework
+                     accesses scheduled_tasks via its own field constants). -->
+                <excludes>flyway_schema_history|scheduled_tasks</excludes>
+                <!-- MariaDB has no schemas (schema = database). Single-database codegen on
+                     'wallet'; outputSchemaToDefault keeps SQL refs unqualified. -->
+                <inputSchema>wallet</inputSchema>
+                <outputSchemaToDefault>true</outputSchemaToDefault>
+                <!-- jOOQ defaults: DATETIME/TIMESTAMP→LocalDateTime, JSON→String. Model.createdDate
+                     is Instant and outbox payloads are ObjectNode — without these, step 7 won't
+                     compile. Note: JSONObjectNodeConverter has no 'B' (vs. Postgres's JSONB). -->
+                <forcedTypes>
+                    <forcedType>
+                        <userType>java.time.Instant</userType>
+                        <converter>io.ekbatan.core.persistence.jooq.converter.InstantConverter</converter>
+                        <includeTypes>(?i:DATETIME|TIMESTAMP)</includeTypes>
+                        <includeExpression>.*</includeExpression>
+                    </forcedType>
+                    <forcedType>
+                        <userType>tools.jackson.databind.node.ObjectNode</userType>
+                        <converter>io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter</converter>
+                        <includeTypes>(?i:JSON)</includeTypes>
+                        <includeExpression>.*</includeExpression>
+                    </forcedType>
+                    <!-- No UUID converter — MariaDB 10.7+ has a native UUID type that jOOQ
+                         maps to java.util.UUID directly. Contrast with MySQL below. -->
+                </forcedTypes>
+            </database>
+            <target>
+                <packageName>io.example.wallet.generated.jooq</packageName>
+            </target>
+        </generator>
+    </configuration>
+</plugin>`} />
+
+</div>
+<div data-build="maven" data-db="mysql">
+
+<CodeBlock filename="pom.xml" language="xml" shadow="default" code={`<!-- inside <build><plugins> -->
+<plugin>
+    <groupId>org.jooq</groupId>
+    <artifactId>jooq-codegen-maven</artifactId>
+    <version>3.20.10</version>
+    <executions><execution><goals><goal>generate</goal></goals></execution></executions>
+    <configuration>
+        <jdbc>
+            <driver>com.mysql.cj.jdbc.Driver</driver>
+            <url>jdbc:mysql://localhost:3306/wallet</url>
+            <user>wallet</user>
+            <password>wallet</password>
+        </jdbc>
+        <generator>
+            <database>
+                <name>org.jooq.meta.mysql.MySQLDatabase</name>
+                <includes>.*</includes>
+                <excludes>flyway_schema_history|scheduled_tasks</excludes>
+                <inputSchema>wallet</inputSchema>
+                <outputSchemaToDefault>true</outputSchemaToDefault>
+                <forcedTypes>
+                    <forcedType>
+                        <userType>java.time.Instant</userType>
+                        <converter>io.ekbatan.core.persistence.jooq.converter.InstantConverter</converter>
+                        <includeTypes>(?i:DATETIME|TIMESTAMP)</includeTypes>
+                        <includeExpression>.*</includeExpression>
+                    </forcedType>
+                    <forcedType>
+                        <userType>tools.jackson.databind.node.ObjectNode</userType>
+                        <converter>io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter</converter>
+                        <includeTypes>(?i:JSON)</includeTypes>
+                        <includeExpression>.*</includeExpression>
+                    </forcedType>
+                    <!-- MySQL has no native UUID type — every UUID column is CHAR(36) ASCII.
+                         UuidStringConverter maps back to java.util.UUID. Scope to id / *_id
+                         columns so unrelated CHAR(36) columns aren't bound to UUID. -->
+                    <forcedType>
+                        <userType>java.util.UUID</userType>
+                        <converter>io.ekbatan.core.persistence.jooq.converter.mysql.UuidStringConverter</converter>
+                        <includeTypes>CHAR\\(36\\)</includeTypes>
+                        <includeExpression>.*\\.id|.*_id</includeExpression>
+                    </forcedType>
+                </forcedTypes>
+            </database>
+            <target>
+                <packageName>io.example.wallet.generated.jooq</packageName>
+            </target>
+        </generator>
+    </configuration>
+</plugin>`} />
+
+</div>
+
+Run it once: `./gradlew generateJooqClasses` (Gradle) or `./mvnw generate-sources` (Maven). The generated classes appear under `build/generated/sources/jooq/` (Gradle) or `target/generated-sources/jooq/` (Maven), with package `io.example.wallet.generated.jooq.*`.
+
+## 7. The repository compiles now
+
+Same file as before — but `WALLETS`, `Wallets`, and `WalletsRecord` now exist:
+
+<CodeBlock filename="src/main/java/io/example/wallet/repository/WalletRepository.java" language="java" shadow="yellow" code={`@EkbatanRepository
+public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wallets, UUID> {
+
+    public WalletRepository(DatabaseRegistry databaseRegistry) {
+        super(Wallet.class, WALLETS, WALLETS.ID, databaseRegistry);
+    }
+
+    @Override
+    public Wallet fromRecord(WalletsRecord r) {
+        return WalletBuilder.wallet()
+                .id(Id.of(Wallet.class, r.getId()))
+                .version(r.getVersion())
+                .state(WalletState.valueOf(r.getState()))
+                .ownerId(r.getOwnerId())
+                .currency(Currency.getInstance(r.getCurrency()))
+                .balance(r.getBalance())
+                .createdDate(r.getCreatedDate())
+                .updatedDate(r.getUpdatedDate())
+                .build();
+    }
+
+    @Override
+    public WalletsRecord toRecord(Wallet w) {
+        return new WalletsRecord(
+                w.id.getValue(), w.version, w.state.name(),
+                w.ownerId, w.currency.getCurrencyCode(), w.balance,
+                w.createdDate, w.updatedDate);
+    }
+}`} />
+
+Build (`./gradlew compileJava` / `./mvnw compile`) succeeds. No more squiggles.
+
+## 8. Configure the DB connection
+
+The framework reads connection coordinates from `ekbatan.sharding.*`. Each shard **member** (a physical database) carries three pools:
+
+- **`primaryConfig`** — general request/transaction work, sized for HTTP parallelism (~20 conns).
+- **`jobsConfig`** — the distributed-jobs runtime, kept separate (~5 conns) so a job storm can't starve user requests.
+- **`lockConfig`** — backs the keyed-lock provider (~30 conns, one pinned per active lease; `leakDetectionThreshold: 0` because leases may legitimately be held for a while).
+
+`defaultShard` is required — the framework routes there when no sharding strategy commits. `ekbatan.namespace` is required too; it scopes events/notifications when multiple Ekbatan apps share a database.
+
+Note what's **NOT** here: no `spring.datasource.*`, no `datasources.default`, no `quarkus.datasource.jdbc.url`. The framework owns its pools directly; your stack's datasource auto-config is intentionally **not used** — so Flyway and Ekbatan don't argue over connection coords. Step 10 bridges Flyway to the same `ekbatan.sharding.*` block.
+
+<div data-stack="spring" data-db="pg">
+
+<CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="orange" code={`ekbatan:
+    namespace: example.wallet
+    sharding:
+      defaultShard:
+        group: 0
+        member: 0
+      groups:
+        - group: 0
+          name: default
+          members:
+            - member: 0
+              name: default
+              configs:
+                primaryConfig:
+                  jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                  username: wallet
+                  password: wallet
+                  driverClassName: org.postgresql.Driver
+                  maximumPoolSize: 20
+                jobsConfig:
+                  jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                  username: wallet
+                  password: wallet
+                  driverClassName: org.postgresql.Driver
+                  maximumPoolSize: 5
+                lockConfig:
+                  jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                  username: wallet
+                  password: wallet
+                  driverClassName: org.postgresql.Driver
+                  maximumPoolSize: 30
+                  leakDetectionThreshold: 0
+    local-event-handler:
+      handling:
+        enabled: true
+`} />
+
+</div>
+<div data-stack="spring" data-db="mariadb">
+
+<CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="yellow" code={`
+  ekbatan:
+    namespace: example.wallet
+    sharding:
+      defaultShard:
+        group: 0
+        member: 0
+      groups:
+        - group: 0
+          name: default
+          members:
+            - member: 0
+              name: default
+              configs:
+                primaryConfig:
+                  jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                  username: wallet
+                  password: wallet
+                  driverClassName: org.mariadb.jdbc.Driver
+                  maximumPoolSize: 20
+                jobsConfig:
+                  jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                  username: wallet
+                  password: wallet
+                  driverClassName: org.mariadb.jdbc.Driver
+                  maximumPoolSize: 5
+                lockConfig:
+                  jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                  username: wallet
+                  password: wallet
+                  driverClassName: org.mariadb.jdbc.Driver
+                  maximumPoolSize: 30
+                  leakDetectionThreshold: 0
+    local-event-handler:
+      handling:
+        enabled: true
+`} />
+
+</div>
+<div data-stack="spring" data-db="mysql">
+
+<CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="orange" code={`
+  ekbatan:
+    namespace: example.wallet
+    sharding:
+      defaultShard:
+        group: 0
+        member: 0
+      groups:
+        - group: 0
+          name: default
+          members:
+            - member: 0
+              name: default
+              configs:
+                # MySQL: serverTimezone=UTC keeps DATETIME round-tripping consistent with
+                # Ekbatan's UTC-everywhere contract (driver default would shift by host TZ).
+                primaryConfig:
+                  jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                  username: wallet
+                  password: wallet
+                  driverClassName: com.mysql.cj.jdbc.Driver
+                  maximumPoolSize: 20
+                jobsConfig:
+                  jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                  username: wallet
+                  password: wallet
+                  driverClassName: com.mysql.cj.jdbc.Driver
+                  maximumPoolSize: 5
+                lockConfig:
+                  jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                  username: wallet
+                  password: wallet
+                  driverClassName: com.mysql.cj.jdbc.Driver
+                  maximumPoolSize: 30
+                  leakDetectionThreshold: 0
+    local-event-handler:
+      handling:
+        enabled: true
+`} />
+
+</div>
+<div data-stack="quarkus" data-db="pg">
+
+<CodeBlock filename="src/main/resources/application.properties" language="properties" shadow="default" code={`ekbatan.namespace=example.wallet
+ekbatan.local-event-handler.handling.enabled=true
+
+ekbatan.sharding.defaultShard.group=0
+ekbatan.sharding.defaultShard.member=0
+ekbatan.sharding.groups[0].group=0
+ekbatan.sharding.groups[0].name=default
+ekbatan.sharding.groups[0].members[0].member=0
+ekbatan.sharding.groups[0].members[0].name=default
+
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl=jdbc:postgresql://localhost:5432/wallet
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username=wallet
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password=wallet
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.driverClassName=org.postgresql.Driver
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize=20
+
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl=jdbc:postgresql://localhost:5432/wallet
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username=wallet
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password=wallet
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.driverClassName=org.postgresql.Driver
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize=5
+
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.jdbcUrl=jdbc:postgresql://localhost:5432/wallet
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.username=wallet
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.password=wallet
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.driverClassName=org.postgresql.Driver
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.maximumPoolSize=30
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.leakDetectionThreshold=0
+
+# Quarkus needs db-kind to bind a Flyway bean. URL/user/pass are intentionally NOT set —
+# EkbatanShardFlywayCustomizer (step 9) overrides them from ekbatan.sharding.* at startup.
+quarkus.datasource.db-kind=postgresql
+quarkus.flyway.migrate-at-start=true`} />
+
+</div>
+<div data-stack="quarkus" data-db="mariadb">
+
+<CodeBlock filename="src/main/resources/application.properties" language="properties" shadow="default" code={`ekbatan.namespace=example.wallet
+ekbatan.local-event-handler.handling.enabled=true
+
+ekbatan.sharding.defaultShard.group=0
+ekbatan.sharding.defaultShard.member=0
+ekbatan.sharding.groups[0].group=0
+ekbatan.sharding.groups[0].name=default
+ekbatan.sharding.groups[0].members[0].member=0
+ekbatan.sharding.groups[0].members[0].name=default
+
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl=jdbc:mariadb://localhost:3306/wallet
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username=wallet
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password=wallet
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.driverClassName=org.mariadb.jdbc.Driver
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize=20
+
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl=jdbc:mariadb://localhost:3306/wallet
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username=wallet
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password=wallet
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.driverClassName=org.mariadb.jdbc.Driver
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize=5
+
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.jdbcUrl=jdbc:mariadb://localhost:3306/wallet
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.username=wallet
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.password=wallet
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.driverClassName=org.mariadb.jdbc.Driver
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.maximumPoolSize=30
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.leakDetectionThreshold=0
+
+# Quarkus needs db-kind to bind a Flyway bean. URL/user/pass are intentionally NOT set —
+# EkbatanShardFlywayCustomizer (step 9) overrides them from ekbatan.sharding.* at startup.
+quarkus.datasource.db-kind=mariadb
+quarkus.flyway.migrate-at-start=true`} />
+
+</div>
+<div data-stack="quarkus" data-db="mysql">
+
+<CodeBlock filename="src/main/resources/application.properties" language="properties" shadow="default" code={`ekbatan.namespace=example.wallet
+ekbatan.local-event-handler.handling.enabled=true
+
+ekbatan.sharding.defaultShard.group=0
+ekbatan.sharding.defaultShard.member=0
+ekbatan.sharding.groups[0].group=0
+ekbatan.sharding.groups[0].name=default
+ekbatan.sharding.groups[0].members[0].member=0
+ekbatan.sharding.groups[0].members[0].name=default
+
+# MySQL: serverTimezone=UTC keeps DATETIME round-tripping consistent with
+# Ekbatan's UTC-everywhere contract (driver default would shift by host TZ).
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl=jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username=wallet
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password=wallet
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.driverClassName=com.mysql.cj.jdbc.Driver
+ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize=20
+
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl=jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username=wallet
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password=wallet
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.driverClassName=com.mysql.cj.jdbc.Driver
+ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize=5
+
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.jdbcUrl=jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.username=wallet
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.password=wallet
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.driverClassName=com.mysql.cj.jdbc.Driver
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.maximumPoolSize=30
+ekbatan.sharding.groups[0].members[0].configs.lockConfig.leakDetectionThreshold=0
+
+# Quarkus needs db-kind to bind a Flyway bean. URL/user/pass are intentionally NOT set —
+# EkbatanShardFlywayCustomizer (step 9) overrides them from ekbatan.sharding.* at startup.
+quarkus.datasource.db-kind=mysql
+quarkus.flyway.migrate-at-start=true`} />
+
+</div>
+<div data-stack="micronaut" data-db="pg">
+
+<CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="yellow" code={`
+  ekbatan:
+    namespace: example.wallet
+    sharding:
+      defaultShard:
+        group: 0
+        member: 0
+      groups:
+        - group: 0
+          name: default
+          members:
+            - member: 0
+              name: default
+              configs:
+                primaryConfig:
+                  jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                  username: wallet
+                  password: wallet
+                  # Declare driverClassName explicitly: Micronaut's Hikari init doesn't always
+                  # discover the JDBC Driver via the SPI when the JVM is started by Gradle's worker.
+                  driverClassName: org.postgresql.Driver
+                  maximumPoolSize: 20
+                jobsConfig:
+                  jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                  username: wallet
+                  password: wallet
+                  driverClassName: org.postgresql.Driver
+                  maximumPoolSize: 5
+                lockConfig:
+                  jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                  username: wallet
+                  password: wallet
+                  driverClassName: org.postgresql.Driver
+                  maximumPoolSize: 30
+                  leakDetectionThreshold: 0
+    local-event-handler:
+      handling:
+        enabled: true
+
+`} />
+
+</div>
+<div data-stack="micronaut" data-db="mariadb">
+
+<CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="orange" code={`
+  ekbatan:
+    namespace: example.wallet
+    sharding:
+      defaultShard:
+        group: 0
+        member: 0
+      groups:
+        - group: 0
+          name: default
+          members:
+            - member: 0
+              name: default
+              configs:
+                primaryConfig:
+                  jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                  username: wallet
+                  password: wallet
+                  driverClassName: org.mariadb.jdbc.Driver
+                  maximumPoolSize: 20
+                jobsConfig:
+                  jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                  username: wallet
+                  password: wallet
+                  driverClassName: org.mariadb.jdbc.Driver
+                  maximumPoolSize: 5
+                lockConfig:
+                  jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                  username: wallet
+                  password: wallet
+                  driverClassName: org.mariadb.jdbc.Driver
+                  maximumPoolSize: 30
+                  leakDetectionThreshold: 0
+    local-event-handler:
+      handling:
+        enabled: true
+
+`} />
+
+</div>
+<div data-stack="micronaut" data-db="mysql">
+
+<CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="yellow" code={`
+  ekbatan:
+    namespace: example.wallet
+    sharding:
+      defaultShard:
+        group: 0
+        member: 0
+      groups:
+        - group: 0
+          name: default
+          members:
+            - member: 0
+              name: default
+              configs:
+                # MySQL: serverTimezone=UTC keeps DATETIME round-tripping consistent with
+                # Ekbatan's UTC-everywhere contract (driver default would shift by host TZ).
+                primaryConfig:
+                  jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                  username: wallet
+                  password: wallet
+                  driverClassName: com.mysql.cj.jdbc.Driver
+                  maximumPoolSize: 20
+                jobsConfig:
+                  jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                  username: wallet
+                  password: wallet
+                  driverClassName: com.mysql.cj.jdbc.Driver
+                  maximumPoolSize: 5
+                lockConfig:
+                  jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                  username: wallet
+                  password: wallet
+                  driverClassName: com.mysql.cj.jdbc.Driver
+                  maximumPoolSize: 30
+                  leakDetectionThreshold: 0
+    local-event-handler:
+      handling:
+        enabled: true
+
+`} />
+
+</div>
+<div data-stack="plain">
+
+Configure the `DatabaseRegistry` programmatically — there's no DI container to read application config from. See [Plain Java wiring](/reference/di/without-di/) for the full builder.
+
+</div>
+## 9. Wire Flyway to the Ekbatan sharding config
+
+The framework reads connection coordinates from <code class="font-mono text-xs bg-yellow px-1">ekbatan.sharding.*</code>. Flyway, when auto-configured by your stack, would otherwise read them from its own keys (`spring.datasource.*`, `quarkus.datasource.*`, `flyway.datasources.default.*`). Without a bridge, you'd duplicate the connection coords in two places. Each stack has its own way to point Flyway at the shard config Ekbatan already owns — a typed bean (Spring/Micronaut) or a CDI customizer (Quarkus).
+
+<div data-stack="spring">
+
+Spring Boot's `FlywayAutoConfiguration` is gated on `@ConditionalOnBean(DataSource.class)`. Produce the `DataSource` programmatically from `ShardingConfig` AND scope it to Flyway only via `@FlywayDataSource` — Spring won't pick it up as your app's main DataSource (Ekbatan keeps owning that), and you don't write a separate customizer (the bean IS the customization).
+
+<CodeBlock filename="src/main/java/io/example/wallet/startup/EkbatanShardFlywayDataSource.java" language="java" shadow="yellow" code={`import com.zaxxer.hikari.HikariDataSource;
+import io.ekbatan.core.shard.config.ShardingConfig;
+import javax.sql.DataSource;
+import org.springframework.boot.flyway.autoconfigure.FlywayDataSource;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class EkbatanShardFlywayDataSource {
+
+    @Bean
+    @FlywayDataSource
+    public DataSource flywayDataSource(ShardingConfig shardingConfig) {
+        var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
+        var ds = new HikariDataSource();
+        ds.setJdbcUrl(primary.jdbcUrl);
+        ds.setUsername(primary.username);
+        ds.setPassword(primary.password);
+        ds.setMaximumPoolSize(2);
+        ds.setPoolName("flyway-migrations");
+        return ds;
+    }
+}`} />
+
+</div>
+
+<div data-stack="quarkus">
+
+Quarkus discovers any CDI bean implementing `FlywayConfigurationCustomizer` and calls `customize(...)` after applying `quarkus.flyway.*` / `quarkus.datasource.*` but before building the `Flyway` instance. The customizer overrides whatever datasource Quarkus prepared.
+
+<CodeBlock filename="src/main/java/io/example/wallet/startup/EkbatanShardFlywayCustomizer.java" language="java" shadow="orange" code={`import io.ekbatan.core.shard.config.ShardingConfig;
+import io.quarkus.flyway.FlywayConfigurationCustomizer;
+import jakarta.enterprise.context.ApplicationScoped;
+import org.flywaydb.core.api.configuration.FluentConfiguration;
+
+@ApplicationScoped
+public class EkbatanShardFlywayCustomizer implements FlywayConfigurationCustomizer {
+
+    private final ShardingConfig shardingConfig;
+
+    public EkbatanShardFlywayCustomizer(ShardingConfig shardingConfig) {
+        this.shardingConfig = shardingConfig;
+    }
+
+    @Override
+    public void customize(FluentConfiguration configuration) {
+        var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
+        configuration.dataSource(primary.jdbcUrl, primary.username, primary.password);
+    }
+}`} />
+
+</div>
+
+<div data-stack="micronaut">
+
+The path via `micronaut-flyway`'s `FlywayConfigurationCustomizer` works but requires a `flyway.datasources.default` block in `application.yml` with `${ekbatan.sharding...}` placeholder interpolation — duplicating the source of truth. A cleaner option: skip the YAML block entirely and construct `Flyway` directly from the typed `ShardingConfig` in a `@Context` bean.
+
+`@Context` makes Micronaut instantiate it eagerly at startup — before lazy `@Singleton` beans (like Ekbatan's `DatabaseRegistry`) ever touch the database. The constructor calls `.migrate()` synchronously, guaranteeing migrations are applied first.
+
+<CodeBlock filename="src/main/java/io/example/wallet/startup/EkbatanFlywayMigrator.java" language="java" shadow="yellow" code={`import io.ekbatan.core.shard.config.ShardingConfig;
+import io.micronaut.context.annotation.Context;
+import org.flywaydb.core.Flyway;
+
+@Context
+public class EkbatanFlywayMigrator {
+
+    public EkbatanFlywayMigrator(ShardingConfig shardingConfig) {
+        var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
+        Flyway.configure()
+                .dataSource(primary.jdbcUrl, primary.username, primary.password)
+                .load()
+                .migrate();
+    }
+}`} />
+
+</div>
+
+<div data-stack="plain">
+
+No DI container, no customizer hook. Configure Flyway programmatically with the same `ShardingConfig` primary you'll hand to `DatabaseRegistry`. See [Plain Java wiring](/reference/di/without-di/) for the full bootstrap.
+
+</div>
+
+## 10. Example Action
+
+An **Action** is Ekbatan's unit of work — it encapsulates a state change *and* the domain events that describe it, in a single atomic transaction. The row update and the event row commit together (or neither does). This is where the framework's dual-write guarantee originates.
+
+<CodeBlock filename="src/main/java/io/example/wallet/action/WalletDepositMoneyAction.java" language="java" shadow="orange" code={`
+  package io.example.wallet.action;
+
+  import io.ekbatan.core.action.Action;
+  import io.ekbatan.core.domain.Id;
+  import io.ekbatan.di.EkbatanAction;
+  import io.example.wallet.model.Wallet;
+  import io.example.wallet.repository.WalletRepository;
+  import java.math.BigDecimal;
+  import java.security.Principal;
+  import java.time.Clock;
+
+  @EkbatanAction
+  public class WalletDepositMoneyAction extends Action<WalletDepositMoneyAction.Params, Wallet> {
+
+      public record Params(Id<Wallet> walletId, BigDecimal amount, String recipient) {}
+
+      private final WalletRepository walletRepository;
+
+      public WalletDepositMoneyAction(Clock clock, WalletRepository walletRepository) {
+          super(clock);
+          this.walletRepository = walletRepository;
+      }
+
+      @Override
+      protected Wallet perform(Principal principal, Params params) {
+          final var wallet = walletRepository.getById(params.walletId().getValue());
+          final var updated = wallet.deposit(params.amount());
+          return plan().update(updated);
+      }
+  }
+`} />
+
+What's happening inside `perform`:
+- **Read** the wallet through the typed repository.
+- `wallet.deposit(amount)` returns a new immutable `Wallet` with the next balance *and* a `WalletMoneyDepositedEvent` attached via `.withEvent(...)` — the model itself owns the invariant "balance changed ⇒ event emitted".
+- `plan().update(updated)` enqueues the row update for the framework's persister. On commit, both the wallet row and the event row land atomically.
+
+The `recipient` parameter rides on the Action's `Params`, *not* the domain event payload — that keeps notification-routing concerns out of the event so downstream consumers (CDC streams, projections) don't carry knowledge they don't need. Event handlers read it back from `EventEnvelope.actionParams` (see the next section).
+
+## 11. Example Event Handler
+
+With `ekbatan-local-event-handler` on the classpath (the Spring Boot starter pulls it transitively; for Quarkus/Micronaut it's an explicit `implementation(...)`), the framework polls the outbox, materializes per-handler delivery rows in `event_notifications`, and invokes your `@EkbatanEventHandler` beans on a cluster-exclusive worker.
+
+<CodeBlock filename="src/main/java/io/example/wallet/handler/WalletMoneyDepositedEventHandler.java" language="java" shadow="yellow" code={`
+  package io.example.wallet.handler;
+
+  import io.ekbatan.core.action.ActionExecutor;
+  import io.ekbatan.di.EkbatanEventHandler;
+  import io.ekbatan.events.localeventhandler.EventEnvelope;
+  import io.ekbatan.events.localeventhandler.EventHandler;
+  import io.example.wallet.action.CreateNotificationAction;
+  import io.example.wallet.model.NotificationKind;
+  import io.example.wallet.model.events.WalletMoneyDepositedEvent;
+  import java.util.UUID;
+
+  @EkbatanEventHandler
+  public class WalletMoneyDepositedEventHandler implements EventHandler<WalletMoneyDepositedEvent> {
+
+      private final ActionExecutor executor;
+
+      public WalletMoneyDepositedEventHandler(ActionExecutor executor) {
+          this.executor = executor;
+      }
+
+      @Override
+      public String name() {
+          // Cluster-stable identifier; stored in event_notifications.handler_name.
+          return "wallet-money-deposited-notification";
+      }
+
+      @Override
+      public Class<WalletMoneyDepositedEvent> eventType() {
+          return WalletMoneyDepositedEvent.class;
+      }
+
+      @Override
+      public void handle(EventEnvelope<WalletMoneyDepositedEvent> envelope) {
+          final var walletId = UUID.fromString(envelope.event.modelId);
+          final var recipient = envelope.actionParams.get("recipient").asText();
+          final var message = "Deposit of " + envelope.event.amount
+                  + " received. New balance: " + envelope.event.newBalance + ".";
+
+          executor.execute(
+                  () -> "wallet-handler",
+                  CreateNotificationAction.class,
+                  new CreateNotificationAction.Params(
+                          walletId, NotificationKind.MONEY_DEPOSITED, recipient, message));
+      }
+  }
+`} />
+
+Three required methods:
+- **`name()`** — cluster-stable handler identifier, stored in `event_notifications.handler_name`. Renaming re-delivers every historical event the new name hasn't seen.
+- **`eventType()`** — the typed payload class; drives JSON deserialization from the outbox row's `payload` column.
+- **`handle(envelope)`** — your logic. `envelope.event` is the typed payload; `envelope.actionParams` is the source Action's params as a Jackson `ObjectNode` (so you can read fields the event itself doesn't carry).
+
+Calling `executor.execute(...)` dispatches another Action — its update + event commit atomically in their own transaction (the **listen-to-yourself** pattern: side-effects from a handler are themselves recorded in the same outbox).
+
+## 12. Example DistributedJob
+
+A `DistributedJob` is periodic, cluster-exclusive work — runs on exactly one cluster member per schedule slot. The `ekbatan-distributed-jobs` module wraps [db-scheduler](https://github.com/kagkarlsson/db-scheduler) under a small opinionated facade: `name()` + `schedule()` + `execute()`.
+
+<CodeBlock filename="src/main/java/io/example/wallet/job/WalletStipendJob.java" language="java" shadow="orange" code={`
+  package io.example.wallet.job;
+
+  import com.github.kagkarlsson.scheduler.task.ExecutionContext;
+  import com.github.kagkarlsson.scheduler.task.schedule.FixedDelay;
+  import com.github.kagkarlsson.scheduler.task.schedule.Schedule;
+  import io.ekbatan.core.action.ActionExecutor;
+  import io.ekbatan.di.EkbatanDistributedJob;
+  import io.ekbatan.distributedjobs.DistributedJob;
+  import io.example.wallet.action.WalletDepositMoneyAction;
+  import io.example.wallet.repository.WalletRepository;
+  import java.math.BigDecimal;
+
+  @EkbatanDistributedJob
+  public class WalletStipendJob extends DistributedJob {
+
+      private static final BigDecimal THRESHOLD = new BigDecimal("100.00");
+      private static final BigDecimal STIPEND   = new BigDecimal("10.00");
+
+      private final ActionExecutor executor;
+      private final WalletRepository walletRepository;
+
+      public WalletStipendJob(ActionExecutor executor, WalletRepository walletRepository) {
+          this.executor = executor;
+          this.walletRepository = walletRepository;
+      }
+
+      @Override
+      public String name() {
+          // Cluster-wide unique. Persisted in scheduled_tasks.task_name; db-scheduler
+          // uses it to coordinate at-most-once-per-slot across worker instances.
+          return "wallet-stipend";
+      }
+
+      @Override
+      public Schedule schedule() {
+          return FixedDelay.ofSeconds(2);
+      }
+
+      @Override
+      public void execute(ExecutionContext ctx) {
+          final var underFunded = walletRepository.findOpenWithBalanceBelow(THRESHOLD);
+          for (var wallet : underFunded) {
+              executor.execute(
+                      () -> "wallet-stipend-job",
+                      WalletDepositMoneyAction.class,
+                      new WalletDepositMoneyAction.Params(
+                              wallet.id, STIPEND, "stipend@system.local"));
+          }
+      }
+  }
+`} />
+
+The shape of a job:
+- **`name()`** — cluster-wide unique. db-scheduler stores it in `scheduled_tasks.task_name` and uses it as the lease key for at-most-once execution per schedule slot.
+- **`schedule()`** — a db-scheduler `Schedule`. `FixedDelay`, `Cron`, `DailyAt`, etc. are all supported.
+- **`execute(ctx)`** — runs on whichever cluster member won the lease for the current slot. Read from repositories freely (no transaction owned by the job); dispatch `Action`s via the injected `ActionExecutor` — each one opens its own short transaction, emits its events, and commits.
+
+The headline pattern is **job invokes action**: the job is just a scheduling trigger, the business logic lives in the Action. Same Action a REST endpoint would call; same `eventlog.events` rows produced; same downstream handlers fire. The job doesn't need to know about the events or the handlers — it just dispatches the Action and moves on.
+
+## 13. Run + verify
+
+<div data-stack="spring" data-build="gradle">
+
+```bash
+./gradlew bootRun
+```
+
+</div>
+<div data-stack="spring" data-build="maven">
+
+```bash
+./mvnw spring-boot:run
+```
+
+</div>
+<div data-stack="quarkus" data-build="gradle">
+
+```bash
+./gradlew quarkusDev
+```
+
+</div>
+<div data-stack="quarkus" data-build="maven">
+
+```bash
+./mvnw quarkus:dev
+```
+
+</div>
+<div data-stack="micronaut" data-build="gradle">
+
+```bash
+./gradlew run
+```
+
+</div>
+<div data-stack="micronaut" data-build="maven">
+
+```bash
+./mvnw mn:run
+```
+
+</div>
+<div data-stack="plain" data-build="gradle">
+
+```bash
+./gradlew run
+```
+
+</div>
+<div data-stack="plain" data-build="maven">
+
+```bash
+./mvnw exec:java
+```
+
+</div>
+
+After the app boots, verify the framework wired up by checking that its outbox tables exist:
+
+<div data-db="pg">
+
+```bash
+docker compose exec wallet-db psql -U wallet -c "\dt eventlog.*"
+```
+
+You should see `eventlog.events` and `eventlog.event_notifications`.
+
+</div>
+
+<div data-db="mariadb">
+
+```bash
+docker compose exec wallet-db mariadb -uwallet -pwallet -e "SHOW TABLES IN eventlog"
+```
+
+</div>
+
+<div data-db="mysql">
+
+```bash
+docker compose exec wallet-db mysql -uwallet -pwallet -e "SHOW TABLES IN eventlog"
+```
+
+</div>
+
+If you see the eventlog tables, Flyway ran the framework's bundled migrations and Ekbatan is fully wired.
+
+## 14. Use the example projects as your reference
+
+Every snippet on this page came from [`ekbatan-examples/`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples) — 39 runnable wallet projects covering Spring Boot, Quarkus, and Micronaut, each on PostgreSQL/MariaDB/MySQL, in Gradle and Maven, with native-image siblings. The picker's **EXAMPLE** row links straight to the one matching your picks.
+
+A few sibling projects show patterns this tutorial doesn't:
+
+- `spring-boot-wallet-saga-gradle-pg` — multi-Action coordinated flow
+- `spring-boot-wallet-rest-gradle-sharded-pg` — two physical databases under one logical app
+- `spring-boot-job-worker-gradle-pg` — job-only process (no HTTP), for scaling jobs separately
+
+AI assistants benefit from the same matrix — point them at `ekbatan-examples/` so they pattern-match against verified code instead of guessing from training data.
+
+## Next
+
+→ **[Your first Action](/learn/your-first-action/)** — write `WalletDepositAction` and watch a row land in `eventlog.events` after the commit.
+
+## See also
+
+- [Concepts → The dual-write trap](/concepts/the-dual-write-trap/) — why the eventlog table exists
+- [Reference → DI integration](/reference/) — exhaustive per-stack wiring
+- [`ekbatan-examples/`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples) — 24 runnable wallet projects, one per `(stack × build × dialect)`

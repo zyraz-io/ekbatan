@@ -1,0 +1,88 @@
+---
+// /concepts/ — the WHY. Conceptual pages that explain the model behind the
+// framework. Voice: opinionated, not how-to. Audience: someone who already
+// knows what Ekbatan is and wants to understand the design choices.
+//
+// Source material is mostly docs/concepts/*.md, ported page-by-page into
+// .mdx files alongside this index. The pages[] registry below is the
+// single source of truth for what shows up here AND in /sitemap; flip a
+// status to "ready" when the matching .mdx is published.
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import SectionCard from "../../components/SectionCard.astro";
+
+// Prefix the absolute hrefs in the entries data with the deployment base path
+// at render time. Lets the source list stay as readable root-relative paths.
+const linkTo = (p: string) => `${import.meta.env.BASE_URL}${p.replace(/^\//, "")}`;
+
+const pages = [
+    {
+        href: "/concepts/the-dual-write-trap/",
+        title: "The dual-write trap",
+        blurb: "Why writing to a database and to Kafka separately is the bug your monitoring will eventually find for you — and what an outbox-pattern-by-construction framework looks like instead.",
+        status: "ready",
+    },
+    {
+        href: "/concepts/outbox/",
+        title: "The outbox: atomic state + events",
+        blurb: "The framework's central guarantee: every action's commit is a single database transaction that touches as many domain tables as the action needs plus the eventlog outbox. They land together, or none of them do.",
+        status: "ready",
+    },
+    {
+        href: "/concepts/actions/",
+        title: "Actions, ActionPlan, ActionExecutor",
+        blurb: "The two-phase lifecycle: pure construction in Phase 1, single-transaction persistence in Phase 2. Why your action code never opens a transaction itself.",
+        status: "ready",
+    },
+    {
+        href: "/concepts/models-and-entities/",
+        title: "Models and Entities",
+        blurb: "Models emit events when they change; Entities don't. Why the distinction matters and where each fits.",
+        status: "ready",
+    },
+    {
+        href: "/concepts/sharding/",
+        title: "Sharding strategies",
+        blurb: "Single-database, embedded-bits UUID, policy-axis routing — what each costs and when each is appropriate. Two axes (policy + capacity) and why splitting them matters.",
+        status: "ready",
+    },
+] as const;
+---
+
+<BaseLayout
+    title="Concepts · Ekbatan"
+    description="The model behind the framework. Why the transactional outbox is built in, not bolted on. Read these to understand the design choices."
+    activeSection="concepts"
+>
+    <section class="border-b-2 border-ink">
+        <div class="container-px max-w-7xl mx-auto py-20 md:py-28">
+            <div class="inline-flex items-center gap-3 brut-border bg-ink text-paper font-mono text-[11px] uppercase tracking-widest px-3 py-1.5">
+                <span class="text-yellow">§</span><span>Concepts</span>
+            </div>
+            <h1 class="font-display font-bold text-5xl md:text-7xl tracking-tight max-w-4xl text-balance mt-6 leading-[0.95]">
+                The <span class="bg-yellow px-2">why</span> behind the
+                framework.
+            </h1>
+            <p class="mt-6 max-w-2xl text-lg leading-relaxed">
+                Reference docs tell you what each class does. Tutorials show
+                you what to type. These pages explain the model the framework
+                rests on — the dual-write trap that prompted it, the
+                primitives it factors into, the trade-offs each choice
+                inherits. Read them once and the rest of the surface reads
+                like notation.
+            </p>
+            <div class="mt-14 grid md:grid-cols-2 gap-5">
+                {
+                    pages.map((p, i) => (
+                        <SectionCard
+                            href={linkTo(p.href)}
+                            title={p.title}
+                            blurb={p.blurb}
+                            status={p.status}
+                            index={String(i + 1).padStart(2, "0")}
+                        />
+                    ))
+                }
+            </div>
+        </div>
+    </section>
+</BaseLayout>

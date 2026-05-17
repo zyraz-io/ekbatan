@@ -1,0 +1,104 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: "Action"
+activeSection: reference
+description: "Action<P, R> — the unit of business work. Two-phase lifecycle, perform() signature, plan() staging API, retry on StaleRecordException."
+lead: "Action<P, R> is the unit of business work. It stages new and updated domain objects onto its ActionPlan during Phase 1; the framework's ActionExecutor commits them in a single transaction during Phase 2."
+---
+
+## Type signature
+
+```java
+package io.ekbatan.core.action;
+
+public abstract class Action<P, R> {
+
+    protected Action(Clock clock);
+
+    /** Phase 1 — read, build, stage. No DB writes. */
+    protected abstract R perform(Principal principal, P params);
+
+    /** Access the ActionPlan to stage adds/updates. */
+    protected final ActionPlan plan();
+}
+```
+
+`P` is the parameter type — usually a `record` you declare on the action itself. `R` is the return type — the value passed back to the caller of `executor.execute(...)`.
+
+## Declaring an action
+
+```java
+@EkbatanAction
+public class WalletDepositAction extends Action<WalletDepositAction.Params, Wallet> {
+
+    public record Params(Id<Wallet> walletId, BigDecimal amount) {}
+
+    private final WalletRepository walletRepository;
+
+    public WalletDepositAction(Clock clock, WalletRepository walletRepository) {
+        super(clock);
+        this.walletRepository = walletRepository;
+    }
+
+    @Override
+    protected Wallet perform(Principal principal, Params params) {
+        var wallet  = walletRepository.getById(params.walletId());
+        var updated = wallet.deposit(params.amount());
+        return plan().update(updated);
+    }
+}
+```
+
+The `@EkbatanAction` annotation marks the class for compile-time discovery by `ekbatan-annotation-processor` — the generated `ActionRegistry` includes it, so `ActionExecutor` can route `execute(WalletDepositAction.class, params)` calls without reflection at runtime.
+
+## The two-phase lifecycle
+
+```
+        executor.execute(WalletDepositAction.class, params)
+                              │
+                              ▼
+   ┌─── Phase 1 — perform() — no transaction ──────────────────┐
+   │   read · build · attach events · plan.add / plan.update   │
+   └───────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+   ┌─── Phase 2 — Executor.persistChanges() — one atomic TX ───┐
+   │   1. group plan changes by ShardIdentifier                │
+   │   2. inTransaction(shard, () -> {                         │
+   │        Repository.addAll / updateAll  → domain rows       │
+   │        EventPersister.persistActionEvents → outbox rows   │
+   │        commit  ─or─  rollback                             │
+   │      });                                                  │
+   │   3. on StaleRecordException → retry whole action         │
+   └───────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                 result returned to the caller
+```
+
+Phase 1 is pure construction — reads are allowed, no writes happen. Phase 2 is the only place the framework opens a transaction, and it always wraps every staged change plus the matching event rows together. Anything that throws inside Phase 2 rolls the whole transaction back.
+
+## Methods
+
+### `plan()`
+
+Returns the action's `ActionPlan`. Call `plan().add(newModel)` to stage an insert; `plan().update(updatedModel)` to stage an update. Both return the staged model for fluent chaining (`return plan().update(updated)`).
+
+### `perform(principal, params)`
+
+The method you implement. Receives the caller-supplied `Principal` (for auditing / authorization) and the action's `Params`. Returns `R` — typically one of the models you staged, but free to be anything else.
+
+## Retry semantics
+
+When Phase 2 fails with `StaleRecordException` (an optimistic-lock conflict on any updated row), the framework discards the plan and re-runs Phase 1 from the start. The number of retries is configured per-action via `@EkbatanAction(maxOptimisticLockRetries = 3)` — default is 3. Other exception types propagate to the caller.
+
+## Cross-shard execution
+
+By default, an action's staged changes must all route to a single shard. To allow staging changes across shards (and commit them in independent per-shard transactions), set `@EkbatanAction(allowCrossShard = true)`. The executor then opens one transaction per shard, in deterministic order, and rolls each back independently on failure. See [Sharding](/reference/sharding/) for the consistency caveats.
+
+## See also
+
+- [ActionPlan](/reference/action-plan/) — the staging API
+- [ActionExecutor](/reference/action-executor/) — how Phase 2 actually runs
+- [Concepts → Actions, ActionPlan, ActionExecutor](/concepts/actions/) — the WHY behind this shape
+- Source: [`ekbatan-core/src/main/java/io/ekbatan/core/action/Action.java`](https://github.com/zyraz-io/ekbatan/blob/main/ekbatan-core/src/main/java/io/ekbatan/core/action/Action.java)

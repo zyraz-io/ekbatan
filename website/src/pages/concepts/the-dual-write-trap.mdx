@@ -1,0 +1,58 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: "The dual-write trap"
+activeSection: concepts
+description: "Why writing to a database and to Kafka separately is the bug your monitoring will eventually find for you — and what an outbox-pattern-by-construction framework looks like instead."
+lead: "Every business change produces two things at once — a new state, and an event that records how it got there. Persisting them as separate writes is where systems start to drift out of sync."
+---
+
+## The shape of the bug
+
+You write an order to the database. Then you write an `OrderPlaced` event to Kafka so the warehouse, the billing system, and the email worker all hear about it. Two `INSERT`s, two systems, two network round trips.
+
+```
+   app
+  ↙   ↘
+DB    Kafka
+```
+
+The bug is the gap between the two writes. The database write succeeds; the JVM panics, the broker connection drops, the pod is OOM-killed — any of them, between line 1 and line 2 — and the database now contains an order the rest of the system will never hear about. Or the reverse: the broker `INSERT` succeeds, the database one rolls back, and three downstream systems start working on an order that doesn't exist.
+
+You can't fix this with retries on either side. Retrying the Kafka write after a successful DB commit can succeed *or* duplicate. Retrying the DB write after a successful Kafka publish can succeed *or* leave you publishing twice. There is no atomic version of "do both" across two coordinating systems without a distributed transaction, and distributed transactions across a database and a broker are not a thing anyone actually runs in production.
+
+This is the **dual-write problem**, and it is the single most common source of "events don't match the data" bugs in event-driven systems.
+
+## The shape of the fix
+
+Write the event to *the same database, in the same transaction* as the domain row. Let something else carry it to Kafka *afterwards*, by reading the database. There's still exactly one place — the database — that decides whether the change happened, and exactly one transaction that commits it.
+
+```
+       app
+        ↓
+  ┌─────────────────────────┐
+  │  database (one tx)      │
+  │   ┌──────┐  ┌────────┐  │
+  │   │state │  │ outbox │  │
+  │   └──────┘  └────────┘  │
+  └─────────────────────────┘
+        ↓
+      Kafka  (Debezium or a poller)
+```
+
+The outbox table is just a regular table in your application database. The framework inserts an outbox row in the same transaction as the state change, so the two either both land or both don't. Then a separate process — Debezium reading the write-ahead log, or an in-process worker polling the table — tails the outbox and ships the events to Kafka.
+
+The dual write is gone. The database is the only system that has to be transactionally consistent — which is exactly what databases are for.
+
+## Why it's a framework concern
+
+The outbox pattern is well-known. Most teams that need it bolt it on: add an `outbox_events` table, write to it manually in each transaction, build a poller. It works, but you carry the discipline forever — every new action has to remember to write to the outbox, and every code review has to enforce it. The day someone forgets, you have a silent dual-write bug.
+
+Ekbatan makes it impossible to forget. The framework's `ActionExecutor` writes the outbox row for you — every action, every commit, automatically. Your code stages a `WalletDepositAction`; the executor opens the transaction, writes the wallet row, writes the matching `WalletMoneyDepositedEvent` to `eventlog.events`, commits. There is no second table you have to remember to write to, because the framework writes it.
+
+That's the whole pitch. The rest of the [Concepts](/concepts/) section explains how the pieces fit together to make that guarantee structural — not a convention you have to police.
+
+## See also
+
+- [The outbox: atomic state + events](/concepts/outbox/) — the schema and the persistence path
+- [Actions, ActionPlan, ActionExecutor](/concepts/actions/) — the two-phase lifecycle that makes this automatic
+- [Learn → Consuming events](/learn/consuming-events/) — what to do with the outbox rows once they're there

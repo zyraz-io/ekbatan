@@ -1,0 +1,92 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'ModelEvent'
+activeSection: reference
+lead: 'A domain event emitted by a Model. Subclasses describe state transitions worth recording in the event stream — created, deposited, transferred, closed, etc. — and become rows in the eventlog outbox when the action commits.'
+---
+
+## Type signature
+
+```java
+package io.ekbatan.core.domain;
+
+public abstract class ModelEvent<MODEL> implements Serializable {
+
+    public final String modelId;        // source model's id, as String
+    public final String modelName;      // source model class's simple name
+
+    protected ModelEvent(String modelId, Class<MODEL> modelClass);
+}
+```
+
+The type parameter `MODEL` ties the event to the model class that emits it (compile-time check — you can't accidentally attach a `WalletMoneyDepositedEvent` to an `Order`). Subclasses add the payload fields specific to the event.
+
+## How events become outbox rows
+
+Events are attached to a `Model` via the builder's `withEvent(...)` method. `ChangePersister` extracts them when the action commits and persists them through the configured [`EventPersister`](/reference/events/local-event-handler/). The persistence row carries `modelId` and `modelName` so downstream consumers can correlate events back to their source aggregate **without inspecting the payload**.
+
+```
+Action.perform()             ActionExecutor.persistChanges()
+─────────────                ─────────────────────────────
+wallet.deposit(amount)       ChangePersister.persist(...)
+  ▼                            │
+attaches                       ├─ writes wallet UPDATE row
+WalletMoneyDepositedEvent      └─ writes eventlog.events INSERT row
+to wallet.events                    │     id, namespace,
+  ▼                                 │     model_id, model_name,
+plan().update(wallet)               │     event_type, payload,
+                                    │     action_id, ...
+                                    └─ COMMIT (one transaction)
+```
+
+## Writing an event
+
+Concrete subclasses are typically simple data carriers — Java `record`s or hand-written value classes — that serialize cleanly to JSON / Avro / Protobuf via the wire-format modules:
+
+```java
+public final class WalletMoneyDepositedEvent extends ModelEvent<Wallet> {
+    public final BigDecimal amount;
+    public final BigDecimal newBalance;
+
+    public WalletMoneyDepositedEvent(Id<Wallet> walletId, BigDecimal amount, BigDecimal newBalance) {
+        super(walletId.toString(), Wallet.class);
+        this.amount     = amount;
+        this.newBalance = newBalance;
+    }
+}
+```
+
+**Don't put** mutable state, transient references, or circular object graphs in events. They serialize to JSON / Avro / Protobuf and may be read back hours or years later by consumers that never had access to your in-process object graph.
+
+## Attaching one
+
+Always inside `Model.copy().withEvent(...)`, **inside an action's `perform()`** (not in a constructor, not in a service method — actions are the only place events legitimately enter the outbox):
+
+```java
+public Wallet deposit(BigDecimal amount) {
+    var newBalance = balance.add(amount);
+    return copy()
+            .withEvent(new WalletMoneyDepositedEvent(id, amount, newBalance))
+            .balance(newBalance)
+            .build();
+}
+```
+
+## Consumers
+
+Two paths read these rows after they're committed:
+
+| Path | Module | How it consumes |
+|---|---|---|
+| In-process `EventHandler`s | [`local-event-handler`](/reference/events/local-event-handler/) | Two `DistributedJob` workers drain `eventlog.events` and invoke typed `EventHandler<E>` beans with `delivered=true` flips. No broker. |
+| Debezium → Kafka | [`streaming`](/reference/events/streaming/) | CDC tails the table, optionally applies the `OutboxToAvro` / `OutboxToProtobuf` SMTs, and ships rows to per-event-type Kafka topics. |
+
+Both can run against the same outbox simultaneously.
+
+## See also
+
+- [Concepts → The outbox: atomic state + events](/concepts/outbox/) — what happens to events after `withEvent`
+- [Concepts → Models and Entities](/concepts/models-and-entities/) — why only Models emit events
+- [Model](/reference/model/) — what `withEvent` is called on
+- [Outbox schema](/reference/outbox-schema/) — the on-disk shape of the row each event becomes
+- Source: [`ekbatan-core/src/main/java/io/ekbatan/core/domain/ModelEvent.java`](https://github.com/zyraz-io/ekbatan/blob/main/ekbatan-core/src/main/java/io/ekbatan/core/domain/ModelEvent.java)

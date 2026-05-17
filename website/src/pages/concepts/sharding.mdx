@@ -1,0 +1,84 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: "Sharding strategies"
+activeSection: concepts
+description: "Single-database, embedded-bits UUID, policy-axis routing — what each strategy costs and when each is appropriate. The conceptual model behind Ekbatan's two-axis sharding."
+lead: "Sharding is opt-in and has zero overhead when disabled. When you do need it, Ekbatan separates two reasons to shard — policy and capacity — and gives each its own axis. Your action and model code stays sharding-agnostic; the routing happens at the edges."
+---
+
+## Two reasons to shard, two axes
+
+The mistake most sharding designs make is to use a single number for "which database does this row live on" and let that number conflate everything. Ekbatan splits it deliberately. A `ShardIdentifier` is a `(group, member)` pair, and each axis answers a different question:
+
+| Axis | Question it answers | Cardinality driven by | Range |
+|---|---|---|---|
+| **Group** (policy axis) | "Where is this data *allowed* to live?" | External constraints — data residency law, contractual tenant isolation, business-domain separation. You don't pick how many groups you have; the world picks for you. | 8 bits → up to 256 groups |
+| **Member** (capacity axis) | "How many writes per second can one database take?" | Capacity planning. You add members when one database starts to fall over under load. | 6 bits per group → up to 64 members per group |
+
+The split matters because the two axes have very different operational profiles. A new **group** (e.g. "we just signed a Mexican bank that requires onshore data") is a major event — new infrastructure in a new region, new compliance posture, separate failure domain. A new **member** within a group is a routine capacity addition — same region, same VPC, same operational playbook, just more compute.
+
+Conflating the two into one number ("shard #47") forces every routing decision through the same lens, which is wrong. Routing for *compliance* is deterministic from the customer's properties. Routing for *capacity* can be anything that distributes load evenly — typically a hash. Different concerns, different routing logic, different change cadences. Two axes lets each have its own answer.
+
+## Three strategies, in order of weight
+
+### Single-database (no sharding)
+
+Everything lives at `(group=0, member=0)`. `ShardIdentifier.DEFAULT`. You write your actions exactly the same way you would if sharding didn't exist — `Id<Wallet>` instead of `ShardedId<Wallet>`, no shard parameter passed anywhere. The framework still goes through its `DatabaseRegistry` and `TransactionManager`, but every call resolves to the same one database.
+
+> Use it when: you don't have a write-throughput problem and no policy is forcing data location. Which is the case for the overwhelming majority of services. Stay here as long as possible.
+
+The day you outgrow one database, you migrate to one of the next two strategies. The action code does not change. Only the model's ID type and the registry configuration do.
+
+### Embedded-bits UUID (`ShardedUUID`)
+
+The shard `(group, member)` is encoded into 14 bits of the UUID itself — specifically inside the `rand_b` field of a UUID v7. The crucial property: **the shard can be recovered from the ID at any time without a lookup table**.
+
+```
+ShardedUUID layout
+┌────────────────────────────────────────────────────────────────┐
+│ MSB: [48-bit timestamp][4-bit version=7][12-bit rand_a]        │
+│ LSB: [2-bit variant][8-bit GROUP][6-bit MEMBER][48-bit rand]   │
+└────────────────────────────────────────────────────────────────┘
+```
+
+When a request comes in with a wallet ID, the framework reads the shard bits out of the ID, looks up the matching database in the registry, opens a transaction there. No round-trip to a directory service. No sticky session needed at the load balancer. The ID is self-describing.
+
+The shard is chosen *at creation time* — your `WalletCreateAction` calls `ShardedId.generate(Wallet.class, shard)` and from then on the ID and its shard are bonded for the row's lifetime. Choosing the shard is your call: typically inside the create action you'd map customer properties (`tenantId`, `region`, `regulatoryClass`) to a shard via a small `ShardSelector` of your own.
+
+> Use it when: you can decide each row's shard from properties known at creation time, and you never want to move rows between shards afterwards. This covers most cases.
+
+### Custom sharding strategy (full control)
+
+If embedded bits in the ID don't fit — say you need to re-shard live data, or the shard isn't knowable at creation time but is derivable from the row's columns — you provide a `ShardingStrategy` of your own. It takes a model (or a query parameter) and returns a `ShardIdentifier`. The framework calls it once per persistence operation, before opening the transaction.
+
+> Use it when: the routing logic is more dynamic than "fixed at creation" — e.g. hash-based rebalancing, time-window-based routing, hot-key detection.
+
+The cost is that the ID is no longer self-describing. Any query that starts from an ID alone (e.g. `repository.getById(id)`) needs the strategy to consult the row first to learn where it lives. That's an extra round trip you pay implicitly. Use the embedded-bits approach if you can; reach for this when you can't.
+
+## Cross-shard actions: one transaction per shard, never atomic across
+
+By default, an action's staged changes must all route to a single shard. The framework opens one transaction on that shard, writes everything, commits. This is the only way to keep the outbox guarantee — state + events atomic — intact, because atomic-across-databases doesn't exist.
+
+When you set `@EkbatanAction(allowCrossShard = true)`, the executor groups staged changes by shard and opens **one transaction per shard**, in deterministic order, rolling each back independently on failure. This buys you cross-shard workflows (e.g. a wallet-to-wallet transfer where source and destination live on different shards) at the price of:
+
+- **Per-shard atomicity, not global atomicity.** Shard A's commit can succeed while shard B's rolls back. You're back in dual-write territory for that specific action — except now the dual write is between two shards of your own database, not between a database and a broker. The mitigation pattern is the [saga](/concepts/the-dual-write-trap/) — split the cross-shard work into one action per shard, chained via outbox events, with a compensation action that runs if the destination action fails.
+- **No cross-shard reads inside a single transaction.** Joins between rows on different shards happen in application code, after each shard's transaction commits.
+
+The good news: most actions don't need cross-shard at all. Routing customers to the same shard as their wallets, and orders to the same shard as their customer, eliminates most cross-shard pressure for free.
+
+## What sharding doesn't solve
+
+Sharding is a write-throughput-and-policy tool. It does not:
+
+- **Give you cross-shard transactions.** No framework can; this is a property of distributed systems, not of Ekbatan.
+- **Speed up cross-shard scatter-gather queries.** Reading all wallets matching a predicate where wallets are spread across N members hits N databases. Latency is `max(latencies)`, not `mean(latencies)`.
+- **Eliminate hot-shard problems.** If 80% of your traffic targets one customer, that customer's shard is hot regardless of how many other shards exist. Pre-splitting hot tenants across multiple members in their own group is a separate technique.
+
+If you reach for sharding to solve a *read latency* problem, you're probably reaching for the wrong tool — caching, read replicas, and CQRS materializations are usually the right answer.
+
+## See also
+
+- [Reference → Sharding](/reference/sharding/) — APIs, configuration schema, `ShardedUUID` bit layout, `DatabaseRegistry.effectiveShard`, declarative `application.yml`
+- [Concepts → The dual-write trap](/concepts/the-dual-write-trap/) — why cross-shard actions are conceptually a dual write, and how sagas restore the guarantee
+- [Concepts → Actions, ActionPlan, ActionExecutor](/concepts/actions/) — the per-shard transaction grouping happens inside Phase 2
+- [`ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) — a runnable two-shard wallet using `EmbeddedBitsShardingStrategy`

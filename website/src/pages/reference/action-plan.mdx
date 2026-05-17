@@ -1,0 +1,90 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: 'ActionPlan'
+activeSection: reference
+lead: 'The accumulator for one action execution''s intended persistence changes. Created fresh per execute(...) call and bound as a ScopedValue for the duration of perform(); inside the action, code reaches it via Action.plan().'
+---
+
+## Type signature
+
+```java
+package io.ekbatan.core.action;
+
+public class ActionPlan {
+
+    public ActionPlan();
+
+    public <ID extends Comparable<ID>, E extends Persistable<ID>> E add(E entity);
+    public <ID extends Comparable<ID>> Collection<? extends Persistable<ID>> addAll(Collection<? extends Persistable<ID>> entities);
+
+    public <ID extends Comparable<ID>, E extends Persistable<ID>> E update(E entity);
+    public <ID extends Comparable<ID>> Collection<? extends Persistable<ID>> updateAll(Collection<? extends Persistable<ID>> entities);
+
+    public <ID extends Comparable<ID>, E extends Persistable<ID>> Map<ID, E> additions(Class<E> entityClass);
+    public <ID extends Comparable<ID>, E extends Persistable<ID>> Map<ID, E> updates(Class<E> entityClass);
+
+    public Map<Class<? extends Persistable<?>>, PersistableChanges<?, ?>> changes();
+    public boolean hasChanges();
+}
+```
+
+`Persistable<ID>` is the framework's common supertype for both [`Model`](/reference/model/) and [`Entity`](/reference/entity/) — anything you can stage on a plan is one of those.
+
+## Single-writer; not thread-safe
+
+`ActionPlan` uses a plain `LinkedHashMap` internally and is intentionally **not** thread-safe. Within an action's `perform()`, mutations via `add`, `update`, `addAll`, and `updateAll` must happen on the executing thread. If the action spawns parallel work to gather data, **join the children first and only then mutate the plan from the thread that invoked `perform()`**. Calling `plan.add(...)` from inside a spawned task is undefined behavior — concurrent mutations of the underlying map are a data race.
+
+## Methods
+
+### `add(entity)` / `addAll(entities)`
+
+Stages one entity (or a collection) for INSERT. Returns the entity unchanged, for fluent use inside the action:
+
+```java
+var wallet = plan().add(Wallet.createWallet(...));
+// wallet is now staged and you can keep using it as the "new" version
+```
+
+### `update(entity)` / `updateAll(entities)`
+
+Stages one entity (or a collection) for UPDATE. **Returns the entity with `version + 1`** so subsequent logic in the same action can see post-update state:
+
+```java
+var updated = plan().update(wallet.deposit(amount));
+// updated.version is wallet.version + 1
+```
+
+This is what enables actions like "deposit then check balance crossed threshold then emit event" to read the post-deposit version without an intermediate fetch.
+
+### `additions(entityClass)` / `updates(entityClass)`
+
+Read back the staged additions or updates for a specific class. Returns an id-keyed `Map`. Useful for actions that want to introspect what they've staged so far (e.g. an `EventHandler` action that emits one summary event per N additions).
+
+### `changes()` / `hasChanges()`
+
+Returns the full immutable view of all staged changes (keyed by entity class), or a quick boolean check for whether anything is staged. Used by `ActionExecutor.persistChanges()` to drive the per-shard transaction grouping.
+
+## Lifecycle
+
+```
+ActionExecutor.execute(...)
+    │
+    ├─ creates a fresh ActionPlan
+    ├─ binds it via ScopedValue
+    ├─ calls Action.perform(principal, params)
+    │     │
+    │     └─ inside perform: plan.add(...) / plan.update(...) — repeatedly
+    │
+    └─ once perform returns: ActionExecutor.persistChanges() walks
+       plan.changes() and writes everything inside per-shard
+       TransactionManager.inTransactionChecked(...)
+```
+
+The plan exists for exactly one `execute(...)` call; on retry after `StaleRecordException` a **brand-new plan** is created — your action gets to re-stage from scratch.
+
+## See also
+
+- [Concepts → Actions, ActionPlan, ActionExecutor](/concepts/actions/) — the conceptual lifecycle behind the plan
+- [Action](/reference/action/) — the class whose `perform()` writes to the plan
+- [ActionExecutor](/reference/action-executor/) — what consumes the plan after `perform()` returns
+- Source: [`ekbatan-core/src/main/java/io/ekbatan/core/action/ActionPlan.java`](https://github.com/zyraz-io/ekbatan/blob/main/ekbatan-core/src/main/java/io/ekbatan/core/action/ActionPlan.java)

@@ -1,0 +1,87 @@
+---
+// Global footer. Three columns: brand + license, links, "built with".
+//
+// Lifted from the original Lovable landing's <footer>. Keeping it identical to
+// preserve the brutalist identity end-to-end — same ink background, paper
+// text, yellow accent headings, mono uppercase tracking-widest.
+---
+
+<footer class="bg-ink text-paper">
+    <div
+        class="container-px max-w-7xl mx-auto py-12 grid md:grid-cols-3 gap-8 items-start"
+    >
+        <div>
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-8 h-8 brut-border border-paper bg-yellow flex items-center justify-center"
+                >
+                    <div class="w-3 h-3 bg-ink rounded-full"></div>
+                </div>
+                <span class="font-display text-xl font-bold tracking-tight"
+                    >EKBATAN</span
+                >
+            </div>
+            <p
+                class="font-mono text-[11px] uppercase tracking-widest mt-4 text-paper/60"
+            >
+                Apache 2.0 · io.github.zyraz-io
+            </p>
+        </div>
+        <div>
+            <div
+                class="font-mono text-[10px] uppercase tracking-widest text-yellow mb-3"
+            >
+                Links
+            </div>
+            <ul class="space-y-2 font-mono text-sm">
+                <li>
+                    <a
+                        href="https://github.com/zyraz-io/ekbatan"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="hover:bg-yellow hover:text-ink px-1 transition-colors"
+                        >GitHub</a
+                    >
+                </li>
+                <li>
+                    <a
+                        href="https://central.sonatype.com/namespace/io.github.zyraz-io"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="hover:bg-yellow hover:text-ink px-1 transition-colors"
+                        >Maven Central</a
+                    >
+                </li>
+                <li>
+                    <a
+                        href="https://www.apache.org/licenses/LICENSE-2.0"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="hover:bg-yellow hover:text-ink px-1 transition-colors"
+                        >Apache License 2.0</a
+                    >
+                </li>
+            </ul>
+        </div>
+        <div>
+            <div
+                class="font-mono text-[10px] uppercase tracking-widest text-yellow mb-3"
+            >
+                Built with
+            </div>
+            <ul class="space-y-2 font-mono text-sm text-paper/80">
+                <li>Java 25 · Virtual threads</li>
+                <li>jOOQ</li>
+                <li>Spring · Quarkus · Micronaut</li>
+            </ul>
+        </div>
+    </div>
+    <div class="border-t-2 border-paper/20">
+        <div
+            class="container-px max-w-7xl mx-auto py-4 font-mono text-[10px] uppercase tracking-widest text-paper/50 flex justify-between"
+        >
+            <span>© 2026 zyraz.io</span>
+            <span>made with conviction</span>
+        </div>
+    </div>
+</footer>

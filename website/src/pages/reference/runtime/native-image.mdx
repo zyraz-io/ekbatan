@@ -1,0 +1,132 @@
+---
+layout: ../../../layouts/DocLayout.astro
+title: 'GraalVM native-image'
+activeSection: reference
+lead: 'Ekbatan ships first-class GraalVM native-image support via the `ekbatan-native` module. Drop it on the classpath and a set of `Feature` classes auto-load at native-image build time, registering the reflection metadata that Jackson 3 records, `@AutoBuilder` builders, JDBC drivers, Avro `SpecificRecord`s, Kafka clients, Flyway migrations, and Testcontainers'' docker-java types need at runtime.'
+---
+
+The module also exposes `FlywayHelper`, a thin wrapper that detects native-image and swaps in a `ResourceProvider` capable of walking GraalVM Substrate's `resource:/` filesystem so Flyway can find migrations. Same code path runs on JVM and native.
+
+## What auto-loads
+
+Each `Feature` is registered through its own `META-INF/native-image/.../native-image.properties`. They detect their target library at runtime and **no-op gracefully** if it isn't on the classpath, so adding `ekbatan-native` to a module that doesn't use Avro/Kafka/Testcontainers costs nothing.
+
+| Feature | Triggers when classpath contains | Registers |
+|---|---|---|
+| `Jackson3RecordsFeature` | always (drives Ekbatan's own records + builders) | Java records, `@AutoBuilder`-generated `Builder` inner classes, classes with `@JsonCreator` (Jackson 2 or 3 packages), and classes in any `.generated.jooq.` package |
+| `KafkaClientsFeature` | `org.apache.kafka.clients.consumer.KafkaConsumer` | `org.apache.kafka.common.security` and `org.apache.kafka.common.serialization` packages, plus six default partitioners/assignors named by ConfigDef strings |
+| `AvroSpecificRecordFeature` | `org.apache.avro.specific.SpecificRecord` | every `SpecificRecord` implementation found in the configured scan packages |
+| `TestcontainersDockerJavaFeature` | `org.testcontainers.DockerClientFactory` | docker-java API/model/command packages (both shaded under `org.testcontainers.shaded.*` and unshaded) |
+
+The FlywayHelper + `NativeImageFlywayResourceProvider` aren't `Feature`s — they're runtime helpers `FlywayHelper.migrate(...)` calls when the JVM is detected as a native image (`org.graalvm.nativeimage.imagecode != null`).
+
+## Telling Jackson where YOUR records live
+
+The Jackson scan defaults to `io.ekbatan` (the framework's own records). If you have your own records, `@AutoBuilder` builders, `@JsonCreator` mixins, or jOOQ-generated classes under a different namespace, you have to extend the scan roots — otherwise none of your types will be reflectively reachable on native and Jackson will fail at runtime with `UnsupportedFeatureError: Record components not available for record class …`.
+
+The override is a JVM system property passed at native-image **build** time:
+
+| Consumer | How to set it |
+|---|---|
+| Spring Boot / Micronaut / plain GraalVM Build Tools (Gradle) | `graalvmNative.binaries.all { buildArgs.add("-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,com.your.package") }` |
+| Quarkus | `quarkus.native.additional-build-args=-Dio.ekbatan.graalvm.scan.packages=io.ekbatan\,com.your.package` in `application.properties` (escape the comma — Quarkus uses `,` to separate multiple build args) |
+| Maven (any) | `<buildArg>-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,com.your.package</buildArg>` inside the native-maven-plugin's `<buildArgs>` |
+
+A few related properties exist for the Avro Feature (`io.ekbatan.graalvm.avro.scan.packages`) and follow the same pattern. The Kafka and Testcontainers Features scan fixed library namespaces and don't need user configuration.
+
+## Why both bulk and per-element registration
+
+GraalVM 25 changed how reachability metadata is consumed. Bulk calls like `RuntimeReflection.registerAllDeclaredFields(...)` only enable the **query** API; per-element `RuntimeReflection.register(field)` is what adds invocation-path metadata Jackson 3 actually needs at runtime. The Features call **both** — bulk for query coverage, per-element for invocation. This is why running just the upstream GraalVM Reachability Metadata Repository entries (which are typically bulk-only) isn't enough.
+
+## What about everything else?
+
+JDBC drivers, HikariCP, jOOQ internals, etc. — these need their own native metadata, and the path differs by consumer:
+
+- **Spring Boot / Micronaut** — the GraalVM Build Tools Gradle plugin auto-pulls the GraalVM Reachability Metadata Repository, which already covers HikariCP and the major JDBC drivers. Nothing to do.
+- **Quarkus** — does not auto-consume the GraalVM RMR. JDBC drivers come via Quarkus extensions (`quarkus-jdbc-postgresql` / `quarkus-jdbc-mysql` / `quarkus-jdbc-mariadb` — they register the driver class). HikariCP isn't covered by any Quarkus extension (Quarkus blesses Agroal); you have to vendor the upstream RMR JSON yourself. See [`ekbatan-integration-tests/di/quarkus/src/main/resources/META-INF/native-image/com.zaxxer/HikariCP/reachability-metadata.json`](../../ekbatan-integration-tests/di/quarkus/) for a working example, copied verbatim from the upstream RMR.
+
+## jOOQ on native — `Internal.arrayType`
+
+jOOQ 3.20's `Internal.arrayType(Class<T>)` calls `type.arrayType()`, which returns null in native image for some types (reflection metadata missing). Ekbatan ships a GraalVM SVM substitution at `io.ekbatan.core.nativeimage.Target_org_jooq_impl_Internal` that overrides it with `Array.newInstance(type, 0).getClass()` — the safe fallback. This is auto-applied; no opt-in needed.
+
+## Flyway on native — two patterns
+
+Flyway's default `ClassPathScanner` relies on `ClassLoader.getResources(dir)` returning a `file:` or `jar:` URL, which GraalVM Substrate cannot satisfy. There are **two ways** Ekbatan apps cope with this, and which one applies depends on whether you're running raw Flyway or a framework-wrapped Flyway:
+
+### Pattern A — framework extension (use this in your app)
+
+If you're writing a Spring Boot / Quarkus / Micronaut app — **use the framework's official Flyway integration**. Each ships its own substrate-VM-aware Flyway resource scanning, so classpath migrations Just Work on native; you don't need to touch `FlywayHelper` at all.
+
+| Framework | Dependency | Customization hook | Wallet example |
+|---|---|---|---|
+| Spring Boot | `org.springframework.boot:spring-boot-starter-flyway` | `@FlywayDataSource @Bean DataSource` | [`spring-boot-wallet-rest-gradle-pg`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-pg) |
+| Quarkus | `io.quarkus:quarkus-flyway` | `implements io.quarkus.flyway.FlywayConfigurationCustomizer` | [`quarkus-wallet-rest-gradle-pg`](../../ekbatan-examples/quarkus-wallet-rest-gradle-pg) |
+| Micronaut | `io.micronaut.flyway:micronaut-flyway` | `@Named("default") implements io.micronaut.flyway.FlywayConfigurationCustomizer` | [`micronaut-wallet-rest-gradle-pg`](../../ekbatan-examples/micronaut-wallet-rest-gradle-pg) |
+
+Full wiring details for each — including the exact dep coordinates to use and to avoid — live in the wiring docs:
+- [Wiring with Quarkus § Flyway](/reference/di/quarkus/#flyway--use-quarkus-flyway--a-flywayconfigurationcustomizer)
+- [Wiring with Micronaut § Flyway](/reference/di/micronaut/#flyway--use-micronaut-flyway--a-flywayconfigurationcustomizer)
+- [Wiring with Spring Boot § Flyway](/reference/di/spring-boot/#flyway--use-spring-boot-starter-flyway--a-flywaydatasource-bean)
+
+### Pattern B — raw Flyway via `FlywayHelper` (framework's own tests; opt-in for non-framework apps)
+
+If you're using raw Flyway **without** any of the three framework extensions — e.g. a plain Java app, a test harness, or a special scenario where the framework integration doesn't fit — wrap your migration call with `FlywayHelper.migrate(...)`. The helper detects native image and swaps in `NativeImageFlywayResourceProvider`, which walks the bundled migrations through Substrate's `resource:/` NIO filesystem:
+
+```java
+import io.ekbatan.graalvm.flyway.FlywayHelper;
+
+FlywayHelper.migrate(jdbcUrl, username, password);              // default classpath:db/migration
+FlywayHelper.migrate(jdbcUrl, username, password, "classpath:db/migration", "classpath:db/seed");
+```
+
+This is the path the framework's own integration tests under `ekbatan-integration-tests/` take — they exercise `ekbatan-core` / `ekbatan-events:local-event-handler` / `ekbatan-distributed-jobs` directly with raw Flyway, without dragging in a whole DI framework just to run a migration. On the JVM the helper's behaviour is identical to inline `Flyway.configure().dataSource(...).load().migrate()`; on native it installs the resource provider transparently.
+
+### Resource inclusion (applies to both patterns)
+
+Either way, the migration SQL files and any Testcontainers init scripts must be bundled into the native image. The framework's `build.gradle.kts` enables this for every module via the convention plugin:
+
+```kotlin
+graalvmNative {
+    binaries.all {
+        resources.includedPatterns.add("db/migration/.*\\.sql")
+        resources.includedPatterns.add(".*_init\\.sql")
+    }
+}
+```
+
+If you author your own migrations under a different path, add a matching `includedPatterns` entry.
+
+## Build-tools settings the framework relies on
+
+- `toolchainDetection = true` so both the compile and the run paths use the configured JDK 25 GraalVM toolchain. Without this, GraalVM Build Tools' default (`false`) routes the runtime-args provider for `nativeTest` through the `GRAALVM_HOME`/`JAVA_HOME` env-var fallback while compile uses the toolchain — inconsistent.
+- `binaries.named("test") { quickBuild = true }` for the `nativeTest` task. Test binaries don't need runtime perf, so `-Ob` (quick build) trades runtime optimisation for ~30–50% faster native-image compilation, which dominates the nativeTest sweep cost.
+- `metadataRepository.enabled = true` (version 1.0.0) so RMR JSON for HikariCP, JDBC drivers, etc., is pulled in automatically (Spring Boot / Micronaut / plain GraalVM consumers).
+
+## Cross-project parallelism caveat
+
+Cross-project parallel builds on Gradle 9 are **opt-in only**, not the default. Two plugins on this build (GraalVM Build Tools' `collectReachabilityMetadata` and Quarkus' `validateExtension`) resolve cross-project configurations at execution time, which Gradle 9 rejects under parallel mode with "Resolution of the configuration ... was attempted without an exclusive lock."
+
+For the `nativeTest` sweep where parallelism actually wins, opt in explicitly:
+
+```bash
+./gradlew nativeTest --parallel --max-workers=4 --continue
+```
+
+Each native-image build uses ~4–6 GB during analysis (with the trimmed Features), so 4 concurrent builds fit on a 32 GB machine.
+
+## Modules that opt out of native-image
+
+Most modules get a `nativeTest` task automatically. Some opt out:
+
+- `ekbatan-annotation-processor` — build-time only, no runtime artifact.
+- `ekbatan-events:streaming:debezium-smt:*` — Java 21 (Kafka Connect runtime), not Java 25.
+- `ekbatan-di:quarkus:{runtime,deployment}` — Quarkus has its own native machinery.
+- `ekbatan-integration-tests:di:quarkus` — validated via `@QuarkusIntegrationTest` / `quarkusIntTest`, not the GraalVM Build Tools `nativeTest` path.
+
+## See also
+
+- [Multi-database](/reference/multi-database/) — Flyway migrations on native, JDBC driver metadata
+- [Wiring with Spring Boot](/reference/di/spring-boot/) — Spring AOT processor specifics
+- [Wiring with Quarkus](/reference/di/quarkus/) — Quarkus build-step gating + HikariCP RMR vendoring
+- [Wiring with Micronaut](/reference/di/micronaut/) — compile-time visitor / native scan packages
+- [The outbox: atomic state + events](/concepts/outbox/) — written on JVM and native alike
