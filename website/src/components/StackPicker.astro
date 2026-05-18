@@ -78,7 +78,7 @@ const examples = [
 <div class="sticky-sentinel" aria-hidden="true"></div>
 
 <aside
-    class="brut-border bg-paper sticky"
+    class="brutalist-border bg-paper sticky"
     aria-label="Stack picker"
 >
     <div class="container-px max-w-7xl mx-auto py-3 grid gap-2">
@@ -88,7 +88,7 @@ const examples = [
                     <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground w-20 shrink-0">
                         {row.label}
                     </span>
-                    <div class="flex gap-0 brut-border min-w-0 overflow-x-auto picker-row-scroll">
+                    <div class="flex gap-0 brutalist-border min-w-0 overflow-x-auto picker-row-scroll">
                         {row.options.map((opt, i) => (
                             <button
                                 type="button"
@@ -142,9 +142,9 @@ const examples = [
        providing a paper background that opaquely covers scrolling content, plus the
        top/bottom ink lines that extend edge-to-edge. The aside's own borders are
        made transparent so only the pseudo's borders are visible.
-       Selector names `.brut-border` to bump specificity above DocLayout's global
-       `.doc-prose .brut-border.bg-paper` rule (specificity 0,3,0). */
-    aside.brut-border.is-stuck {
+       Selector names `.brutalist-border` to bump specificity above DocLayout's global
+       `.doc-prose .brutalist-border.bg-paper` rule (specificity 0,3,0). */
+    aside.brutalist-border.is-stuck {
         border-color: transparent;
     }
     aside.is-stuck::before {

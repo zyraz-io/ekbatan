@@ -6,7 +6,7 @@ import remarkBasePath from "./src/plugins/remark-base-path.mjs";
 // Astro config for the Ekbatan website.
 //
 // The visual identity (brutalist palette, Space Grotesk + DM Sans + JetBrains Mono,
-// brut-borders/brut-shadows) was carried over verbatim from the original Lovable
+// brut-borders/brut-shadows) was carried over verbatim from the original
 // design — the Tailwind-compiled CSS bundle and the woff2 fonts ship as static
 // assets (`src/styles/*.css` + `public/fonts/*.woff2`) and Astro just wires them
 // into each page via the BaseLayout. We are NOT rebuilding Tailwind from a config —

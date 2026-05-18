@@ -41,7 +41,7 @@ A planned (deferred) refactor to Astro Content Layer with a `glob({ base: '../do
 
 ## Why Astro
 
-The visual identity is custom (brutalist, paper + ink + orange + yellow, Space Grotesk display), so a docs framework with an opinionated theme (VitePress, Docusaurus) would be fighting us. Astro's blank-slate approach lets us reuse the Lovable-derived CSS bundle unchanged while adding islands of interactivity (the StackPicker) without shipping a SPA-sized JS payload to every visitor. Output is mostly static HTML — deploys to any static host.
+The visual identity is custom (brutalist, paper + ink + orange + yellow, Space Grotesk display), so a docs framework with an opinionated theme (VitePress, Docusaurus) would be fighting us. Astro's blank-slate approach lets us reuse the existing prebuilt CSS bundle unchanged while adding islands of interactivity (the StackPicker) without shipping a SPA-sized JS payload to every visitor. Output is mostly static HTML — deploys to any static host.
 
 ## File layout
 
