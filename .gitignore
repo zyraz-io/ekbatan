@@ -112,3 +112,6 @@ yarn-error.log*
 
 .playwright-mcp
 .crush
+
+# Claude Code project-scoped MCP servers — local dev tooling, not shared
+.mcp.json

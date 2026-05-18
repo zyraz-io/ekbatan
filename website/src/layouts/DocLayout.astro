@@ -23,7 +23,7 @@ const { frontmatter } = Astro.props;
 >
     <article class="doc-prose container-px max-w-4xl mx-auto py-12 md:py-20">
         <header class="mb-12 pb-8 border-b-2 border-ink">
-            <div class="inline-flex items-center gap-3 brut-border bg-ink text-paper font-mono text-[11px] uppercase tracking-widest px-3 py-1.5">
+            <div class="inline-flex items-center gap-3 brutalist-border bg-ink text-paper font-mono text-[11px] uppercase tracking-widest px-3 py-1.5">
                 <span class="text-yellow">§</span>
                 <span>{frontmatter.activeSection ?? "page"}</span>
             </div>
@@ -126,13 +126,61 @@ const { frontmatter } = Astro.props;
         margin: 1.5rem 0;
         overflow-x: auto;
         background: #fafafa;
+        position: relative; /* anchor for the floating copy button */
     }
-    /* The <CodeBlock> component brings its OWN brut-border + brut-shadow on its
+    /* The script below wraps every Shiki fence in a .code-fence-wrap div and
+       puts the copy button INSIDE that wrap (not inside the <pre>) — because
+       absolute children of an overflow:auto element scroll with the content
+       when the user drags a long line horizontally, which makes the button
+       drift right. The wrap is a static, non-scrolling parent so the button
+       stays pinned to the visible top-right. The wrap inherits the brutalist
+       chrome (border + shadow + margin) that previously sat on the <pre>;
+       the <pre> itself now just provides the scroll context and padding. */
+    .doc-prose .code-fence-wrap {
+        position: relative;
+        margin: 1.5rem 0;
+        border: 2px solid var(--ink, #0a0a0a);
+        box-shadow: 4px 4px 0 0 var(--ink, #0a0a0a);
+        background: #fafafa;
+    }
+    .doc-prose .code-fence-wrap > pre.astro-code {
+        margin: 0;
+        border: 0;
+        box-shadow: none;
+    }
+    .doc-prose .code-fence-wrap > .copy-btn-floating {
+        position: absolute;
+        top: 0.4rem;
+        right: 0.6rem;
+        z-index: 1;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink, #0a0a0a);
+        background: rgba(250, 250, 250, 0.85);
+        padding: 0.1rem 0.35rem;
+        border: 0;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.15s ease, color 0.15s ease;
+    }
+    .doc-prose .code-fence-wrap:hover > .copy-btn-floating,
+    .doc-prose .code-fence-wrap > .copy-btn-floating:focus,
+    .doc-prose .code-fence-wrap > .copy-btn-floating.copied {
+        opacity: 1;
+    }
+    .doc-prose .code-fence-wrap > .copy-btn-floating:hover,
+    .doc-prose .code-fence-wrap > .copy-btn-floating.copied,
+    .doc-prose .code-fence-wrap > .copy-btn-floating.copied:hover {
+        color: var(--brand-orange);
+    }
+    /* The <CodeBlock> component brings its OWN brutalist-border + brutalist-shadow on its
        outer wrapper, so its inner <pre> shouldn't get the standalone-pre chrome
        above (otherwise you get a box-in-a-box-with-shadow effect). Strip the
-       border/shadow/margin from any <pre> that lives inside a .brut-border
+       border/shadow/margin from any <pre> that lives inside a .brutalist-border
        wrapper — the CodeBlock's wrapper handles all of that. */
-    .doc-prose .brut-border pre {
+    .doc-prose .brutalist-border pre {
         border: 0;
         box-shadow: none;
         margin: 0;
@@ -140,9 +188,9 @@ const { frontmatter } = Astro.props;
     }
     /* Give the CodeBlock outer wrapper the same vertical breathing room standalone
        fenced blocks get. Restricted to .bg-paper so it doesn't also widen the
-       section-name chip in the header (which uses brut-border + bg-ink and
+       section-name chip in the header (which uses brutalist-border + bg-ink and
        wants no extra vertical margin). */
-    .doc-prose .brut-border.bg-paper {
+    .doc-prose .brutalist-border.bg-paper {
         margin: 1.5rem 0;
     }
     /* The "compile error" wavy red underline — used to mark identifiers that
@@ -184,3 +232,54 @@ const { frontmatter } = Astro.props;
         font-weight: 700;
     }
 </style>
+
+<script>
+    // Inject a Copy button into every Shiki-rendered fence on the page so
+    // markdown ```code blocks get the same copy UX as <CodeBlock> components
+    // without each .mdx file having to opt in manually. Skips fences that
+    // already live inside a CodeBlock wrapper (which ships its own button).
+    document
+        .querySelectorAll<HTMLPreElement>(".doc-prose pre.astro-code")
+        .forEach((pre) => {
+            // CodeBlock wraps its <pre> in a .brutalist-border outer div; that
+            // outer div already provides its own copy button so skip those.
+            if (pre.closest(".brutalist-border")) return;
+            const code = pre.textContent ?? "";
+            // Wrap the <pre> in a non-scrolling div so the absolute-positioned
+            // copy button doesn't drift right when the user scrolls a long
+            // line horizontally (position:absolute children of an overflow:auto
+            // element scroll with the content). The wrapper carries the brut
+            // chrome; the inner <pre> just provides the scroll context.
+            const wrap = document.createElement("div");
+            wrap.className = "code-fence-wrap";
+            pre.parentNode?.insertBefore(wrap, pre);
+            wrap.appendChild(pre);
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "copy-btn-floating";
+            btn.textContent = "Copy";
+            btn.setAttribute("aria-label", "Copy code");
+            btn.addEventListener("click", async () => {
+                try {
+                    await navigator.clipboard.writeText(code);
+                } catch {
+                    // Fallback for non-HTTPS contexts / older browsers
+                    const ta = document.createElement("textarea");
+                    ta.value = code;
+                    ta.style.position = "fixed";
+                    ta.style.opacity = "0";
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try { document.execCommand("copy"); } catch {}
+                    document.body.removeChild(ta);
+                }
+                btn.textContent = "Copied";
+                btn.classList.add("copied");
+                setTimeout(() => {
+                    btn.textContent = "Copy";
+                    btn.classList.remove("copied");
+                }, 1500);
+            });
+            wrap.appendChild(btn);
+        });
+</script>

@@ -3,8 +3,8 @@
 //
 // Three section links (Concepts · Learn · Reference) plus the EKBATAN logo +
 // version chip on the left and a GitHub link on the right. Mirrors the
-// original Lovable header's brutalist look (sticky-top paper bar, 2px ink
-// border-bottom, yellow-highlighted EKBATAN swatch, all-caps mono link text).
+// site's brutalist look (sticky-top paper bar, 2px ink border-bottom,
+// yellow-highlighted EKBATAN swatch, all-caps mono link text).
 //
 // The current section gets a yellow background via .nav-current so users
 // always know where they are.
@@ -25,7 +25,7 @@ const sections = [
     <div class="container-px max-w-7xl mx-auto flex items-center justify-between py-3">
         <a href={import.meta.env.BASE_URL} class="flex items-center gap-3 group">
             <div
-                class="w-8 h-8 brut-border bg-yellow flex items-center justify-center"
+                class="w-8 h-8 brutalist-border bg-yellow flex items-center justify-center"
             >
                 <div class="w-3 h-3 bg-ink rounded-full"></div>
             </div>
@@ -58,11 +58,11 @@ const sections = [
         </nav>
         <details class="relative menu-details">
             <summary
-                class="font-mono text-[11px] uppercase tracking-widest brut-border bg-paper px-3 py-2 cursor-pointer"
+                class="font-mono text-[11px] uppercase tracking-widest brutalist-border bg-paper px-3 py-2 cursor-pointer"
                 >Menu</summary
             >
             <nav
-                class="absolute right-0 top-full mt-2 flex flex-col font-mono text-[11px] uppercase tracking-widest bg-paper brut-border min-w-[160px] z-50"
+                class="absolute right-0 top-full mt-2 flex flex-col font-mono text-[11px] uppercase tracking-widest bg-paper brutalist-border min-w-[160px] z-50"
             >
                 {
                     sections.map((s) => (
@@ -85,7 +85,7 @@ const sections = [
             href="https://github.com/zyraz-io/ekbatan"
             target="_blank"
             rel="noreferrer"
-            class="font-mono text-[11px] uppercase tracking-widest brut-border bg-ink text-paper px-3 py-2 hover:bg-orange hover:text-paper transition-colors"
+            class="font-mono text-[11px] uppercase tracking-widest brutalist-border bg-ink text-paper px-3 py-2 hover:bg-orange hover:text-paper transition-colors"
             >GitHub ↗</a
         >
     </div>
@@ -103,9 +103,9 @@ const sections = [
     .menu-details > summary::marker {
         content: "";
     }
-    /* The frozen Lovable Tailwind bundle doesn't ship a plain `md:hidden`
-       utility (only `after:md:hidden`), so we hand-roll the breakpoint
-       hide here: MENU dropdown only on screens narrower than md (768px). */
+    /* The frozen Tailwind bundle doesn't ship a plain `md:hidden` utility
+       (only `after:md:hidden`), so we hand-roll the breakpoint hide here:
+       MENU dropdown only on screens narrower than md (768px). */
     @media (min-width: 768px) {
         .menu-details {
             display: none;
