@@ -18,7 +18,7 @@ import java.lang.reflect.Array;
  * {@code Array.newInstance(...).getClass()} as a commented-out fallback (after {@code else} of
  * the dead {@code if (true)}); this substitution simply elects that path under native image.
  *
- * <p>This is a JVM-invisible class — under HotSpot the SVM annotations are absent (svm.jar is
+ * <p>This is a JVM-invisible class - under HotSpot the SVM annotations are absent (svm.jar is
  * compileOnly) and the class loads but is never referenced. Under native image the
  * {@code @TargetClass}/@{@code Substitute} pair causes the substitution to take effect.
  *

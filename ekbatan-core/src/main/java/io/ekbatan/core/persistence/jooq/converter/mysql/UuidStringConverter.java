@@ -6,7 +6,7 @@ import org.jooq.Converter;
 /**
  * jOOQ converter mapping a MySQL {@code CHAR(36)} column to {@link UUID}. MySQL has no
  * native UUID type; this is the canonical "store UUIDs as their hyphenated string form"
- * choice — readable in {@code SELECT}, indexable as a normal string column, but ~2.25× the
+ * choice - readable in {@code SELECT}, indexable as a normal string column, but ~2.25x the
  * storage of {@link UuidBinaryConverter}'s {@code BINARY(16)} variant.
  *
  * <p>The framework's MySQL repositories use this for non-sharded aggregates' IDs; the binary

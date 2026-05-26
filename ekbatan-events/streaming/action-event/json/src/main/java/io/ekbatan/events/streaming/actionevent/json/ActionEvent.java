@@ -5,16 +5,16 @@ import java.util.UUID;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * A complete representation of an event from the outbox — mirrors all fields from the outbox row.
+ * A complete representation of an event from the outbox - mirrors all fields from the outbox row.
  * The consumer gets the full picture and picks what they need.
- * The payload is raw JSON — the consumer deserializes it into whatever type they want.
+ * The payload is raw JSON - the consumer deserializes it into whatever type they want.
  */
 public class ActionEvent {
 
     /** Stable per-event identifier (matches the outbox row's primary key). */
     public final UUID id;
 
-    /** Logical namespace recorded with the event — lets multiple deployments share an eventlog table without collisions. */
+    /** Logical namespace recorded with the event - lets multiple deployments share an eventlog table without collisions. */
     public final String namespace;
 
     /** Identifier of the action invocation that produced this event. Same value across every event emitted by one action call. */
@@ -41,7 +41,7 @@ public class ActionEvent {
     /** Simple class name of the event subclass (e.g. {@code WidgetCreated}); {@code null} for actions that emitted no model event. */
     public final String eventType;
 
-    /** The event payload as JSON — consumers deserialize into their own DTO/POJO of choice. */
+    /** The event payload as JSON - consumers deserialize into their own DTO/POJO of choice. */
     public final ObjectNode payload;
 
     /** Instant the event itself was logically produced inside the action (may slightly precede {@link #completionDate}). */

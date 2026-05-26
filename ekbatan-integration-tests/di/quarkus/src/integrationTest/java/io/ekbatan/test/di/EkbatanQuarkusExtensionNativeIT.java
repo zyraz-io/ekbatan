@@ -19,15 +19,15 @@ import org.junit.jupiter.api.Test;
  * direct {@code @Inject}; this test exercises it through the packaged artifact via HTTP.
  *
  * <p>Driven through {@link EkbatanTestEndpoint} because {@code @QuarkusIntegrationTest} runs the
- * packaged binary out-of-process — {@code @Inject} cannot bridge the test JVM to the app process.
+ * packaged binary out-of-process - {@code @Inject} cannot bridge the test JVM to the app process.
  * Same pattern as official Quarkus extension tests (Flyway, JPA-Postgres, etc.).
  *
  * <p>Run via:
  *
  * <ul>
- *   <li>{@code ./gradlew :ekbatan-integration-tests:di:quarkus:quarkusIntTest} — against the
+ *   <li>{@code ./gradlew :ekbatan-integration-tests:di:quarkus:quarkusIntTest} - against the
  *       packaged jar.</li>
- *   <li>{@code ./gradlew :ekbatan-integration-tests:di:quarkus:testNative} — against the native
+ *   <li>{@code ./gradlew :ekbatan-integration-tests:di:quarkus:testNative} - against the native
  *       binary.</li>
  * </ul>
  *

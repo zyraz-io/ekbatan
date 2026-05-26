@@ -14,12 +14,12 @@ import java.util.UUID;
  * Creates a wallet on a shard chosen by {@code countryCode}.
  *
  * <ul>
- *   <li>{@code "MX"} → Mexico shard (group=1, member=0)</li>
- *   <li>{@code "AU"} → Australia shard (group=2, member=0) — not registered in this example;
+ *   <li>{@code "MX"} -> Mexico shard (group=1, member=0)</li>
+ *   <li>{@code "AU"} -> Australia shard (group=2, member=0) - not registered in this example;
  *       falls back to the default shard via {@code DatabaseRegistry.effectiveShard}. The wallet's
  *       UUID still encodes the Australia shard, so when the Australia DB is provisioned later, no
  *       data migration is needed.</li>
- *   <li>anything else → global shard (group=0, member=0), the default</li>
+ *   <li>anything else -> global shard (group=0, member=0), the default</li>
  * </ul>
  *
  * <p>The shard travels with the wallet's {@code ShardedId}; every later {@code findById} or

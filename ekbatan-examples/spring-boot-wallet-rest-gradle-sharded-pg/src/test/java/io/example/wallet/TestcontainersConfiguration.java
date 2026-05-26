@@ -6,7 +6,7 @@ import org.springframework.test.context.DynamicPropertyRegistrar;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Boots two Postgres testcontainers — one per shard — and points Ekbatan's sharding config at
+ * Boots two Postgres testcontainers - one per shard - and points Ekbatan's sharding config at
  * them. Migrations are not run here; {@code EkbatanShardFlywayMigrator} iterates every shard's
  * {@code primaryConfig} from the same {@link io.ekbatan.core.shard.config.ShardingConfig}
  * this registrar populates.
@@ -39,7 +39,7 @@ class TestcontainersConfiguration {
     DynamicPropertyRegistrar ekbatanShardingProperties(
             PostgreSQLContainer globalPostgres, PostgreSQLContainer mexicoPostgres) {
         return registry -> {
-            // groups[0] = global shard (group=0, member=0) — the default.
+            // groups[0] = global shard (group=0, member=0) - the default.
             registry.add(
                     "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl", globalPostgres::getJdbcUrl);
             registry.add(

@@ -87,7 +87,7 @@ public final class EkbatanConfigJacksonModule extends SimpleModule {
     abstract static class ShardIdentifierMixin {
         @JsonCreator
         public static ShardIdentifier of(@JsonProperty("group") int group, @JsonProperty("member") int member) {
-            throw new UnsupportedOperationException("mix-in body — never invoked");
+            throw new UnsupportedOperationException("mix-in body - never invoked");
         }
     }
 }

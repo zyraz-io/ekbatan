@@ -21,7 +21,7 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Slice tests for {@link EkbatanLocalEventHandlerConfiguration}. Covers conditional wiring
- * without a real database — end-to-end verification belongs to {@code ekbatan-integration-tests}.
+ * without a real database - end-to-end verification belongs to {@code ekbatan-integration-tests}.
  *
  * <p>Each test mocks the heavy collaborators ({@link DatabaseRegistry}, {@link ActionExecutor})
  * and lets the auto-config build {@link EventHandlerRegistry}, {@link EventFanoutJob}, and
@@ -46,7 +46,7 @@ class EkbatanLocalEventHandlerConfigurationTest {
 
     @Test
     void shouldNotCreateEventHandlerRegistryOrJobsWhenNoEventHandlerBeansExist() {
-        // No fixture base-package registration → no @EkbatanEventHandler beans discovered →
+        // No fixture base-package registration -> no @EkbatanEventHandler beans discovered ->
         // @ConditionalOnBean(EventHandler.class) suppresses the entire auto-config.
         contextRunner.withPropertyValues(shardingProperties()).run(ctx -> {
             assertThat(ctx).hasNotFailed();
@@ -58,7 +58,7 @@ class EkbatanLocalEventHandlerConfigurationTest {
 
     @Test
     void shouldCreateRegistryAndFanoutJobButNotHandlingJobByDefault() {
-        // FixtureEventHandler IS discovered → auto-config activates → registry + fanout exist.
+        // FixtureEventHandler IS discovered -> auto-config activates -> registry + fanout exist.
         // Handling is opt-in, so without ekbatan.local-event-handler.handling.enabled=true, it stays off.
         // Stub fanout to bypass real DatabaseRegistry interaction (the real EventFanoutJob
         // constructor reads dialect from defaultTransactionManager); end-to-end wiring with a
@@ -136,7 +136,7 @@ class EkbatanLocalEventHandlerConfigurationTest {
         }
     }
 
-    /** Stubs both jobs — used by the test that explicitly enables handling. */
+    /** Stubs both jobs - used by the test that explicitly enables handling. */
     @Configuration
     static class StubFanoutAndHandlingConfig {
         @Bean(name = "ekbatanEventFanoutJob")

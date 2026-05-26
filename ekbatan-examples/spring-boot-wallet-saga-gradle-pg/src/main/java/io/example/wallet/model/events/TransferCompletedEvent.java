@@ -9,11 +9,11 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
- * Saga step 2 (happy path) — emitted by {@code CompleteTransferAction} on the <em>destination</em>
+ * Saga step 2 (happy path) - emitted by {@code CompleteTransferAction} on the <em>destination</em>
  * wallet when the credit succeeds. Carries the {@code transferId} so consumers can correlate
  * with the corresponding {@link TransferInitiatedEvent} on the source.
  *
- * <p>This is a terminal event for the saga's happy path — no further handler runs on receipt.
+ * <p>This is a terminal event for the saga's happy path - no further handler runs on receipt.
  * Downstream systems (analytics, notification dispatchers, audit) can subscribe if they want.
  */
 public class TransferCompletedEvent extends ModelEvent<Wallet> {

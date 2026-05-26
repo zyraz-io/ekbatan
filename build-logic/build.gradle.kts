@@ -16,7 +16,7 @@ dependencies {
     // directly from a custom task rather than going through the `org.kordamp.gradle.jandex`
     // plugin, because the kordamp plugin (1.x and 2.x) trips a `ClassCastException` on
     // `Banner$Inject_` under Gradle 9 the moment the plugin is applied to more than one
-    // subproject — Gradle's per-subproject classloader isolation in 9.x conflicts with the
+    // subproject - Gradle's per-subproject classloader isolation in 9.x conflicts with the
     // plugin's Guice-injected internals. Bypassing the plugin and indexing in-process from
     // build-logic has no such issue.
     //

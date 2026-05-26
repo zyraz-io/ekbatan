@@ -27,8 +27,8 @@ import tools.jackson.databind.node.ObjectNode;
  * as {@link EventEntityRepository}: dialect-specific {@code UUID} and JSON column
  * definitions chosen at construction time, dialect-neutral fields shared as constants.
  *
- * <p>Notification rows carry a denormalized copy of the event and action context — see
- * {@link EventNotification}'s javadoc — so dispatch never has to JOIN against
+ * <p>Notification rows carry a denormalized copy of the event and action context - see
+ * {@link EventNotification}'s javadoc - so dispatch never has to JOIN against
  * {@code eventlog.events}.
  *
  * <p>Reads route through {@link #readonlyDb(ShardIdentifier)} (replica). Writes route
@@ -152,7 +152,7 @@ public final class EventNotificationRepository {
         }
     }
 
-    // --- db() variants — primary connection ---
+    // --- db() variants - primary connection ---
 
     private DSLContext db() {
         return databaseRegistry.primary.get(databaseRegistry.defaultShard);
@@ -166,7 +166,7 @@ public final class EventNotificationRepository {
         return databaseRegistry.primary.values();
     }
 
-    // --- readonlyDb() variants — replica/secondary connection ---
+    // --- readonlyDb() variants - replica/secondary connection ---
 
     private DSLContext readonlyDb() {
         return databaseRegistry.secondary.get(databaseRegistry.defaultShard);
@@ -180,7 +180,7 @@ public final class EventNotificationRepository {
         return databaseRegistry.secondary.values();
     }
 
-    // --- txDb() variants — currently-open transaction's connection, if any ---
+    // --- txDb() variants - currently-open transaction's connection, if any ---
 
     private Optional<DSLContext> txDb() {
         return databaseRegistry.defaultTransactionManager().currentTransactionDbContext();
@@ -190,7 +190,7 @@ public final class EventNotificationRepository {
         return databaseRegistry.transactionManager(shard).currentTransactionDbContext();
     }
 
-    // --- txDbElseDb() variants — transaction connection if open, primary otherwise ---
+    // --- txDbElseDb() variants - transaction connection if open, primary otherwise ---
 
     private DSLContext txDbElseDb() {
         return txDb().orElseGet(this::db);
@@ -265,7 +265,7 @@ public final class EventNotificationRepository {
     /**
      * Read up to {@code limit} due-or-overdue notifications (state PENDING or FAILED with
      * {@code next_retry_at <= now}), ordered by {@code next_retry_at} ascending. Each row
-     * is fully self-contained — the dispatch job invokes the handler from this alone with
+     * is fully self-contained - the dispatch job invokes the handler from this alone with
      * no further DB reads.
      *
      * @param shard the shard to read from.

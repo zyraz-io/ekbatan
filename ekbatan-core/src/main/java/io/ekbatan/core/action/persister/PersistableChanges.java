@@ -10,7 +10,7 @@ import java.util.Map;
  * to "to be added" entities and a separate map of IDs to "to be updated" entities, both
  * insertion-ordered.
  *
- * <p>Re-registering the same ID — whether for add or update — raises
+ * <p>Re-registering the same ID - whether for add or update - raises
  * {@link IllegalStateException}. This is deliberate: an action that stages a wallet for add
  * and then tries to update it has almost certainly drifted in its understanding of state and
  * the right answer is to surface the mistake at staging time rather than at commit time.

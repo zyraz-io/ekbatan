@@ -35,7 +35,7 @@ public final class KeyedReentrantHolder<LOCK_PAYLOAD> {
     private static final int RELEASED = -1;
 
     /**
-     * Callback invoked by the holder when the outermost lease closes or the watchdog fires —
+     * Callback invoked by the holder when the outermost lease closes or the watchdog fires -
      * the backend-specific code that actually releases the underlying lock.
      *
      * @param <LOCK_PAYLOAD> the backend-specific payload type.

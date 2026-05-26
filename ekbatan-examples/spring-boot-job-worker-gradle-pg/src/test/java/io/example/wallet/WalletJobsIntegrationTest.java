@@ -18,7 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 
 /**
- * End-to-end integration test for the job-worker. No HTTP — wallets are seeded directly via the
+ * End-to-end integration test for the job-worker. No HTTP - wallets are seeded directly via the
  * injected {@link ActionExecutor}; the {@code WalletStipendJob} then runs against them on its
  * own schedule and we use Awaitility to wait for the side effects to land.
  *
@@ -26,8 +26,8 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
  *
  * <ol>
  *   <li>The job actually fires and updates wallet balances via {@code WalletDepositMoneyAction}.</li>
- *   <li>The listen-to-yourself chain still works under job-driven execution — every stipend
- *       deposit triggers {@code WalletMoneyDepositedEventHandler} → {@code CreateNotificationAction},
+ *   <li>The listen-to-yourself chain still works under job-driven execution - every stipend
+ *       deposit triggers {@code WalletMoneyDepositedEventHandler} -> {@code CreateNotificationAction},
  *       so a {@code notifications} row appears for each deposit.</li>
  * </ol>
  */
@@ -43,7 +43,7 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
             "ekbatan.sharding.groups[0].members[0].member=0",
             "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize=5",
             "ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize=4",
-            // Tighten poll intervals — both the framework's local-event-handler jobs and our
+            // Tighten poll intervals - both the framework's local-event-handler jobs and our
             // own @EkbatanDistributedJobs use them. Defaults are tuned for production (longer
             // intervals to keep DB load low); tests want everything to converge quickly.
             "ekbatan.local-event-handler.fanoutPollDelay=200ms",
@@ -65,7 +65,7 @@ class WalletJobsIntegrationTest {
 
     @Test
     void stipend_job_tops_up_underfunded_wallets_and_triggers_notifications() throws Exception {
-        // GIVEN — three wallets with balance 0 (well below the 100.00 stipend threshold)
+        // GIVEN - three wallets with balance 0 (well below the 100.00 stipend threshold)
         for (int i = 0; i < 3; i++) {
             executor.execute(
                     () -> "test-user",
@@ -73,7 +73,7 @@ class WalletJobsIntegrationTest {
                     new WalletCreateAction.Params(UUID.randomUUID(), Currency.getInstance("USD"), BigDecimal.ZERO));
         }
 
-        // WHEN / THEN — the stipend job fires every 2s; within ~10s every wallet should have
+        // WHEN / THEN - the stipend job fires every 2s; within ~10s every wallet should have
         // received at least one 10.00 deposit. The deposit emits an event that the local-event-
         // handler picks up; the handler creates a Notification. We assert both: the balances
         // got bumped AND a corresponding notifications row landed for each wallet.

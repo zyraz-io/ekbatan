@@ -327,7 +327,7 @@ class RedisKeyedLockProviderIntegrationTest {
 
         try (var outer = lock.acquire(key, FIVE_MIN);
                 var inner = lock.acquire(key, Duration.ofMillis(50))) {
-            // Inner specified a 50ms maxHold but it must be ignored — outer's 5min governs.
+            // Inner specified a 50ms maxHold but it must be ignored - outer's 5min governs.
             // (If Redisson's last-call-wins were leaking through, the inner would shorten the
             // Redis TTL and another thread would be able to grab the key after 50ms.)
             Thread.sleep(200);

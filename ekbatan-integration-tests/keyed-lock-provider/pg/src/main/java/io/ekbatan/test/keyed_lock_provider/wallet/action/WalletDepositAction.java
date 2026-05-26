@@ -10,7 +10,7 @@ import java.time.Clock;
 
 /**
  * Plain deposit Action with no lock injection. The action is a pure "read-modify-write" step
- * over the {@code wallets} table — locking is a coordination policy applied at the
+ * over the {@code wallets} table - locking is a coordination policy applied at the
  * <em>caller</em> (around {@code executor.execute(...)}), not inside {@code perform()}.
  *
  * <p>The framework opens its transaction <strong>after</strong> {@code perform()} returns the

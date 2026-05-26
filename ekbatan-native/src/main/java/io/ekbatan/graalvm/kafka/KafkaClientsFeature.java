@@ -7,7 +7,7 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
 
 /**
  * GraalVM Native Image {@link Feature} that registers Apache Kafka client classes for
- * reflective {@code Class.forName} lookup at runtime — required because every
+ * reflective {@code Class.forName} lookup at runtime - required because every
  * {@code KafkaConsumer} / {@code KafkaProducer} / {@code AdminClient} construction walks
  * its {@code ConfigDef} and validates each config key whose default is a class name by
  * calling {@code Class.forName} on it.
@@ -15,7 +15,7 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  * <p><b>Why</b>: the upstream Kafka client RMR
  * ({@code oracle/graalvm-reachability-metadata}, latest metadata-version 3.5.1) is years
  * stale. Kafka 4.x added new SASL/OAuth defaults (e.g. {@code DefaultJwtRetriever},
- * {@code DefaultJwtValidator}) and reorganised existing security classes — none of those
+ * {@code DefaultJwtValidator}) and reorganised existing security classes - none of those
  * are in the published RMR, so a stock native build of any Kafka 4 client fails at
  * {@code KafkaConsumer.&lt;init&gt;} with {@code ConfigException: Class ... could not be
  * found}. Scanning the security/login namespaces and registering everything is a
@@ -32,7 +32,7 @@ public final class KafkaClientsFeature implements Feature {
     public KafkaClientsFeature() {}
 
     /**
-     * Scan roots — only the namespaces where Kafka 4.x ConfigDef defaults can name a class:
+     * Scan roots - only the namespaces where Kafka 4.x ConfigDef defaults can name a class:
      * SASL / OAuth / SSL login + login modules, and the {@code serialization} package whose
      * serializers/deserializers are used as ProducerConfig / ConsumerConfig defaults. The
      * specific top-level classes from {@code clients.*} that ARE ConfigDef defaults are
@@ -105,11 +105,11 @@ public final class KafkaClientsFeature implements Feature {
      * {@code getDeclaredConstructors} / {@code getDeclaredMethods} can throw
      * {@link NoClassDefFoundError} when a class references types not on the build
      * classpath (common with Kafka's optional integrations like Kerberos / IBM-only
-     * security providers). Skip those silently — they aren't reachable at runtime.
+     * security providers). Skip those silently - they aren't reachable at runtime.
      *
      * <p>Both bulk and per-element registration are required: on GraalVM 25,
      * {@code registerAllDeclared*} only allows the QUERY API (so
-     * {@code Class.getDeclaredMethods()} returns them) — explicit
+     * {@code Class.getDeclaredMethods()} returns them) - explicit
      * {@code RuntimeReflection.register(method)} / {@code register(ctor)} adds the
      * invocation path. Kafka's {@code ConfigDef} resolves classes by name and instantiates
      * them via the no-arg constructor, which requires the per-element registration.

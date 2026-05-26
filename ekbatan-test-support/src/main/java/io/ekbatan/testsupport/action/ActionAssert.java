@@ -1,5 +1,6 @@
-package io.ekbatan.core.action;
+package io.ekbatan.testsupport.action;
 
+import io.ekbatan.core.action.ActionPlan;
 import io.ekbatan.core.domain.Model;
 import io.ekbatan.core.domain.ModelEvent;
 import java.util.ArrayList;
@@ -7,6 +8,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
 
+/**
+ * Fluent assertions over the result and {@link ActionPlan} produced by {@link ActionSpec}.
+ *
+ * @param <R> action result type.
+ */
 public class ActionAssert<R> {
 
     private final R result;
@@ -19,6 +25,14 @@ public class ActionAssert<R> {
 
     // --- Additions ---
 
+    /**
+     * Asserts that exactly one entity of {@code type} was staged for addition and verifies it.
+     *
+     * @param <E> staged entity type.
+     * @param type entity class to inspect.
+     * @param verifier verifier invoked with the staged entity.
+     * @return this assertion object.
+     */
     public <E> ActionAssert<R> assertAdded(Class<E> type, Consumer<E> verifier) {
         var added = getAdditions(type);
         if (added.size() != 1) {
@@ -29,6 +43,14 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts that {@code count} entities of {@code type} were staged for addition.
+     *
+     * @param <E> staged entity type.
+     * @param type entity class to inspect.
+     * @param count expected number of additions.
+     * @return this assertion object.
+     */
     public <E> ActionAssert<R> assertAdded(Class<E> type, int count) {
         var added = getAdditions(type);
         if (added.size() != count) {
@@ -38,6 +60,15 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts addition count for {@code type} and verifies the staged entities.
+     *
+     * @param <E> staged entity type.
+     * @param type entity class to inspect.
+     * @param count expected number of additions.
+     * @param verifier verifier invoked with the staged entities.
+     * @return this assertion object.
+     */
     public <E> ActionAssert<R> assertAdded(Class<E> type, int count, Consumer<List<E>> verifier) {
         var added = getAdditions(type);
         if (added.size() != count) {
@@ -48,6 +79,11 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts that the action staged no additions.
+     *
+     * @return this assertion object.
+     */
     public ActionAssert<R> assertNoAdditions() {
         var total = plan.changes().values().stream()
                 .mapToInt(c -> c.additions().size())
@@ -58,6 +94,13 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts that the action staged no additions of {@code type}.
+     *
+     * @param <E> staged entity type.
+     * @param type entity class to inspect.
+     * @return this assertion object.
+     */
     public <E> ActionAssert<R> assertNoAdditionsOf(Class<E> type) {
         var added = getAdditions(type);
         if (!added.isEmpty()) {
@@ -66,6 +109,12 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts the total number of staged additions across all entity types.
+     *
+     * @param count expected total number of additions.
+     * @return this assertion object.
+     */
     public ActionAssert<R> assertTotalAdditions(int count) {
         var total = plan.changes().values().stream()
                 .mapToInt(c -> c.additions().size())
@@ -78,6 +127,14 @@ public class ActionAssert<R> {
 
     // --- Updates ---
 
+    /**
+     * Asserts that exactly one entity of {@code type} was staged for update and verifies it.
+     *
+     * @param <E> staged entity type.
+     * @param type entity class to inspect.
+     * @param verifier verifier invoked with the staged entity.
+     * @return this assertion object.
+     */
     public <E> ActionAssert<R> assertUpdated(Class<E> type, Consumer<E> verifier) {
         var updated = getUpdates(type);
         if (updated.size() != 1) {
@@ -88,6 +145,14 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts that {@code count} entities of {@code type} were staged for update.
+     *
+     * @param <E> staged entity type.
+     * @param type entity class to inspect.
+     * @param count expected number of updates.
+     * @return this assertion object.
+     */
     public <E> ActionAssert<R> assertUpdated(Class<E> type, int count) {
         var updated = getUpdates(type);
         if (updated.size() != count) {
@@ -97,6 +162,15 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts update count for {@code type} and verifies the staged entities.
+     *
+     * @param <E> staged entity type.
+     * @param type entity class to inspect.
+     * @param count expected number of updates.
+     * @param verifier verifier invoked with the staged entities.
+     * @return this assertion object.
+     */
     public <E> ActionAssert<R> assertUpdated(Class<E> type, int count, Consumer<List<E>> verifier) {
         var updated = getUpdates(type);
         if (updated.size() != count) {
@@ -107,6 +181,11 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts that the action staged no updates.
+     *
+     * @return this assertion object.
+     */
     public ActionAssert<R> assertNoUpdates() {
         var total = plan.changes().values().stream()
                 .mapToInt(c -> c.updates().size())
@@ -117,6 +196,13 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts that the action staged no updates of {@code type}.
+     *
+     * @param <E> staged entity type.
+     * @param type entity class to inspect.
+     * @return this assertion object.
+     */
     public <E> ActionAssert<R> assertNoUpdatesOf(Class<E> type) {
         var updated = getUpdates(type);
         if (!updated.isEmpty()) {
@@ -125,6 +211,12 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts the total number of staged updates across all entity types.
+     *
+     * @param count expected total number of updates.
+     * @return this assertion object.
+     */
     public ActionAssert<R> assertTotalUpdates(int count) {
         var total = plan.changes().values().stream()
                 .mapToInt(c -> c.updates().size())
@@ -137,6 +229,13 @@ public class ActionAssert<R> {
 
     // --- Events ---
 
+    /**
+     * Asserts that at least one event of {@code type} was emitted.
+     *
+     * @param <E> event type.
+     * @param type event class to inspect.
+     * @return this assertion object.
+     */
     public <E extends ModelEvent<?>> ActionAssert<R> assertEmitted(Class<E> type) {
         var events = getEvents(type);
         if (events.isEmpty()) {
@@ -145,6 +244,14 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts that exactly one event of {@code type} was emitted and verifies it.
+     *
+     * @param <E> event type.
+     * @param type event class to inspect.
+     * @param verifier verifier invoked with the emitted event.
+     * @return this assertion object.
+     */
     public <E extends ModelEvent<?>> ActionAssert<R> assertEmitted(Class<E> type, Consumer<E> verifier) {
         var events = getEvents(type);
         if (events.size() != 1) {
@@ -155,6 +262,14 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts that {@code count} events of {@code type} were emitted.
+     *
+     * @param <E> event type.
+     * @param type event class to inspect.
+     * @param count expected number of emitted events.
+     * @return this assertion object.
+     */
     public <E extends ModelEvent<?>> ActionAssert<R> assertEmitted(Class<E> type, int count) {
         var events = getEvents(type);
         if (events.size() != count) {
@@ -164,6 +279,15 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts event count for {@code type} and verifies the emitted events.
+     *
+     * @param <E> event type.
+     * @param type event class to inspect.
+     * @param count expected number of emitted events.
+     * @param verifier verifier invoked with the emitted events.
+     * @return this assertion object.
+     */
     public <E extends ModelEvent<?>> ActionAssert<R> assertEmitted(
             Class<E> type, int count, Consumer<List<E>> verifier) {
         var events = getEvents(type);
@@ -175,6 +299,13 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts that no events of {@code type} were emitted.
+     *
+     * @param <E> event type.
+     * @param type event class to inspect.
+     * @return this assertion object.
+     */
     public <E extends ModelEvent<?>> ActionAssert<R> assertNotEmitted(Class<E> type) {
         var events = getEvents(type);
         if (!events.isEmpty()) {
@@ -183,6 +314,11 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts that no model events were emitted.
+     *
+     * @return this assertion object.
+     */
     public ActionAssert<R> assertNoEvents() {
         var total = getEvents(ModelEvent.class).size();
         if (total > 0) {
@@ -193,6 +329,11 @@ public class ActionAssert<R> {
 
     // --- No changes ---
 
+    /**
+     * Asserts that the action staged no additions, no updates, and emitted no events.
+     *
+     * @return this assertion object.
+     */
     public ActionAssert<R> assertNoChanges() {
         assertNoAdditions();
         assertNoUpdates();
@@ -200,6 +341,13 @@ public class ActionAssert<R> {
         return this;
     }
 
+    /**
+     * Asserts that the action staged no additions or updates of {@code type}.
+     *
+     * @param <E> staged entity type.
+     * @param type entity class to inspect.
+     * @return this assertion object.
+     */
     public <E> ActionAssert<R> assertNoChangesOf(Class<E> type) {
         assertNoAdditionsOf(type);
         assertNoUpdatesOf(type);
@@ -208,6 +356,12 @@ public class ActionAssert<R> {
 
     // --- Result ---
 
+    /**
+     * Verifies the action result.
+     *
+     * @param verifier verifier invoked with the action result.
+     * @return this assertion object.
+     */
     public ActionAssert<R> assertResult(Consumer<R> verifier) {
         verifier.accept(result);
         return this;
@@ -215,14 +369,33 @@ public class ActionAssert<R> {
 
     // --- Raw accessors ---
 
+    /**
+     * Returns the raw action result.
+     *
+     * @return action result.
+     */
     public R result() {
         return result;
     }
 
+    /**
+     * Returns additions staged for {@code type}.
+     *
+     * @param <E> staged entity type.
+     * @param type entity class to inspect.
+     * @return staged additions for the given type.
+     */
     public <E> List<E> additions(Class<E> type) {
         return getAdditions(type);
     }
 
+    /**
+     * Returns updates staged for {@code type}.
+     *
+     * @param <E> staged entity type.
+     * @param type entity class to inspect.
+     * @return staged updates for the given type.
+     */
     public <E> List<E> updates(Class<E> type) {
         return getUpdates(type);
     }

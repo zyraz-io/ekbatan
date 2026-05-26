@@ -88,7 +88,7 @@ public abstract class AbstractRepository<
     private static final String STATE_FIELD_NAME = "state";
 
     /**
-     * Convenience constructor for single-shard repositories — equivalent to passing
+     * Convenience constructor for single-shard repositories - equivalent to passing
      * {@link NoShardingStrategy}.
      *
      * @param domainClass runtime {@link Class} of the persistable type.
@@ -804,7 +804,7 @@ public abstract class AbstractRepository<
 
     /**
      * Resolves which shard owns a row given only its ID. Only strategies that advertise
-     * ID-based resolution (e.g. {@code EmbeddedBitsShardingStrategy}) can answer this — others
+     * ID-based resolution (e.g. {@code EmbeddedBitsShardingStrategy}) can answer this - others
      * raise {@link UnsupportedOperationException}.
      *
      * @param id the database-side identifier.

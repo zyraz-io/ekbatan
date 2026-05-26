@@ -26,8 +26,8 @@ import org.jooq.impl.DSL;
  * {@link #transactionManager(ShardIdentifier)}.
  *
  * <p>Build manually via {@link Builder#withDatabase(TransactionManager)} /
- * {@link Builder#withDefaultDatabase(TransactionManager)}, or — when wiring from external
- * config — via {@link #fromConfig(io.ekbatan.core.shard.config.ShardingConfig)} which reads
+ * {@link Builder#withDefaultDatabase(TransactionManager)}, or - when wiring from external
+ * config - via {@link #fromConfig(io.ekbatan.core.shard.config.ShardingConfig)} which reads
  * the same shape that Spring / Quarkus / Micronaut auto-configure produces from
  * {@code ekbatan.sharding.*} keys.
  *
@@ -112,7 +112,7 @@ public final class DatabaseRegistry implements AutoCloseable {
      * misbehaving shard doesn't strand the rest.
      *
      * <p>This is invoked automatically when the registry is exposed as a Spring/Quarkus/Micronaut
-     * managed bean — Spring's {@code (inferred)} destroy-method detection finds this {@code close}
+     * managed bean - Spring's {@code (inferred)} destroy-method detection finds this {@code close}
      * on context shutdown.
      */
     @Override
@@ -136,7 +136,7 @@ public final class DatabaseRegistry implements AutoCloseable {
     }
 
     /**
-     * Builds a registry from an externally-loaded {@link ShardingConfig} — the canonical entry
+     * Builds a registry from an externally-loaded {@link ShardingConfig} - the canonical entry
      * point when wiring from {@code ekbatan.sharding.*} configuration.
      *
      * @param config the sharding configuration.
@@ -193,7 +193,7 @@ public final class DatabaseRegistry implements AutoCloseable {
         }
 
         /**
-         * Registers the default shard — the one the executor routes to when an action doesn't
+         * Registers the default shard - the one the executor routes to when an action doesn't
          * specify. Exactly one default is required (and is implicit when only one database is
          * registered).
          *

@@ -11,14 +11,14 @@ import org.flywaydb.core.api.configuration.FluentConfiguration;
  * this customizer, the {@code quarkus-flyway} extension would migrate against whatever
  * {@code quarkus.datasource.{url, username, password}} is set to, requiring those keys
  * to be declared in {@code application.properties} (or derived via SmallRye expressions)
- * — both approaches duplicate config we already publish under {@code ekbatan.sharding.*}.
+ * - both approaches duplicate config we already publish under {@code ekbatan.sharding.*}.
  *
  * <p>Quarkus discovers any CDI bean implementing
  * {@link FlywayConfigurationCustomizer} and calls {@link #customize(FluentConfiguration)}
  * after applying the {@code quarkus.flyway.*} / {@code quarkus.datasource.*} config but
  * before building the {@code Flyway} instance. Calling
  * {@link FluentConfiguration#dataSource(String, String, String)} overrides whatever
- * datasource Quarkus prepared — so we don't actually consult {@code quarkus.datasource.*}
+ * datasource Quarkus prepared - so we don't actually consult {@code quarkus.datasource.*}
  * for connection details, only for the {@code db-kind} (needed so Quarkus instantiates a
  * Flyway bean for it in the first place).
  *

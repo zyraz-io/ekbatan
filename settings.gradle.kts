@@ -14,6 +14,7 @@ pluginManagement {
 // without per-subtree group rules.
 include(
     "ekbatan-core",
+    "ekbatan-test-support",
     "ekbatan-native",
     "ekbatan-events-streaming",
     "ekbatan-events-streaming-action-event-json",

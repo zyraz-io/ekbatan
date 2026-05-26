@@ -214,7 +214,7 @@ class MariaDBKeyedLockProviderTest {
 
     @Test
     void close_lease_should_return_connection_when_release_lock_returns_zero() throws Exception {
-        // RELEASE_LOCK returning 0 means the session didn't hold the lock — a state mismatch
+        // RELEASE_LOCK returning 0 means the session didn't hold the lock - a state mismatch
         // we log, but the connection itself is fine and goes back to the pool (not evicted).
         var jdbc = new JdbcMocks().getLockReturns(1).releaseLockReturns(0);
         var provider = newProvider(jdbc.connection);
@@ -324,7 +324,7 @@ class MariaDBKeyedLockProviderTest {
         var provider = newProvider(jdbc.connection);
         var lock = newLock(provider);
 
-        // Duration.ofNanos(500) = 0ms after toMillis() — Math.max(1, ...) clamps to 1ms,
+        // Duration.ofNanos(500) = 0ms after toMillis() - Math.max(1, ...) clamps to 1ms,
         // which becomes 0.001 seconds for GET_LOCK.
         var leaseOpt = lock.tryAcquire("k", Duration.ofNanos(500), ONE_HOUR);
 
@@ -411,7 +411,7 @@ class MariaDBKeyedLockProviderTest {
 
     /**
      * Wires a mock {@link Connection} so the SQL statements used by
-     * {@link MariaDBKeyedLockProvider} each return their own mock — letting tests verify
+     * {@link MariaDBKeyedLockProvider} each return their own mock - letting tests verify
      * or stub them individually. Convenience builders set up the {@link ResultSet} payloads
      * for {@code GET_LOCK} and {@code RELEASE_LOCK} return values.
      */

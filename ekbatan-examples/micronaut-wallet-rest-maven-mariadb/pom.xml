@@ -26,7 +26,7 @@
         <micronaut.runtime>netty</micronaut.runtime>
         <exec.mainClass>io.example.wallet.Application</exec.mainClass>
 
-        <!-- Hyphenated property names — avoid the `flyway.*` / `jooq.*` namespace, which the
+        <!-- Hyphenated property names - avoid the `flyway.*` / `jooq.*` namespace, which the
              respective Maven plugins scan and reject for unrecognized keys. -->
         <flyway-version>12.0.0</flyway-version>
         <mariadb-driver-version>3.5.7</mariadb-driver-version>
@@ -38,7 +38,7 @@
         <testcontainers.version>2.0.5</testcontainers.version>
 
         <!-- Single source of truth for the codegen-time database. We connect as root so V0000's
-             CREATE DATABASE eventlog succeeds — the runtime / test containers use a less-
+             CREATE DATABASE eventlog succeeds - the runtime / test containers use a less-
              privileged `wallet` user with a mariadb_init.sql GRANT, but the codegen container
              is throwaway and root is simpler. -->
         <codegen.db.port>13306</codegen.db.port>
@@ -77,7 +77,7 @@
              its BOM, but the jooq-codegen-maven plugin generates classes against 3.20 APIs (e.g.
              `VERSION_3_20`, `resetTouchedOnNotNull()`). Declared as a direct dependency so the
              explicit version wins over the BOM-managed transitive, without adding a
-             <dependencyManagement> block — that breaks micronaut-maven-plugin 4.11.5's
+             <dependencyManagement> block - that breaks micronaut-maven-plugin 4.11.5's
              aot-analysis mojo. -->
         <dependency>
             <groupId>org.jooq</groupId>
@@ -98,7 +98,7 @@
             <artifactId>micronaut-http-server-netty</artifactId>
             <scope>compile</scope>
         </dependency>
-        <!-- micronaut-serde-jackson — Jackson-compatible (de)serialization using
+        <!-- micronaut-serde-jackson - Jackson-compatible (de)serialization using
              compile-time generated serdes instead of Jackson Databind's reflection.
              This is the native-image-friendly path; standard Jackson annotations
              (@JsonProperty, @JsonCreator) are honoured. Types must carry @Serdeable
@@ -300,12 +300,12 @@
 
             <!-- ════════════════════════════════════════════════════════════════════════════
                  jOOQ codegen chain (MariaDB flavour). Identical shape to the Spring-Boot-on-
-                 Maven MariaDB sibling — codegen has no Micronaut specifics. Dialect deltas:
+                 Maven MariaDB sibling - codegen has no Micronaut specifics. Dialect deltas:
                    - mariadb:11.8 + MARIADB_* env vars
                    - flyway-mysql (handles MariaDB)
                    - jdbc:mariadb:// + root user
                    - (?i:DATETIME|TIMESTAMP) + (?i:JSON) forced types
-                   - NO UUID forced type — MariaDB 10.7+ has a native UUID type
+                   - NO UUID forced type - MariaDB 10.7+ has a native UUID type
                  ════════════════════════════════════════════════════════════════════════════ -->
 
             <plugin>

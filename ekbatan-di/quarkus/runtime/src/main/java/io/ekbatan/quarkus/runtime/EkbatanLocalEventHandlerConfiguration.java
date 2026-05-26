@@ -21,7 +21,7 @@ import tools.jackson.databind.json.JsonMapper;
  * user-supplied {@code @EkbatanEventHandler} beans.
  *
  * <p>The {@link EventHandlingJob} is gated by {@code @IfBuildProperty}, evaluated at jar /
- * test bootstrap — set {@code ekbatan.local-event-handler.handling.enabled=true} in
+ * test bootstrap - set {@code ekbatan.local-event-handler.handling.enabled=true} in
  * {@code application.properties} to activate.
  */
 @Singleton
@@ -79,7 +79,7 @@ public class EkbatanLocalEventHandlerConfiguration {
      * keep their {@code @EkbatanEventHandler} beans for serialization-only purposes without
      * booting an in-process consumer.
      *
-     * <p>{@link IfBuildProperty} is evaluated at jar-assembly time — runtime overrides can't flip
+     * <p>{@link IfBuildProperty} is evaluated at jar-assembly time - runtime overrides can't flip
      * this, matching Spring's {@code @ConditionalOnProperty(havingValue="true")} default-off semantic.
      *
      * @param databaseRegistry the per-shard connection pools.

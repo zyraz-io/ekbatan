@@ -343,7 +343,7 @@ class MySQLKeyedLockProviderTest {
     @Test
     void acquire_should_pass_negative_timeout_for_wait_forever() throws Exception {
         // MySQL still honors negative GET_LOCK timeout as "wait forever," so we use the
-        // historical sentinel directly — no need for the very-large-finite workaround that
+        // historical sentinel directly - no need for the very-large-finite workaround that
         // the MariaDB impl needs.
         var jdbc = new JdbcMocks().getLockReturns(1);
         var provider = newProvider(jdbc.connection);

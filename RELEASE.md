@@ -2,7 +2,7 @@
 
 This document covers the release pipeline: one-time setup, the per-release workflow, and the safety nets in between. The publishing surface is two targets:
 
-- **15 jars to Maven Central** under groupId `io.github.zyraz-io` (via Sonatype Central Portal, stage-and-confirm). The Java packages in the source tree are `io.ekbatan.*` — Maven groupId and Java package don't need to match, and we kept the cleaner Java naming.
+- **16 jars to Maven Central** under groupId `io.github.zyraz-io` (via Sonatype Central Portal, stage-and-confirm). The Java packages in the source tree are `io.ekbatan.*` — Maven groupId and Java package don't need to match, and we kept the cleaner Java naming.
 - **2 SMT shadow jars to GitHub Releases** as drop-in assets for Kafka Connect's `plugin.path`.
 
 JReleaser orchestrates both from one config block in the root `build.gradle.kts`.
@@ -168,7 +168,7 @@ The tag push fires `.github/workflows/release.yml`, which runs:
 
 ```
 ./gradlew clean build
-./gradlew publish              # → build/staging-deploy/ populated with 15 jars+sources+javadoc+POM
+./gradlew publish              # → build/staging-deploy/ populated with 16 jars+sources+javadoc+POM
 ./gradlew jreleaserFullRelease # → signs, uploads to Sonatype staging
                                #   stops (does NOT auto-publish — see stage = UPLOAD config)
                                #   creates the GitHub Release with the SMT shadow jars
@@ -180,7 +180,7 @@ Log into <https://central.sonatype.com>. Under **Deployments** you'll see a new 
 
 Click into it. Check:
 
-- All 15 modules listed
+- All 16 modules listed
 - Each has main jar + sources jar + javadoc jar + POM + signatures
 - POM contents look right (group, artifact, version, license, developers, scm)
 

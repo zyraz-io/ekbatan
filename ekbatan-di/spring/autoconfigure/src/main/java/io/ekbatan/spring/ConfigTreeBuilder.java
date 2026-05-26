@@ -9,7 +9,7 @@ import java.util.Map;
  * Spring's {@code Binder.bind(prefix, Bindable.mapOf(String.class, Object.class))} flattens
  * YAML lists into maps keyed by their numeric index (e.g. {@code groups: { "0": ... }}). Jackson
  * refuses to deserialize that shape into a {@code List<...>}. This helper rebuilds Lists wherever
- * a map's keys are contiguous integer strings starting at zero — leaving mixed/non-numeric maps
+ * a map's keys are contiguous integer strings starting at zero - leaving mixed/non-numeric maps
  * (like the {@code configs} map keyed by {@code primaryConfig}/{@code lockConfig}) intact.
  */
 final class ConfigTreeBuilder {

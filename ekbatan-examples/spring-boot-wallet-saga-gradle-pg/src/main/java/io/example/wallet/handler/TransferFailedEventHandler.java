@@ -12,7 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Reacts to a committed {@link TransferFailedEvent} by invoking {@code RefundTransferAction} —
+ * Reacts to a committed {@link TransferFailedEvent} by invoking {@code RefundTransferAction} -
  * the saga's compensation step. The source wallet's balance was reduced by step 1 and step 2
  * couldn't credit the destination, so we credit the source back here.
  */

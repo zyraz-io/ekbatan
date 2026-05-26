@@ -14,7 +14,7 @@ repositories {
 dependencies {
     testImplementation(project(":ekbatan-integration-tests-event-pipeline-common"))
 
-    testImplementation(testFixtures(project(":ekbatan-core")))
+    testImplementation(project(":ekbatan-native"))
     testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))

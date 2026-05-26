@@ -9,12 +9,12 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
- * Saga compensation — emitted by {@code RefundTransferAction} on the source wallet after a
+ * Saga compensation - emitted by {@code RefundTransferAction} on the source wallet after a
  * {@link TransferFailedEvent} is observed. Marks the saga as terminated with the source's
  * balance restored. {@code transferId} matches the original {@link TransferInitiatedEvent} so
- * the full chain (initiated → failed → refunded) is correlated.
+ * the full chain (initiated -> failed -> refunded) is correlated.
  *
- * <p>Terminal event — no handler runs on receipt.
+ * <p>Terminal event - no handler runs on receipt.
  */
 public class TransferRefundedEvent extends ModelEvent<Wallet> {
 

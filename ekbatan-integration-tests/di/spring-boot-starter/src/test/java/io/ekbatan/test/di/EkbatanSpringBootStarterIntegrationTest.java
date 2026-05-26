@@ -28,15 +28,15 @@ import org.springframework.boot.test.context.SpringBootTest;
  *   <li>The event handler is invoked asynchronously after the fan-out and handling jobs run.</li>
  * </ol>
  *
- * <p>This is the only place where the full wiring graph is exercised: classpath scan → Spring DI
- * of repository and handler → {@code AutowireCapableBeanFactory.createBean} for the action's
- * singleton → real {@code DatabaseRegistry} with a Hikari pool → {@code SingleTableJsonEventPersister}
- * writing to {@code eventlog.events} → {@code EventFanoutJob} writing
- * {@code eventlog.event_notifications} rows → {@code EventHandlingJob} draining them and
- * invoking the handler → repository fetching from the real {@code widgets} table.
+ * <p>This is the only place where the full wiring graph is exercised: classpath scan -> Spring DI
+ * of repository and handler -> {@code AutowireCapableBeanFactory.createBean} for the action's
+ * singleton -> real {@code DatabaseRegistry} with a Hikari pool -> {@code SingleTableJsonEventPersister}
+ * writing to {@code eventlog.events} -> {@code EventFanoutJob} writing
+ * {@code eventlog.event_notifications} rows -> {@code EventHandlingJob} draining them and
+ * invoking the handler -> repository fetching from the real {@code widgets} table.
  *
  * <p>For test simplicity the scheduler's {@code jobsConfig} pool points at the same Postgres
- * as the app data — the {@code scheduled_tasks} table lives alongside {@code widgets} and
+ * as the app data - the {@code scheduled_tasks} table lives alongside {@code widgets} and
  * {@code eventlog.*}. Production deployments should typically use a dedicated scheduler
  * database; that's a separate, more elaborate integration test (deferred).
  */
@@ -44,7 +44,7 @@ import org.springframework.boot.test.context.SpringBootTest;
         classes = {EkbatanSpringBootTestApp.class, TestcontainersConfiguration.class},
         properties = {
             "ekbatan.namespace=test.spring",
-            // Sharding — single shard. Container-dependent jdbcUrl/username/password
+            // Sharding - single shard. Container-dependent jdbcUrl/username/password
             // come from the DynamicPropertyRegistrar in TestcontainersConfiguration.
             "ekbatan.sharding.defaultShard.group=0",
             "ekbatan.sharding.defaultShard.member=0",
@@ -60,7 +60,7 @@ import org.springframework.boot.test.context.SpringBootTest;
             "ekbatan.jobs.shutdownMaxWait=5s",
             // Opt in to the in-process handling job (off by default).
             // Read by @ConditionalOnProperty during bean definition phase, which is
-            // BEFORE DynamicPropertyRegistrar runs — must be set here, not the registrar.
+            // BEFORE DynamicPropertyRegistrar runs - must be set here, not the registrar.
             "ekbatan.local-event-handler.handling.enabled=true",
         })
 class EkbatanSpringBootStarterIntegrationTest {

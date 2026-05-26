@@ -362,7 +362,7 @@ class PostgresKeyedLockProviderTest {
         var provider = newProvider(jdbc.connection);
         var lock = newLock(provider);
 
-        // Duration.ofNanos(500) = 0ms after toMillis() — Math.max(1L, ...) clamps to 1
+        // Duration.ofNanos(500) = 0ms after toMillis() - Math.max(1L, ...) clamps to 1
         var leaseOpt = lock.tryAcquire("k", Duration.ofNanos(500), ONE_HOUR);
 
         assertThat(leaseOpt).isPresent();
@@ -417,7 +417,7 @@ class PostgresKeyedLockProviderTest {
 
     /**
      * Wires a mock {@link Connection} so the SQL statements used by {@link PostgresKeyedLockProvider}
-     * each return their own mock — letting tests verify or stub them individually.
+     * each return their own mock - letting tests verify or stub them individually.
      */
     private static final class JdbcMocks {
         final Connection connection = mock(Connection.class);

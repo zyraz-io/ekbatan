@@ -11,7 +11,7 @@ import java.time.Clock;
 
 /**
  * Single-shard deposit. The wallet's {@link ShardedId} encodes the shard bits, so
- * {@code walletRepository.getById} routes to the correct database automatically — and the
+ * {@code walletRepository.getById} routes to the correct database automatically - and the
  * subsequent {@code plan().update(...)} commits on the same shard. No cross-shard semantics here.
  */
 @EkbatanAction

@@ -13,14 +13,14 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Reacts to a committed {@code WalletMoneyDepositedEvent} by creating a Notification row.
- * Demonstrates the framework's listen-to-yourself pattern — the handler runs in-process after the
+ * Demonstrates the framework's listen-to-yourself pattern - the handler runs in-process after the
  * source action commits, then calls another action via the injected {@link ActionExecutor}. The
  * notification is recorded in its own transaction, atomically with a sentinel eventlog row for
  * the {@code CreateNotificationAction} invocation.
  *
  * <p>The recipient isn't part of the {@code WalletMoneyDepositedEvent} payload (that would
  * pollute the domain event with notification-routing concerns). Instead we read it back from
- * {@link EventEnvelope#actionParams} — the serialized parameters of the producing action.
+ * {@link EventEnvelope#actionParams} - the serialized parameters of the producing action.
  */
 @EkbatanEventHandler
 public class WalletMoneyDepositedEventHandler implements EventHandler<WalletMoneyDepositedEvent> {

@@ -38,7 +38,7 @@ public final class EventEntityRepository {
 
     private static final Table<?> EVENTS = DSL.table(DSL.name(SCHEMA, TABLE_NAME));
 
-    // Dialect-neutral fields (String, Instant, Boolean) — same shape on PG/MariaDB/MySQL.
+    // Dialect-neutral fields (String, Instant, Boolean) - same shape on PG/MariaDB/MySQL.
     private static final Field<String> NAMESPACE = DSL.field(DSL.name(SCHEMA, TABLE_NAME, "namespace"), String.class);
     private static final Field<String> ACTION_NAME =
             DSL.field(DSL.name(SCHEMA, TABLE_NAME, "action_name"), String.class);
@@ -125,7 +125,7 @@ public final class EventEntityRepository {
         }
     }
 
-    // --- db() variants — primary connection ---
+    // --- db() variants - primary connection ---
 
     private DSLContext db() {
         return databaseRegistry.primary.get(databaseRegistry.defaultShard);
@@ -139,7 +139,7 @@ public final class EventEntityRepository {
         return databaseRegistry.primary.values();
     }
 
-    // --- readonlyDb() variants — replica/secondary connection ---
+    // --- readonlyDb() variants - replica/secondary connection ---
 
     private DSLContext readonlyDb() {
         return databaseRegistry.secondary.get(databaseRegistry.defaultShard);
@@ -153,7 +153,7 @@ public final class EventEntityRepository {
         return databaseRegistry.secondary.values();
     }
 
-    // --- txDb() variants — currently-open transaction's connection, if any ---
+    // --- txDb() variants - currently-open transaction's connection, if any ---
 
     private Optional<DSLContext> txDb() {
         return databaseRegistry.defaultTransactionManager().currentTransactionDbContext();
@@ -163,7 +163,7 @@ public final class EventEntityRepository {
         return databaseRegistry.transactionManager(shard).currentTransactionDbContext();
     }
 
-    // --- txDbElseDb() variants — transaction connection if open, primary otherwise ---
+    // --- txDbElseDb() variants - transaction connection if open, primary otherwise ---
 
     private DSLContext txDbElseDb() {
         return txDb().orElseGet(this::db);
@@ -176,7 +176,7 @@ public final class EventEntityRepository {
     /**
      * Read up to {@code limit} undelivered, non-sentinel events ordered by {@code event_date}
      * ascending. Sentinel rows (zero-event actions, where {@code event_type} is NULL) are
-     * filtered out — they have no handlers to fan out to.
+     * filtered out - they have no handlers to fan out to.
      *
      * @param shard the shard to read from.
      * @param limit max rows to return.

@@ -23,7 +23,7 @@
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.version>3.34.6</quarkus.platform.version>
 
-        <!-- Hyphenated property names — avoid the `flyway.*` / `jooq.*` namespace, which the
+        <!-- Hyphenated property names - avoid the `flyway.*` / `jooq.*` namespace, which the
              respective Maven plugins scan and reject for unrecognized keys. -->
         <flyway-version>12.0.0</flyway-version>
         <mariadb-driver-version>3.5.7</mariadb-driver-version>
@@ -35,7 +35,7 @@
         <testcontainers.version>2.0.5</testcontainers.version>
 
         <!-- Single source of truth for the codegen-time database. We connect as root so V0000's
-             CREATE DATABASE eventlog succeeds — the runtime / test containers use a less-
+             CREATE DATABASE eventlog succeeds - the runtime / test containers use a less-
              privileged `wallet` user with a mariadb_init.sql GRANT, but the codegen container
              is throwaway and root is simpler. -->
         <codegen.db.port>13306</codegen.db.port>
@@ -261,7 +261,7 @@
                    - flyway-mysql (handles MariaDB)
                    - jdbc:mariadb:// + root user
                    - (?i:DATETIME|TIMESTAMP) + (?i:JSON) forced types
-                   - NO UUID forced type — MariaDB 10.7+ has a native UUID type
+                   - NO UUID forced type - MariaDB 10.7+ has a native UUID type
                  ════════════════════════════════════════════════════════════════════════════ -->
 
             <plugin>

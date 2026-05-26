@@ -17,7 +17,7 @@
         <maven.compiler.release>25</maven.compiler.release>
 
         <!-- Quarkus' BOM doesn't pin jOOQ, but the codegen plugin's default may not match
-             what Ekbatan was built against. Pin explicitly anyway — the failure mode if you
+             what Ekbatan was built against. Pin explicitly anyway - the failure mode if you
              skip this is a NoSuchMethodError at runtime. -->
         <jooq.version>3.20.10</jooq.version>
 
@@ -26,10 +26,10 @@
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.version>3.34.6</quarkus.platform.version>
 
-        <!-- Hyphenated property names — avoid the `flyway.*` / `jooq.*` namespace, which the
+        <!-- Hyphenated property names - avoid the `flyway.*` / `jooq.*` namespace, which the
              respective Maven plugins scan and reject for unrecognized keys.
              Pinned to 12.0.0 to match the version Quarkus 3.34.6's BOM pins for its
-             quarkus-flyway extension — keeping codegen-time and runtime in sync. -->
+             quarkus-flyway extension - keeping codegen-time and runtime in sync. -->
         <flyway-version>12.0.0</flyway-version>
         <postgresql.version>42.7.10</postgresql.version>
 
@@ -94,7 +94,7 @@
              reachability metadata. Auto-applied via META-INF/native-image properties when
              native-image runs; pure no-op on the JVM. Quarkus's own native handling covers
              extensions, but Ekbatan's runtime types (ShardingConfig.Builder etc.) live in
-             plain ekbatan-* JARs that aren't Quarkus extensions — this module bridges that
+             plain ekbatan-* JARs that aren't Quarkus extensions - this module bridges that
              gap. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
@@ -124,10 +124,10 @@
         <!-- Migrations run at app startup driven by `quarkus.flyway.migrate-at-start=true`
              against the `quarkus.datasource.*` config (see application.properties). The
              extension carries native-image reachability metadata for Flyway 12.0.0 and
-             handles the substrate-VM classpath scanning Flyway can't do on its own — no
+             handles the substrate-VM classpath scanning Flyway can't do on its own - no
              FlywayHelper or NativeImageFlywayResourceProvider needed in user code.
              Mirrors the Spring Boot starter / Micronaut Flyway pattern in the sibling
-             wallet examples — each framework owns its Flyway integration. -->
+             wallet examples - each framework owns its Flyway integration. -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-flyway</artifactId>
@@ -224,11 +224,11 @@
             </plugin>
 
             <!-- ════════════════════════════════════════════════════════════════════════════
-                 Quarkus Maven plugin — produces the runnable artifact (`./mvnw quarkus:dev`,
+                 Quarkus Maven plugin - produces the runnable artifact (`./mvnw quarkus:dev`,
                  `./mvnw package` produces `target/quarkus-app/`). Hooked into the build via
                  `<extensions>true</extensions>` so its lifecycle bindings register automatically.
                  ════════════════════════════════════════════════════════════════════════════ -->
-            <!-- Exclude *IT.java from surefire-test — those are @QuarkusIntegrationTest classes
+            <!-- Exclude *IT.java from surefire-test - those are @QuarkusIntegrationTest classes
                  designed to run via failsafe against the packaged binary, NOT in-process via
                  @QuarkusTest. Without this exclude, surefire tries to deploy the IT class as a
                  regular Quarkus test, and Quarkus Arc crashes during bean discovery with
@@ -313,7 +313,7 @@
             <!-- ════════════════════════════════════════════════════════════════════════════
                  jOOQ codegen chain (PostgreSQL flavour). Three plugins in `initialize` /
                  `generate-sources` / `prepare-package`. Declared AFTER quarkus-maven-plugin
-                 so within `generate-sources` they run after Quarkus's code generation — but
+                 so within `generate-sources` they run after Quarkus's code generation - but
                  it doesn't matter for correctness; the jooq generator only needs the live
                  schema and emits its output independently.
                  ════════════════════════════════════════════════════════════════════════════ -->
@@ -463,7 +463,7 @@
              switches Flyway/Hikari to runtime-init, and adds maven-failsafe-plugin to run
              *IT.java (the @QuarkusIntegrationTest classes) against the just-built native
              binary. Without this profile, `mvn verify` builds a JVM jar and skips the IT
-             classes — the JVM `WalletResourceIntegrationTest` (@QuarkusTest) runs via
+             classes - the JVM `WalletResourceIntegrationTest` (@QuarkusTest) runs via
              surefire as usual. -->
         <profile>
             <id>native</id>

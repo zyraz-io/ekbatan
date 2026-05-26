@@ -11,7 +11,7 @@ import java.time.Clock;
 
 /**
  * Cross-shard transfer between two wallets. The wallets may live on the same shard <em>or</em>
- * on different shards — when they do live on different shards, the caller must opt into
+ * on different shards - when they do live on different shards, the caller must opt into
  * cross-shard execution via {@code ExecutionConfiguration.Builder.allowCrossShard(true)},
  * otherwise the framework throws {@code CrossShardException} from {@code ActionExecutor}.
  *
@@ -20,11 +20,11 @@ import java.time.Clock;
  * those shards differ:
  *
  * <ul>
- *   <li>Each shard runs its own transaction — there is no 2PC, and partial failures are
+ *   <li>Each shard runs its own transaction - there is no 2PC, and partial failures are
  *       possible. Choose this only for genuinely cross-region operations that your domain has
  *       designed to be eventually consistent.</li>
  *   <li>The {@code eventlog.events} row for this action is duplicated to <em>both</em> shards
- *       with the same {@code action_id} UUID — each shard's row carries the full transfer
+ *       with the same {@code action_id} UUID - each shard's row carries the full transfer
  *       context (debit event on the source, credit event on the destination) so downstream CDC
  *       consumers on either shard see the complete picture.</li>
  * </ul>
@@ -46,7 +46,7 @@ public class WalletTransferAction extends Action<WalletTransferAction.Params, Wa
     @Override
     protected Result perform(Principal principal, Params params) {
         // Repository.findById decodes each wallet's shard from its ShardedUUID and routes the
-        // query to that shard automatically — no explicit ShardIdentifier handoff.
+        // query to that shard automatically - no explicit ShardIdentifier handoff.
         final var fromWallet = walletRepository.getById(params.fromWalletId().getValue());
         final var toWallet = walletRepository.getById(params.toWalletId().getValue());
 

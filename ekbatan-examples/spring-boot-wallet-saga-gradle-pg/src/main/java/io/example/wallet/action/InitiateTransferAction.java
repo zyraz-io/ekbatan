@@ -11,7 +11,7 @@ import java.time.Clock;
 import java.util.UUID;
 
 /**
- * Saga step 1 — debits the source wallet and emits {@code TransferInitiatedEvent}.
+ * Saga step 1 - debits the source wallet and emits {@code TransferInitiatedEvent}.
  *
  * <p>The transfer's UUID is generated here; it correlates every later event in the saga
  * (completion, failure, refund). The action commits in one transaction: source wallet's row

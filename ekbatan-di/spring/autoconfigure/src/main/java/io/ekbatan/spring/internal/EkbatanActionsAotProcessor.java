@@ -26,13 +26,13 @@ import org.springframework.util.ClassUtils;
  * <p><b>Why</b>: {@code EkbatanCoreConfiguration} historically scanned for
  * {@code @EkbatanAction} via {@link ClassPathScanningCandidateComponentProvider} at
  * runtime. That works on the JVM (it walks {@code .class} files on the classpath) but
- * silently returns an empty set on GraalVM native image — there are no {@code .class}
+ * silently returns an empty set on GraalVM native image - there are no {@code .class}
  * files to walk, so {@code ActionRegistry.get(...)} fails with
  * {@code "No action registered for class"} for every action invocation.
  *
  * <p>This processor moves the scan to AOT processing time (run by Spring's
  * {@code processAot} / {@code processTestAot} Gradle tasks on the JVM), records the
- * discovered classes via {@code ekbatan.aot.actions=…} in the generated initializer,
+ * discovered classes via {@code ekbatan.aot.actions=...} in the generated initializer,
  * and registers reflection hints so the action classes' constructors remain invokable
  * via {@code AutowireCapableBeanFactory.createBean(Class)} at runtime.
  *
@@ -59,7 +59,7 @@ public class EkbatanActionsAotProcessor implements BeanFactoryInitializationAotP
         }
         var packages = AutoConfigurationPackages.get(beanFactory);
         // The processor runs on the JVM at AOT processing time, so the standard scanner
-        // can read .class files normally — same code path as the runtime fallback in
+        // can read .class files normally - same code path as the runtime fallback in
         // EkbatanCoreConfiguration.
         var scanner = new ClassPathScanningCandidateComponentProvider(false, new StandardEnvironment());
         scanner.addIncludeFilter(new AnnotationTypeFilter(EkbatanAction.class));
@@ -69,7 +69,7 @@ public class EkbatanActionsAotProcessor implements BeanFactoryInitializationAotP
                 Class<?> cls = ClassUtils.resolveClassName(bd.getBeanClassName(), null);
                 if (!Action.class.isAssignableFrom(cls)) {
                     throw new IllegalStateException(
-                            "@EkbatanAction on " + cls.getName() + " — class must extend " + Action.class.getName());
+                            "@EkbatanAction on " + cls.getName() + " - class must extend " + Action.class.getName());
                 }
                 classes.add((Class<? extends Action<?, ?>>) cls);
             }
@@ -95,7 +95,7 @@ public class EkbatanActionsAotProcessor implements BeanFactoryInitializationAotP
                         cls,
                         MemberCategory.INVOKE_DECLARED_CONSTRUCTORS,
                         MemberCategory.INVOKE_DECLARED_METHODS,
-                        // Spring 7 renamed DECLARED_FIELDS → ACCESS_DECLARED_FIELDS to distinguish
+                        // Spring 7 renamed DECLARED_FIELDS -> ACCESS_DECLARED_FIELDS to distinguish
                         // "reflective access" (read/write) from "introspection" (metadata).
                         MemberCategory.ACCESS_DECLARED_FIELDS);
             }

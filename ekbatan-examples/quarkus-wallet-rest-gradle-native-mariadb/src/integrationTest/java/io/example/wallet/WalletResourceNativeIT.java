@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
  * which uses {@code @QuarkusTest} + {@code @Inject} to additionally assert internal
  * state (e.g. notification rows written by the listen-to-yourself fan-out).
  *
- * <p>{@code @QuarkusIntegrationTest} launches the packaged binary out-of-process — {@code @Inject}
+ * <p>{@code @QuarkusIntegrationTest} launches the packaged binary out-of-process - {@code @Inject}
  * fields can't bridge the test JVM to the app process. Every assertion goes through the REST
  * surface, with REST-assured making the HTTP calls. This is the same pattern Quarkus's own
  * extension tests follow.
@@ -26,8 +26,8 @@ import org.junit.jupiter.api.Test;
  * <p>Run via:
  *
  * <ul>
- *   <li>{@code ./gradlew quarkusIntTest} — against the packaged jar.</li>
- *   <li>{@code ./gradlew quarkusIntTest -Dquarkus.native.enabled=true} — against the native binary.</li>
+ *   <li>{@code ./gradlew quarkusIntTest} - against the packaged jar.</li>
+ *   <li>{@code ./gradlew quarkusIntTest -Dquarkus.native.enabled=true} - against the native binary.</li>
  * </ul>
  *
  * <p>Notification verification is omitted here (the listen-to-yourself path is asserted in the
@@ -40,7 +40,7 @@ class WalletResourceNativeIT {
 
     @Test
     void create_then_deposit_returns_updated_balance() {
-        // GIVEN — a freshly created wallet
+        // GIVEN - a freshly created wallet
         final var ownerId = UUID.randomUUID();
         final var walletId = UUID.fromString(given().contentType(ContentType.JSON)
                 .body(Map.of(
@@ -57,7 +57,7 @@ class WalletResourceNativeIT {
                 .extract()
                 .path("id"));
 
-        // WHEN — deposit $100
+        // WHEN - deposit $100
         given().contentType(ContentType.JSON)
                 .body(Map.of("amount", "100.00", "recipient", "alice@example.com"))
                 .when()
@@ -66,7 +66,7 @@ class WalletResourceNativeIT {
                 .statusCode(200)
                 .body("balance", equalTo(100.00f));
 
-        // THEN — GET returns the updated balance
+        // THEN - GET returns the updated balance
         given().when().get("/wallets/" + walletId).then().statusCode(200).body("balance", equalTo(100.00f));
     }
 

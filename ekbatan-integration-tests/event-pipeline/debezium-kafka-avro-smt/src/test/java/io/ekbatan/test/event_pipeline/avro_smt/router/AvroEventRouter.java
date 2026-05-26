@@ -70,7 +70,7 @@ public class AvroEventRouter implements AutoCloseable {
                     }
                     consumer.commitSync();
                 } catch (Exception e) {
-                    LOG.error("Failed to route batch, offsets not committed — will retry on next poll", e);
+                    LOG.error("Failed to route batch, offsets not committed - will retry on next poll", e);
                 }
             }
         });

@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Records every {@link WidgetCreatedEvent} the local-event-handler dispatch delivers. Used by
  * each DI-flavor integration test to verify that the framework's auto-config / extension wires
- * the fan-out and handling jobs end to end: action persists → fan-out writes notifications →
+ * the fan-out and handling jobs end to end: action persists -> fan-out writes notifications ->
  * handling job picks them up and invokes this handler.
  *
  * <p>Both fields are concurrency-safe because the handling job invokes handlers from a

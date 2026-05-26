@@ -12,7 +12,7 @@ import io.ekbatan.core.domain.Id;
 import io.ekbatan.core.domain.Model;
 import io.ekbatan.core.domain.ModelEvent;
 import io.ekbatan.core.repository.Repository;
-import io.ekbatan.core.time.VirtualClock;
+import io.ekbatan.testsupport.time.VirtualClock;
 import java.security.Principal;
 import java.time.Instant;
 import java.util.ArrayList;

@@ -21,8 +21,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  *   <li>The {@code ekbatan.sharding.*} keys point at the real PG.</li>
  * </ul>
  *
- * <p>We co-locate the scheduler pool ({@code jobsConfig}) with the application data — same DB,
- * different Hikari pool — to mirror what the Spring Boot integration test does. A production
+ * <p>We co-locate the scheduler pool ({@code jobsConfig}) with the application data - same DB,
+ * different Hikari pool - to mirror what the Spring Boot integration test does. A production
  * deployment would point {@code jobsConfig.jdbcUrl} at a separate scheduler database; that's a
  * more elaborate test deferred for now.
  */
@@ -43,7 +43,7 @@ public class PostgresTestResource implements QuarkusTestResourceLifecycleManager
         var props = new HashMap<String, String>();
         props.put("ekbatan.namespace", "test.quarkus");
 
-        // Sharding — single shard pointing at the Testcontainers PG.
+        // Sharding - single shard pointing at the Testcontainers PG.
         // driverClassName is supplied because Quarkus's runtime classloader doesn't auto-discover
         // JDBC Driver SPIs during the Arc producer phase the way a vanilla JVM does. Setting it
         // here makes Hikari explicitly Class.forName(...) the driver instead of leaning on
@@ -60,7 +60,7 @@ public class PostgresTestResource implements QuarkusTestResourceLifecycleManager
                 "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.driverClassName", "org.postgresql.Driver");
         props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize", "5");
 
-        // jobsConfig — scheduler shares the same PG for this smoke test.
+        // jobsConfig - scheduler shares the same PG for this smoke test.
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl", container.getJdbcUrl());
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username", container.getUsername());
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password", container.getPassword());

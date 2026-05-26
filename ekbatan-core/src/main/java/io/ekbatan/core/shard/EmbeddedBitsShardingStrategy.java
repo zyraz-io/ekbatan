@@ -7,7 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Sharding strategy that reads the shard identifier directly out of the UUID bytes — no
+ * Sharding strategy that reads the shard identifier directly out of the UUID bytes - no
  * external lookup. Used together with {@link ShardedId} (and the underlying
  * {@code ShardedUUID}), which encode {@code (group, member)} into specific bits of a
  * UUIDv7 value.

@@ -38,7 +38,7 @@ public class TestModelEvent extends ModelEvent<Object> {
     }
 
     /**
-     * Jackson deserialization constructor — matches the framework's convention (see
+     * Jackson deserialization constructor - matches the framework's convention (see
      * e.g. WidgetCreatedEvent) of pairing a public app-facing ctor with a private
      * {@code @JsonCreator} variant that accepts the wire-format fields.
      * The {@code modelName} parameter is consumed for protocol compatibility but ignored

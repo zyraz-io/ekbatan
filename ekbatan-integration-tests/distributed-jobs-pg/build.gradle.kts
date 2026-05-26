@@ -13,7 +13,7 @@ repositories {
 
 dependencies {
     testImplementation(project(":ekbatan-core"))
-    testImplementation(testFixtures(project(":ekbatan-core")))
+    testImplementation(project(":ekbatan-native"))
     testImplementation(project(":ekbatan-distributed-jobs"))
     testImplementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
     testImplementation("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")

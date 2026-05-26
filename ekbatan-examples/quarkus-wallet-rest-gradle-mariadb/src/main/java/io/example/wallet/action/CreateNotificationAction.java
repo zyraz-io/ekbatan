@@ -12,7 +12,7 @@ import java.util.UUID;
  * Persists a single Notification row. Called by event handlers (listen-to-yourself path) so that
  * notification creation runs in its own action / own transaction, with its own retry policy if
  * the handler invocation fails partway through. Emits no events of its own (Notification is an
- * {@code Entity}, not a {@code Model}) — the eventlog still gets a sentinel row for the action
+ * {@code Entity}, not a {@code Model}) - the eventlog still gets a sentinel row for the action
  * itself.
  */
 @EkbatanAction

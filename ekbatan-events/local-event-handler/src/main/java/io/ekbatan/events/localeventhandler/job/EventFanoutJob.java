@@ -35,7 +35,7 @@ import org.apache.commons.lang3.Validate;
  * to return.
  *
  * <p>Round-by-round (rather than each shard looping independently) means a shard that's been
- * drained but receives a fresh event is revisited on the very next round — the new event
+ * drained but receives a fresh event is revisited on the very next round - the new event
  * gets picked up in the same {@code execute()} invocation rather than waiting for the next
  * scheduler tick.
  */
@@ -48,7 +48,7 @@ public final class EventFanoutJob extends DistributedJob {
             .build();
     private static final LongCounter NOTIFICATIONS_CREATED = METER.counterBuilder(
                     "ekbatan.events.notifications_created")
-            .setDescription("Notification rows materialized by the fan-out job (one per event × subscribed handler)")
+            .setDescription("Notification rows materialized by the fan-out job (one per event x subscribed handler)")
             .setUnit("{notification}")
             .build();
 
@@ -99,11 +99,11 @@ public final class EventFanoutJob extends DistributedJob {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            // graceful return — db-scheduler is interrupting us during shutdown
+            // graceful return - db-scheduler is interrupting us during shutdown
         }
         // RuntimeException propagates: db-scheduler re-invokes execute() after FixedDelay
         // (which equals our pollDelay), giving the next attempt the same throttling as a
-        // healthy idle round. The known idempotency case (replica-lag → unique-conflict on
+        // healthy idle round. The known idempotency case (replica-lag -> unique-conflict on
         // the notifications insert) is handled inside the repository via
         // ON CONFLICT DO NOTHING and never reaches here.
     }
@@ -133,7 +133,7 @@ public final class EventFanoutJob extends DistributedJob {
     }
 
     private int drainBatch(TransactionManager tm) {
-        // One transaction per batch: select undelivered → insert notifications → mark delivered.
+        // One transaction per batch: select undelivered -> insert notifications -> mark delivered.
         // Atomic across both tables on the same shard.
         return tm.inTransaction(_ -> {
             final var events = eventEntityRepository.findUndelivered(tm.shardIdentifier, batchSize);
@@ -151,7 +151,7 @@ public final class EventFanoutJob extends DistributedJob {
                             .id(UUID.randomUUID())
                             .eventId(event.id)
                             .handlerName(handlerName)
-                            // denormalized event + action context — copied from the event
+                            // denormalized event + action context - copied from the event
                             // so dispatch never has to fetch the events table again.
                             .namespace(event.namespace)
                             .actionId(event.actionId)

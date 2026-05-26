@@ -5,7 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.ekbatan.core.domain.Id;
-import io.ekbatan.core.time.VirtualClock;
+import io.ekbatan.testsupport.action.ActionSpec;
+import io.ekbatan.testsupport.time.VirtualClock;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 

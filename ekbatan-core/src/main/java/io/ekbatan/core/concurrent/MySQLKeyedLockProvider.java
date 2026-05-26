@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * {@link KeyedLockProvider} backed by MySQL session-scoped {@code GET_LOCK} / {@code RELEASE_LOCK}
- * user-level locks. Same family as {@link MariaDBKeyedLockProvider} — the lock is bound
+ * user-level locks. Same family as {@link MariaDBKeyedLockProvider} - the lock is bound
  * to the JDBC session that acquired it and is released when the session ends (lease
  * {@code close()}, {@code maxHold} expiry, or session death).
  *
@@ -48,7 +48,7 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
 
     /**
      * MySQL honors a negative timeout as "wait forever," preserving the historical
-     * GET_LOCK semantics. (MariaDB diverged from this in 12.x — see {@link
+     * GET_LOCK semantics. (MariaDB diverged from this in 12.x - see {@link
      * MariaDBKeyedLockProvider} for details on that side.)
      */
     private static final double WAIT_FOREVER_SECONDS = -1.0;

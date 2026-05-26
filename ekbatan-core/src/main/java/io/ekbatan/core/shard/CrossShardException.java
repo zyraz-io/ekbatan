@@ -6,7 +6,7 @@ package io.ekbatan.core.shard;
  * {@link io.ekbatan.core.action.ExecutionConfiguration#allowCrossShard} is {@code false}
  * (the default).
  *
- * <p>Cross-shard actions cannot commit atomically — there is no 2PC — so the default is to
+ * <p>Cross-shard actions cannot commit atomically - there is no 2PC - so the default is to
  * reject rather than fall into per-shard at-least-once semantics by accident. Set
  * {@code allowCrossShard = true} on the execution configuration to opt in explicitly when
  * the cross-shard side-effect is acceptable.

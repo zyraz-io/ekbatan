@@ -59,7 +59,7 @@ class Transaction {
         } catch (SQLException e) {
             // The connection is in unknown state: either rollback itself failed (transaction may
             // still be pending) or the autocommit reset failed (subsequent users would inherit the
-            // wrong setting). Mark dirty so the caller evicts instead of returning to the pool —
+            // wrong setting). Mark dirty so the caller evicts instead of returning to the pool -
             // otherwise Hikari's setAutoCommit(true) reset on return would implicitly commit a
             // partially-rolled-back transaction.
             log.warn("Failed to rollback and reset auto-commit; connection will be evicted", e);

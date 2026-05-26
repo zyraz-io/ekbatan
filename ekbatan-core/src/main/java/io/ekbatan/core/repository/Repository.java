@@ -15,7 +15,7 @@ import java.util.List;
  * findAllByIds, findOneWhere, findAllWhere, count, existsById, dbs/scatter-gather, etc.).
  * Implementing {@code Repository} directly is reserved for unusual storage backends.
  *
- * <p>All write operations are optimistic-locked via {@link Persistable#getVersion()} — see
+ * <p>All write operations are optimistic-locked via {@link Persistable#getVersion()} - see
  * {@link io.ekbatan.core.repository.exception.StaleRecordException}.
  *
  * @param <PERSISTABLE> the {@link io.ekbatan.core.domain.Model} or
@@ -35,7 +35,7 @@ public interface Repository<PERSISTABLE extends Persistable<?>> {
     PERSISTABLE add(PERSISTABLE model);
 
     /**
-     * Inserts without returning the result — preferred for batched writes where the caller
+     * Inserts without returning the result - preferred for batched writes where the caller
      * doesn't need the post-insert state.
      *
      * @param model the entity to insert.
@@ -58,7 +58,7 @@ public interface Repository<PERSISTABLE extends Persistable<?>> {
     void addAllNoResult(Collection<PERSISTABLE> models);
 
     /**
-     * Updates a single domain object — optimistic-locked on {@link Persistable#getVersion}.
+     * Updates a single domain object - optimistic-locked on {@link Persistable#getVersion}.
      *
      * @param model the entity to update.
      * @return the updated entity, with {@code version + 1}.
@@ -73,7 +73,7 @@ public interface Repository<PERSISTABLE extends Persistable<?>> {
     void updateNoResult(PERSISTABLE model);
 
     /**
-     * Updates a batch — optimistic-locked per row.
+     * Updates a batch - optimistic-locked per row.
      *
      * @param models the entities to update.
      * @return the updated entities in the same order.

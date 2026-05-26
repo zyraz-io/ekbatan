@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
- * Saga step 2 (failure path) — emitted by {@code CompleteTransferAction} on the <em>source</em>
+ * Saga step 2 (failure path) - emitted by {@code CompleteTransferAction} on the <em>source</em>
  * wallet when the destination wallet can't receive the funds (missing, closed, wrong currency,
  * etc.). The source wallet's balance was already debited by step 1; emitting this event on the
  * source attaches a clear failure marker to the source's event trail without rolling back the

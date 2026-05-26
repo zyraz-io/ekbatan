@@ -39,7 +39,7 @@ out/
 
 # Local-only configuration overrides (machine/developer-specific). Application
 # config files (`application.properties`, `application.yml/yaml`,
-# `native-image.properties`, etc.) are committed — they're the source of truth
+# `native-image.properties`, etc.) are committed - they're the source of truth
 # for how each module is wired.
 local.properties
 **/secrets.properties
@@ -117,5 +117,5 @@ yarn-error.log*
 .playwright-mcp
 .crush
 
-# Claude Code project-scoped MCP servers — local dev tooling, not shared
+# Claude Code project-scoped MCP servers - local dev tooling, not shared
 .mcp.json

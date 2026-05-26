@@ -74,6 +74,9 @@ dependencies {
     // GraalVM native-image Features (auto-loaded; include only if you build native binaries)
     implementation("io.github.zyraz-io:ekbatan-native:0.0.3")
 
+    // Testing helpers: ActionSpec, ActionAssert, VirtualClock, and Testcontainers utilities
+    testImplementation("io.github.zyraz-io:ekbatan-test-support:0.0.3")
+
     // ── Wire-format DTOs (only for Kafka consumer apps reading from the eventlog) ──
     // Pick the one matching your Kafka serializer; not needed in the producer app itself.
     implementation("io.github.zyraz-io:ekbatan-action-event-json:0.0.3")

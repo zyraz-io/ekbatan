@@ -4,7 +4,7 @@ import java.util.Objects;
 import org.apache.commons.lang3.Validate;
 
 /**
- * Two-tier shard coordinate: a {@code group} (logical grouping — e.g. region, tenant tier)
+ * Two-tier shard coordinate: a {@code group} (logical grouping - e.g. region, tenant tier)
  * and a {@code member} (physical database within the group). The framework uses this pair
  * as the lookup key into {@link DatabaseRegistry}.
  *

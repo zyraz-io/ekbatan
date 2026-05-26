@@ -31,7 +31,7 @@ public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wal
     }
 
     /**
-     * Open wallets with balance strictly below the given threshold — consumed by
+     * Open wallets with balance strictly below the given threshold - consumed by
      * {@link io.example.wallet.job.WalletStipendJob} to decide who needs a top-up.
      */
     public List<Wallet> findOpenWithBalanceBelow(BigDecimal threshold) {

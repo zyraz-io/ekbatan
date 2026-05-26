@@ -24,8 +24,8 @@ import org.slf4j.LoggerFactory;
  * {@link io.ekbatan.core.domain.Model} subclasses) to the configured {@link EventPersister}.
  *
  * <p>This is an internal helper of {@link io.ekbatan.core.action.ActionExecutor}; application
- * code doesn't construct one directly. Documented here because the persister surface — what
- * gets written, in what order, with what correlation IDs — is part of the framework's
+ * code doesn't construct one directly. Documented here because the persister surface - what
+ * gets written, in what order, with what correlation IDs - is part of the framework's
  * persistence contract.
  *
  * <p>Domain rows are written first, then events, all within the per-shard transaction the

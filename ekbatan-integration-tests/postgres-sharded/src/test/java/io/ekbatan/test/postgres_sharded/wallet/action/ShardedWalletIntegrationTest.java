@@ -115,11 +115,11 @@ public class ShardedWalletIntegrationTest {
         // WHEN
         var wallet = executor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params("DE"));
 
-        // THEN — wallet on global shard
+        // THEN - wallet on global shard
         var globalOnlyRepo = new WalletRepository(singleShardRegistry(GLOBAL_SHARD));
         assertThat(globalOnlyRepo.findById(wallet.id.getValue())).isPresent();
 
-        // AND — not on mexico shard
+        // AND - not on mexico shard
         var mexicoOnlyRepo = new WalletRepository(singleShardRegistry(MEXICO_SHARD));
         assertThat(mexicoOnlyRepo.findById(wallet.id.getValue())).isEmpty();
     }
@@ -132,11 +132,11 @@ public class ShardedWalletIntegrationTest {
         var mexicoWallet =
                 executor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params("MX"));
 
-        // THEN — sharded repo finds both
+        // THEN - sharded repo finds both
         assertThat(walletRepo.findById(globalWallet.id.getValue())).isPresent();
         assertThat(walletRepo.findById(mexicoWallet.id.getValue())).isPresent();
 
-        // AND — per-shard isolation
+        // AND - per-shard isolation
         var globalOnlyRepo = new WalletRepository(singleShardRegistry(GLOBAL_SHARD));
         var mexicoOnlyRepo = new WalletRepository(singleShardRegistry(MEXICO_SHARD));
 
@@ -156,10 +156,10 @@ public class ShardedWalletIntegrationTest {
         // WHEN
         executor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params("MX"));
 
-        // THEN — one new action_events on mexico shard
+        // THEN - one new action_events on mexico shard
         assertThat(countActionEvents(MEXICO_SHARD)).isEqualTo(beforeMexico + 1);
 
-        // AND — no new action_events on global shard
+        // AND - no new action_events on global shard
         assertThat(countActionEvents(GLOBAL_SHARD)).isEqualTo(beforeGlobal);
     }
 
@@ -167,7 +167,7 @@ public class ShardedWalletIntegrationTest {
 
     @Test
     void cross_shard_action_throws_by_default() {
-        // WHEN / THEN — default config disallows cross-shard
+        // WHEN / THEN - default config disallows cross-shard
         assertThatThrownBy(() -> executor.execute(
                         () -> "test-user",
                         WalletCreateMultiShardAction.class,
@@ -202,7 +202,7 @@ public class ShardedWalletIntegrationTest {
         } catch (Exception _) {
         }
 
-        // THEN — no new wallets on either shard
+        // THEN - no new wallets on either shard
         assertThat(countWallets(GLOBAL_SHARD)).isEqualTo(beforeGlobal);
         assertThat(countWallets(MEXICO_SHARD)).isEqualTo(beforeMexico);
     }
@@ -225,27 +225,27 @@ public class ShardedWalletIntegrationTest {
                 new WalletCreateMultiShardAction.Params(),
                 config);
 
-        // THEN — one new wallet on each shard
+        // THEN - one new wallet on each shard
         assertThat(countWallets(GLOBAL_SHARD)).isEqualTo(beforeGlobalWallets + 1);
         assertThat(countWallets(MEXICO_SHARD)).isEqualTo(beforeMexicoWallets + 1);
 
-        // AND — EUR wallet on global, MXN wallet on mexico
+        // AND - EUR wallet on global, MXN wallet on mexico
         var globalWallets = new WalletRepository(singleShardRegistry(GLOBAL_SHARD)).findAll();
         var mexicoWallets = new WalletRepository(singleShardRegistry(MEXICO_SHARD)).findAll();
         assertThat(globalWallets).anyMatch(w -> w.currency.getCurrencyCode().equals("EUR"));
         assertThat(mexicoWallets).anyMatch(w -> w.currency.getCurrencyCode().equals("MXN"));
 
-        // AND — action_events duplicated to both shards
+        // AND - action_events duplicated to both shards
         assertThat(countActionEvents(GLOBAL_SHARD)).isEqualTo(beforeGlobalEvents + 1);
         assertThat(countActionEvents(MEXICO_SHARD)).isEqualTo(beforeMexicoEvents + 1);
 
-        // AND — the duplicated action_events share the same UUID
+        // AND - the duplicated action_events share the same UUID
         var globalIds = fetchActionEventIds(GLOBAL_SHARD);
         var mexicoIds = fetchActionEventIds(MEXICO_SHARD);
         assertThat(globalIds).containsAnyElementsOf(mexicoIds);
     }
 
-    // --- Effective shard fallback tests (unregistered shard → default) ---
+    // --- Effective shard fallback tests (unregistered shard -> default) ---
 
     @Test
     void unregistered_shard_wallet_persisted_to_default_shard() throws Exception {
@@ -253,16 +253,16 @@ public class ShardedWalletIntegrationTest {
         var beforeGlobal = countWallets(GLOBAL_SHARD);
         var beforeMexico = countWallets(MEXICO_SHARD);
 
-        // WHEN — AU maps to shard (2,0) which is not registered → falls back to global
+        // WHEN - AU maps to shard (2,0) which is not registered -> falls back to global
         var wallet = executor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params("AU"));
 
-        // THEN — wallet on global shard
+        // THEN - wallet on global shard
         assertThat(countWallets(GLOBAL_SHARD)).isEqualTo(beforeGlobal + 1);
 
-        // AND — not on mexico shard
+        // AND - not on mexico shard
         assertThat(countWallets(MEXICO_SHARD)).isEqualTo(beforeMexico);
 
-        // AND — findable via sharded repo
+        // AND - findable via sharded repo
         assertThat(walletRepo.findById(wallet.id.getValue())).isPresent();
     }
 
@@ -276,7 +276,7 @@ public class ShardedWalletIntegrationTest {
         var australiaWallet =
                 executor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params("AU"));
 
-        // THEN — all three findable via sharded repo
+        // THEN - all three findable via sharded repo
         assertThat(walletRepo.findById(globalWallet.id.getValue())).isPresent();
         assertThat(walletRepo.findById(mexicoWallet.id.getValue())).isPresent();
         assertThat(walletRepo.findById(australiaWallet.id.getValue())).isPresent();
@@ -291,27 +291,27 @@ public class ShardedWalletIntegrationTest {
         // WHEN
         executor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params("AU"));
 
-        // THEN — action event on global (default) shard
+        // THEN - action event on global (default) shard
         assertThat(countActionEvents(GLOBAL_SHARD)).isEqualTo(beforeGlobal + 1);
 
-        // AND — no new action event on mexico shard
+        // AND - no new action event on mexico shard
         assertThat(countActionEvents(MEXICO_SHARD)).isEqualTo(beforeMexico);
     }
 
     @Test
     void unregistered_shard_wallets_coexist_with_default_shard_wallets() throws Exception {
-        // GIVEN — DE wallet (global shard) and AU wallet (unregistered → global shard)
+        // GIVEN - DE wallet (global shard) and AU wallet (unregistered -> global shard)
         var deWallet =
                 executor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params("DE"));
         var auWallet =
                 executor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params("AU"));
 
-        // THEN — both physically on global shard
+        // THEN - both physically on global shard
         var globalOnlyRepo = new WalletRepository(singleShardRegistry(GLOBAL_SHARD));
         assertThat(globalOnlyRepo.findById(deWallet.id.getValue())).isPresent();
         assertThat(globalOnlyRepo.findById(auWallet.id.getValue())).isPresent();
 
-        // AND — neither on mexico shard
+        // AND - neither on mexico shard
         var mexicoOnlyRepo = new WalletRepository(singleShardRegistry(MEXICO_SHARD));
         assertThat(mexicoOnlyRepo.findById(deWallet.id.getValue())).isEmpty();
         assertThat(mexicoOnlyRepo.findById(auWallet.id.getValue())).isEmpty();

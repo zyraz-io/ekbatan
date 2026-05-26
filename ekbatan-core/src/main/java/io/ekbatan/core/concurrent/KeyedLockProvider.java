@@ -9,11 +9,11 @@ import java.util.Optional;
  * (single-JVM) and distributed (cross-JVM) coordination.
  *
  * <p>Callers using typed identifiers (e.g. {@code Id<Wallet>}) should derive the key explicitly
- * — typically by namespacing per type, e.g. {@code "wallet:" + walletId}. This keeps key
+ * - typically by namespacing per type, e.g. {@code "wallet:" + walletId}. This keeps key
  * collisions across unrelated types impossible by construction.
  *
  * <p>Both acquisition methods require a {@code maxHold} duration. The lock is automatically
- * released when {@code maxHold} elapses, even if the caller has not closed the lease — a safety
+ * released when {@code maxHold} elapses, even if the caller has not closed the lease - a safety
  * net against a holder that crashes, hangs, or forgets to release. Callers who want indefinite
  * holds within a single JVM should pass a sufficiently large duration; distributed
  * implementations should always be used with a realistic limit.
@@ -24,7 +24,7 @@ import java.util.Optional;
  * thread can call {@link #acquire(String, Duration)} or {@link #tryAcquire(String, Duration,
  * Duration)} on a key it already holds without blocking; the call returns a fresh {@link Lease}
  * instance and increments an internal hold counter. The underlying backend lock is released only
- * when the <em>outermost</em> lease is closed (or the watchdog fires — see below). Each
+ * when the <em>outermost</em> lease is closed (or the watchdog fires - see below). Each
  * {@code Lease} returned must be closed exactly once; standard try-with-resources handles this
  * naturally.
  *
@@ -42,7 +42,7 @@ import java.util.Optional;
  *
  * <p><b>Best practice:</b> reentrancy exists to prevent accidental self-deadlock when shared
  * service methods get called transitively from inside a locked region. It is not an invitation
- * to design for nested locking — locks layered across the call stack are a maintainability
+ * to design for nested locking - locks layered across the call stack are a maintainability
  * smell. Keep locking at one well-defined layer when possible.
  *
  * <h2>Implementation guarantees</h2>
@@ -61,7 +61,7 @@ public interface KeyedLockProvider extends AutoCloseable {
      * elapses, whichever happens first.
      *
      * <p>If the calling thread already holds {@code key}, this call returns immediately with a
-     * fresh re-entrant lease — no backend round-trip, no blocking. The {@code maxHold} argument
+     * fresh re-entrant lease - no backend round-trip, no blocking. The {@code maxHold} argument
      * is ignored on re-entry; the original outermost watchdog continues to govern the hold
      * limit. See {@link KeyedLockProvider} class docs for the full reentrancy contract.
      *
@@ -78,7 +78,7 @@ public interface KeyedLockProvider extends AutoCloseable {
      * the wait elapsed without acquiring. Pass {@link Duration#ZERO} for a non-blocking attempt.
      *
      * <p>If the calling thread already holds {@code key}, this call always succeeds immediately
-     * with a fresh re-entrant lease — no backend round-trip, no waiting. The {@code maxWait}
+     * with a fresh re-entrant lease - no backend round-trip, no waiting. The {@code maxWait}
      * and {@code maxHold} arguments are both ignored on re-entry; the original outermost
      * watchdog continues to govern the hold limit. See {@link KeyedLockProvider} class docs for
      * the full reentrancy contract.
@@ -100,7 +100,7 @@ public interface KeyedLockProvider extends AutoCloseable {
      *
      * <p>Each call to {@link KeyedLockProvider#acquire(String, Duration)} (or
      * {@link KeyedLockProvider#tryAcquire(String, Duration, Duration)}) returns its own
-     * {@code Lease} instance — including re-entries by the same thread on the same key. Each
+     * {@code Lease} instance - including re-entries by the same thread on the same key. Each
      * lease must be closed exactly once. The underlying backend lock is released when the
      * outermost lease in the nested chain is closed, or when the {@code maxHold} watchdog
      * fires.
@@ -110,7 +110,7 @@ public interface KeyedLockProvider extends AutoCloseable {
         /**
          * True if this lease still holds the lock. Returns false after {@link #close()}, after
          * the {@code maxHold} watchdog has fired (force-releasing the underlying backend lock),
-         * or — for inner re-entrant leases — after the watchdog has expired even if the inner
+         * or - for inner re-entrant leases - after the watchdog has expired even if the inner
          * lease has not been closed yet.
          *
          * @return {@code true} if the lease still holds the lock, {@code false} otherwise.

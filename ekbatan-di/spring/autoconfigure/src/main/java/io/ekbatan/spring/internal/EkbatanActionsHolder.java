@@ -7,7 +7,7 @@ import java.util.Set;
 /**
  * Static registry of {@code @EkbatanAction}-annotated classes discovered at AOT
  * processing time and made available to {@code EkbatanCoreConfiguration} at runtime
- * — a tiny shim that lets a Spring AOT-generated bean-factory initializer populate the
+ * - a tiny shim that lets a Spring AOT-generated bean-factory initializer populate the
  * action list before the auto-config builds the {@code ActionRegistry}.
  *
  * <p>On JVM in non-AOT mode the holder stays empty and the auto-config falls back to
@@ -17,7 +17,7 @@ import java.util.Set;
  * instead of attempting the (broken-on-native) runtime scan.
  *
  * <p>API kept minimal: a {@code Class<?>}-varargs setter so the generated code is
- * trivial — no generics in the codegen. The runtime cast back to
+ * trivial - no generics in the codegen. The runtime cast back to
  * {@code Class<? extends Action<?, ?>>} is checked by the auto-config which already
  * validates the parent class.
  */

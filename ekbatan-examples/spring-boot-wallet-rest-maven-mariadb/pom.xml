@@ -28,7 +28,7 @@
         <jooq.version>3.20.10</jooq.version>
 
         <ekbatan.version>0.0.3</ekbatan.version>
-        <!-- Hyphenated property names — avoid the `flyway.*` / `jooq.*` namespace, which the
+        <!-- Hyphenated property names - avoid the `flyway.*` / `jooq.*` namespace, which the
              respective Maven plugins scan and reject for unrecognized keys. -->
         <flyway-version>12.0.0</flyway-version>
         <mariadb-driver-version>3.5.7</mariadb-driver-version>
@@ -41,7 +41,7 @@
 
         <!-- Single source of truth for the codegen-time database. Used by docker-maven-plugin (to start the
              container), flyway-maven-plugin (to migrate), and jooq-codegen-maven (to introspect).
-             We connect as root so the V0000 migration's `CREATE DATABASE eventlog` succeeds — the runtime
+             We connect as root so the V0000 migration's `CREATE DATABASE eventlog` succeeds - the runtime
              / test containers use a less-privileged `wallet` user with a mariadb_init.sql GRANT, but the
              codegen container is throwaway and root is simpler. -->
         <codegen.db.port>13306</codegen.db.port>
@@ -105,7 +105,7 @@
         <!-- spring-boot-starter-flyway brings FlywayAutoConfiguration plus flyway-core.
              EkbatanShardFlywayCustomizer (@Component) overrides the dataSource from
              ekbatan.sharding.* so connection coords live in one place. flyway-mysql
-             handles MariaDB too — the artifact name is historical. -->
+             handles MariaDB too - the artifact name is historical. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-flyway</artifactId>
@@ -235,7 +235,7 @@
                    - the Flyway plugin's flyway-mysql dependency (handles MariaDB too)
                    - the codegen connection (jdbc:mariadb://…, root user)
                    - the ForcedType regex (case-insensitive DATETIME|TIMESTAMP / JSON)
-                   - NO UUID forced type — MariaDB 10.7+ has a native UUID type
+                   - NO UUID forced type - MariaDB 10.7+ has a native UUID type
                  ════════════════════════════════════════════════════════════════════════════ -->
 
             <plugin>
@@ -299,7 +299,7 @@
                     <user>${codegen.db.user}</user>
                     <password>${codegen.db.password}</password>
                     <schemas>
-                        <!-- On MariaDB / MySQL, "schema" and "database" are synonyms — so the two
+                        <!-- On MariaDB / MySQL, "schema" and "database" are synonyms - so the two
                              namespaces here are the main DB (`wallet`) and the framework's `eventlog`.
                              Flyway treats each name as its own database. The V0000 migration creates
                              `eventlog` from the main connection's privileges. -->
@@ -312,7 +312,7 @@
                     <placeholderReplacement>false</placeholderReplacement>
                 </configuration>
                 <dependencies>
-                    <!-- flyway-mysql covers MariaDB JDBC URLs — same Flyway plugin module for both. -->
+                    <!-- flyway-mysql covers MariaDB JDBC URLs - same Flyway plugin module for both. -->
                     <dependency>
                         <groupId>org.flywaydb</groupId>
                         <artifactId>flyway-mysql</artifactId>
@@ -368,7 +368,7 @@
                                     <inputSchema>wallet</inputSchema>
                                     <outputSchemaToDefault>true</outputSchemaToDefault>
                                     <forcedTypes>
-                                        <!-- Instant on DATETIME(6) / TIMESTAMP — case-insensitive
+                                        <!-- Instant on DATETIME(6) / TIMESTAMP - case-insensitive
                                              because driver-reported type case varies. -->
                                         <forcedType>
                                             <userType>java.time.Instant</userType>
@@ -376,7 +376,7 @@
                                             <includeTypes>(?i:DATETIME|TIMESTAMP)</includeTypes>
                                             <includeExpression>.*</includeExpression>
                                         </forcedType>
-                                        <!-- ObjectNode on JSON — note the converter has no `B` in its
+                                        <!-- ObjectNode on JSON - note the converter has no `B` in its
                                              name (vs. the Postgres-side JSONBObjectNodeConverter). -->
                                         <forcedType>
                                             <userType>tools.jackson.databind.node.ObjectNode</userType>
@@ -384,7 +384,7 @@
                                             <includeTypes>(?i:JSON)</includeTypes>
                                             <includeExpression>.*</includeExpression>
                                         </forcedType>
-                                        <!-- No UUID forced type — MariaDB 10.7+ has a native UUID
+                                        <!-- No UUID forced type - MariaDB 10.7+ has a native UUID
                                              type that jOOQ maps to java.util.UUID directly. -->
                                     </forcedTypes>
                                 </database>

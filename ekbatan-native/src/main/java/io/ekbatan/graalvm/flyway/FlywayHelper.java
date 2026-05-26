@@ -7,7 +7,7 @@ import org.flywaydb.core.Flyway;
  * Thin wrapper around {@code Flyway.configure().dataSource(...).locations(...).load().migrate()}
  * that installs {@link NativeImageFlywayResourceProvider} when running under GraalVM native
  * image. On the JVM the resource-provider override is skipped, so the produced {@code Flyway}
- * instance is configured identically to inline {@code Flyway.configure()...migrate()} — there
+ * instance is configured identically to inline {@code Flyway.configure()...migrate()} - there
  * is no JVM behavioural difference.
  *
  * <p>Use this both in tests and in production startup code that runs Flyway migrations,

@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
  * <p>{@link io.ekbatan.core.action.ActionExecutor} opens exactly one transaction per shard
  * via {@link #inTransactionChecked(CheckedFunction)} (or {@link #inTransactionChecked(CheckedConsumer)}
  * for void blocks) and persists every staged change within it. Repository code reads the
- * current {@link DSLContext} via {@link #currentTransactionDbContext()} — when called outside
+ * current {@link DSLContext} via {@link #currentTransactionDbContext()} - when called outside
  * a transaction, the {@code Optional} is empty and the repository's protected
  * {@code db}/{@code txDbElseDb} accessors fall back to non-transactional execution.
  *
@@ -187,7 +187,7 @@ public class TransactionManager implements AutoCloseable {
             if (newConn != null) {
                 if (transaction != null && transaction.isDirty()) {
                     LOG.warn(
-                            "Evicting connection from pool — rollback or autocommit-reset failed leaving it in unknown state [shard=({},{})]",
+                            "Evicting connection from pool - rollback or autocommit-reset failed leaving it in unknown state [shard=({},{})]",
                             shardIdentifier.group,
                             shardIdentifier.member);
                     primaryConnectionProvider.evict(newConn);
@@ -210,7 +210,7 @@ public class TransactionManager implements AutoCloseable {
 
     /**
      * Closes the primary and (distinct) secondary connection providers. Safe to call multiple
-     * times — Hikari's {@code close()} is idempotent.
+     * times - Hikari's {@code close()} is idempotent.
      */
     @Override
     public void close() {

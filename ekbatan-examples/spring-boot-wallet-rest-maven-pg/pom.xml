@@ -28,7 +28,7 @@
         <jooq.version>3.20.10</jooq.version>
 
         <ekbatan.version>0.0.3</ekbatan.version>
-        <!-- Avoid the `flyway.*` namespace for Maven properties — Flyway's maven plugin scans
+        <!-- Avoid the `flyway.*` namespace for Maven properties - Flyway's maven plugin scans
              system properties and rejects anything prefixed with `flyway.` that isn't a known
              Flyway configuration key. Same caution applies to `jooq.*` (the codegen plugin scans
              its own namespace), so use hyphenated names for plugin / artifact versions. -->
@@ -103,7 +103,7 @@
         </dependency>
 
         <!-- Brings up the compose.yaml services on `./mvnw spring-boot:run` and tears them down on shutdown.
-             Tests don't go through this — they use Testcontainers. <optional>true</optional> keeps it out of
+             Tests don't go through this - they use Testcontainers. <optional>true</optional> keeps it out of
              the produced jar, mirroring Gradle's `developmentOnly` semantics. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -204,7 +204,7 @@
             </plugin>
 
             <!-- ════════════════════════════════════════════════════════════════════════════
-                 Spotless — Palantir Java Format 2.81.0, matching the framework repo's Gradle
+                 Spotless - Palantir Java Format 2.81.0, matching the framework repo's Gradle
                  spotless config. Bound to the `compile` phase so `./mvnw compile` (and `verify`)
                  fails on formatting drift; `./mvnw spotless:apply` rewrites files in place.
                  ════════════════════════════════════════════════════════════════════════════ -->
@@ -253,14 +253,14 @@
             </plugin>
 
             <!-- ════════════════════════════════════════════════════════════════════════════
-                 jOOQ codegen chain — three plugins running in `initialize` and `generate-sources`.
+                 jOOQ codegen chain - three plugins running in `initialize` and `generate-sources`.
 
                  The Gradle sibling uses the `dev.monosoul.jooq-docker` plugin which bundles all of
                  this into one declaration; on Maven we compose three official plugins instead:
 
-                   1. fabric8 docker-maven-plugin  — spin up an ephemeral Postgres
-                   2. flyway-maven-plugin          — run our migrations against it
-                   3. jooq-codegen-maven           — introspect and generate Java classes
+                   1. fabric8 docker-maven-plugin  - spin up an ephemeral Postgres
+                   2. flyway-maven-plugin          - run our migrations against it
+                   3. jooq-codegen-maven           - introspect and generate Java classes
 
                  The plugins are declared in this order so their executions in the `initialize`
                  phase run sequentially (Maven runs executions of the same phase in declaration
@@ -391,7 +391,7 @@
                                          - <outputSchema> sets the Java package name component
                                            (so imports read `io.example...public_schema.tables.Wallets`)
                                          - <outputSchemaToDefault> tells jOOQ the schema is the
-                                           default in SQL — table refs render unqualified
+                                           default in SQL - table refs render unqualified
                                            (`INSERT INTO wallets ...`, not `public_schema.wallets`).
                                          Without the second flag, jOOQ would emit the package name
                                          as a schema name into the SQL, which doesn't exist in

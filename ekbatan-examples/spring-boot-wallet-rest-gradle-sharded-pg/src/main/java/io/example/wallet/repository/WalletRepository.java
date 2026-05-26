@@ -21,15 +21,15 @@ import java.util.UUID;
  * Sharded wallet repository. Two deltas from a non-sharded {@code ModelRepository}:
  *
  * <ol>
- *   <li>The constructor passes an {@link EmbeddedBitsShardingStrategy} to {@code super(...)} —
+ *   <li>The constructor passes an {@link EmbeddedBitsShardingStrategy} to {@code super(...)} -
  *       the strategy decodes the shard from the UUID's embedded bits, so {@code findById(uuid)}
  *       automatically routes to the wallet's shard with no caller cooperation.</li>
  *   <li>{@code fromRecord} wraps the raw UUID in a {@link ShardedId} via {@link ShardedUUID#from}
- *       — the rest of the framework treats wallet IDs as shard-aware.</li>
+ *       - the rest of the framework treats wallet IDs as shard-aware.</li>
  * </ol>
  *
  * <p>Custom queries that drop into raw jOOQ should target a specific shard via the ID-aware
- * accessors — {@code readonlyDb(walletId)}, {@code db(walletId)}, {@code txDbElseDb(walletId)} —
+ * accessors - {@code readonlyDb(walletId)}, {@code db(walletId)}, {@code txDbElseDb(walletId)} -
  * instead of {@code readonlyDb()} which scatter-gathers across every shard. The
  * {@link #findAllByOwnerId(UUID)} method below is intentionally scatter-gather because owner-id
  * is not shard-aware.
@@ -42,7 +42,7 @@ public class WalletRepository extends ModelRepository<Wallet, WalletsRecord, Wal
     }
 
     /**
-     * Scatter-gather across all shards — owner id is not encoded in the wallet's UUID, so we
+     * Scatter-gather across all shards - owner id is not encoded in the wallet's UUID, so we
      * have to ask each shard. For id-aware queries, use {@code findById} or the {@code db(id)}
      * accessor.
      */

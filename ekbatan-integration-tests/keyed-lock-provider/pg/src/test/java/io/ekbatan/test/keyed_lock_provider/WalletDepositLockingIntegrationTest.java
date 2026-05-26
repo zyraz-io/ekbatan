@@ -34,7 +34,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Demonstrates the canonical caller-side lock pattern: the lease wraps
  * {@code executor.execute(...)} so it spans both {@code Action.perform()} AND the framework's
- * transaction commit. The deposit Action itself stays lock-agnostic — locking is a policy
+ * transaction commit. The deposit Action itself stays lock-agnostic - locking is a policy
  * applied at the boundary.
  *
  * <p>{@link #brokenAcquire_blocksIndefinitely_whenLockHeldElsewhere() The blocking-behavior
@@ -97,10 +97,10 @@ public class WalletDepositLockingIntegrationTest {
 
     @Test
     void deposit_succeeds_when_lock_is_uncontested() throws Exception {
-        // GIVEN — a fresh wallet with 100.00
+        // GIVEN - a fresh wallet with 100.00
         var wallet = createWallet(new BigDecimal("100.00"));
 
-        // WHEN — caller-side: lease wraps execute()
+        // WHEN - caller-side: lease wraps execute()
         Wallet updated;
         try (var lease = lockProvider.acquire("wallet:" + wallet.id, Duration.ofSeconds(10))) {
             updated = executor.execute(
@@ -109,25 +109,25 @@ public class WalletDepositLockingIntegrationTest {
                     new WalletDepositAction.Params(wallet.id, new BigDecimal("25.50")));
         }
 
-        // THEN — the new balance is the sum
+        // THEN - the new balance is the sum
         assertThat(updated.balance).isEqualByComparingTo(new BigDecimal("125.50"));
         assertThat(walletRepo.getById(wallet.id.getValue()).balance).isEqualByComparingTo(new BigDecimal("125.50"));
     }
 
     /**
      * Demonstrates the consequence of {@link KeyedLockProvider#acquire(String, Duration)}
-     * having no wait timeout — the {@link Duration} is {@code maxHold}, not {@code maxWait}.
+     * having no wait timeout - the {@link Duration} is {@code maxHold}, not {@code maxWait}.
      * While another holder owns the wallet's advisory lock, the caller's
      * {@code lockProvider.acquire(...)} call is stuck and only proceeds once that holder
      * releases.
      */
     @Test
     void brokenAcquire_blocksIndefinitely_whenLockHeldElsewhere() throws Exception {
-        // GIVEN — a wallet, and "another instance" already holding its advisory lock
+        // GIVEN - a wallet, and "another instance" already holding its advisory lock
         var wallet = createWallet(new BigDecimal("100.00"));
         var heldByOther = lockProvider.acquire("wallet:" + wallet.id, Duration.ofMinutes(1));
 
-        // WHEN — another caller attempts to deposit on the same wallet under the same lock
+        // WHEN - another caller attempts to deposit on the same wallet under the same lock
         var depositFuture = CompletableFuture.supplyAsync(() -> {
             try (var lease = lockProvider.acquire("wallet:" + wallet.id, Duration.ofSeconds(10))) {
                 return executor.execute(
@@ -139,7 +139,7 @@ public class WalletDepositLockingIntegrationTest {
             }
         });
 
-        // THEN — the second caller is stuck on lockProvider.acquire(...). acquire(...) has no
+        // THEN - the second caller is stuck on lockProvider.acquire(...). acquire(...) has no
         // wait timeout, so it blocks until the first holder releases. We give it 750ms to
         // fail-fast (which it can't, since there's no fail-fast path), then assert it's still
         // in flight.
@@ -148,10 +148,10 @@ public class WalletDepositLockingIntegrationTest {
                 .as("Caller should still be blocked while the other holder owns the lock")
                 .isFalse();
 
-        // WHEN — the "other instance" releases the lock
+        // WHEN - the "other instance" releases the lock
         heldByOther.close();
 
-        // THEN — the previously-blocked deposit completes successfully and updates the balance
+        // THEN - the previously-blocked deposit completes successfully and updates the balance
         var updated = depositFuture.get(10, TimeUnit.SECONDS);
         assertThat(updated.balance).isEqualByComparingTo(new BigDecimal("110.00"));
     }

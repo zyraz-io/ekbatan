@@ -19,7 +19,7 @@ import java.util.UUID;
  * <p>Exists because {@link io.quarkus.test.junit.QuarkusIntegrationTest} runs the packaged
  * artifact (jar or native binary) as a separate process. The test JVM is distinct from the app
  * JVM/process, so {@code @Inject} fields can't be wired into the test class. Driving the beans
- * over HTTP is the only way to exercise them from a {@code @QuarkusIntegrationTest} — see
+ * over HTTP is the only way to exercise them from a {@code @QuarkusIntegrationTest} - see
  * {@code quarkusio/quarkus} integration-tests for the same pattern (Flyway, JPA-Postgres, etc.).
  *
  * <p>Lives in {@code src/main/java} (not test) so it's bundled into the native binary; this

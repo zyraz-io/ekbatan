@@ -51,7 +51,7 @@ public class WalletController {
             String state,
             Long version) {
         static WalletResponse from(Wallet w) {
-            // Decode the shard from the wallet's id — useful for the example so callers can see
+            // Decode the shard from the wallet's id - useful for the example so callers can see
             // which physical database the wallet lives on without poking at the DatabaseRegistry.
             final var shard = w.id.resolveShardIdentifier();
             return new WalletResponse(
@@ -89,7 +89,7 @@ public class WalletController {
     }
 
     /**
-     * Cross-shard transfer. Opts into {@code allowCrossShard(true)} unconditionally — for two
+     * Cross-shard transfer. Opts into {@code allowCrossShard(true)} unconditionally - for two
      * wallets on the same shard this is a no-op (the executor sees one shard in the plan and
      * runs it as a regular single-shard action). For two wallets on different shards, the
      * executor opens two independent transactions and duplicates the {@code eventlog.events}

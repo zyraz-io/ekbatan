@@ -5,7 +5,7 @@ import org.apache.commons.lang3.Validate;
 /**
  * A persistent aggregate that does NOT emit events. Use {@code Entity} when the persistence
  * layer needs optimistic-locked rows whose changes don't carry domain meaning worth recording
- * — caches, lookup tables, idempotency markers, audit-only side-effects.
+ * - caches, lookup tables, idempotency markers, audit-only side-effects.
  *
  * <p>The framework's other persistent shape is {@link Model}, which DOES emit events.
  * {@link io.ekbatan.core.action.Action} code stages additions / updates of either kind on the
@@ -20,7 +20,7 @@ import org.apache.commons.lang3.Validate;
  * <h2>Equality</h2>
  *
  * <p>Two {@code Entity} instances are equal iff their {@code id}, {@code state}, and
- * {@code version} match — there's no event list and no timestamps to consider, so the equality
+ * {@code version} match - there's no event list and no timestamps to consider, so the equality
  * surface is narrower than {@link Model}'s.
  *
  * @param <ENTITY> the concrete subclass (CRTP-style self-type)
@@ -50,7 +50,7 @@ public abstract class Entity<
         this.id = Validate.notNull(builder.id, "id cannot be null");
         this.state = Validate.notNull(builder.state, "state cannot be null");
         this.version = Validate.notNull(builder.version, "version cannot be null");
-        Validate.isTrue(builder.version >= 1, "version must be ≥ 1");
+        Validate.isTrue(builder.version >= 1, "version must be >= 1");
     }
 
     @Override
@@ -133,7 +133,7 @@ public abstract class Entity<
         }
 
         /**
-         * Initializes the version to 1 — used by callers staging a new entity for first insert.
+         * Initializes the version to 1 - used by callers staging a new entity for first insert.
          *
          * @return this builder, for chaining.
          */
@@ -145,7 +145,7 @@ public abstract class Entity<
         /**
          * Sets the entity's optimistic-locking version explicitly.
          *
-         * @param version the version value (must be ≥ 1 at build time).
+         * @param version the version value (must be >= 1 at build time).
          * @return this builder, for chaining.
          */
         public B version(Long version) {
@@ -154,7 +154,7 @@ public abstract class Entity<
         }
 
         /**
-         * Increments the accumulated version by one — used by {@link Entity#nextVersion}.
+         * Increments the accumulated version by one - used by {@link Entity#nextVersion}.
          *
          * @return this builder, for chaining.
          */
@@ -167,7 +167,7 @@ public abstract class Entity<
         public abstract E build();
 
         /**
-         * Copies an existing entity's id, state, and version onto this builder — used to start
+         * Copies an existing entity's id, state, and version onto this builder - used to start
          * a mutation from a fully-loaded entity.
          *
          * @param entity the entity to copy from.

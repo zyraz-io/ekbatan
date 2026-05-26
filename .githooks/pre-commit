@@ -1,13 +1,38 @@
 #!/usr/bin/env bash
 #
-# Blocks commits when Spotless would fail. This is intentionally a check-only
-# hook: run `./gradlew spotlessApply` yourself when you want files rewritten.
+# Blocks commits when Java source contains non-ASCII characters or Spotless
+# would fail. This is intentionally a check-only hook: run
+# `./gradlew spotlessApply` yourself when you want files rewritten.
 #
 # Bypass: git commit --no-verify
 
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
+
+echo "pre-commit: checking Java sources are ASCII-only" >&2
+if ! (
+    cd "$repo_root"
+    find . \
+        -path './.git' -prune -o \
+        -path '*/build' -prune -o \
+        -path './website/dist' -prune -o \
+        -name '*.java' \
+        -type f \
+        -print0
+) \
+    | xargs -0 perl -Mutf8 -ne '
+        if ($ARGV ne $file) { $file = $ARGV; $line = 0 }
+        ++$line;
+        if (/[^[:ascii:]]/) {
+          print "$ARGV:$line:$_";
+          $found = 1;
+        }
+        END { exit($found ? 1 : 0) }
+      '; then
+    echo "pre-commit: Java source files must be ASCII-only" >&2
+    exit 1
+fi
 
 echo "pre-commit: running ./gradlew spotlessCheck" >&2
 "$repo_root/gradlew" -p "$repo_root" spotlessCheck

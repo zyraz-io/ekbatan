@@ -23,8 +23,8 @@ import tools.jackson.databind.node.ObjectNode;
  * params are also stored as JSON on every emitted row, so a single eventlog row carries the
  * full audit trail for its action.
  *
- * <p>This is the simplest event-storage shape — one table per shard, schema-less payloads
- * via JSON — and matches the default Flyway migration scripts. Applications that want
+ * <p>This is the simplest event-storage shape - one table per shard, schema-less payloads
+ * via JSON - and matches the default Flyway migration scripts. Applications that want
  * separate {@code action_events} / {@code model_events} tables, or non-JSON payloads, replace
  * this with their own {@link EventPersister} implementation passed to
  * {@link io.ekbatan.core.action.ActionExecutor.Builder#eventPersister(EventPersister)}.

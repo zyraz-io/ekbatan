@@ -13,23 +13,23 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Periodically tops up under-funded wallets — the headline "job invokes action" pattern.
+ * Periodically tops up under-funded wallets - the headline "job invokes action" pattern.
  *
  * <p>Every {@link #schedule() schedule slot}, the job:
  *
  * <ol>
  *   <li>Reads open wallets with {@code balance < THRESHOLD} via the read-only repository
- *       (no transaction owned by the job — actions own their own transactions).</li>
+ *       (no transaction owned by the job - actions own their own transactions).</li>
  *   <li>For each such wallet, invokes {@link WalletDepositMoneyAction} through
  *       {@link ActionExecutor}. The action opens its own transaction, applies the deposit,
  *       emits a {@code WalletMoneyDepositedEvent} to the outbox, and commits.</li>
  *   <li>The framework's local-event-handler picks up each event asynchronously and triggers
- *       {@code WalletMoneyDepositedEventHandler} → {@code CreateNotificationAction} → a row
- *       in {@code notifications} — same listen-to-yourself chain the REST examples exercise,
+ *       {@code WalletMoneyDepositedEventHandler} -> {@code CreateNotificationAction} -> a row
+ *       in {@code notifications} - same listen-to-yourself chain the REST examples exercise,
  *       only here it's job-driven instead of request-driven.</li>
  * </ol>
  *
- * <p>Failures during a single wallet's deposit are caught and logged — the job continues with
+ * <p>Failures during a single wallet's deposit are caught and logged - the job continues with
  * the next wallet so one bad row doesn't halt the whole pass. db-scheduler would otherwise
  * count an uncaught exception as a failed execution and increment
  * {@code scheduled_tasks.consecutive_failures}; this job intentionally chooses per-wallet
@@ -80,7 +80,7 @@ public class WalletStipendJob extends DistributedJob {
                         WalletDepositMoneyAction.class,
                         new WalletDepositMoneyAction.Params(wallet.id, STIPEND, "stipend@system.local"));
             } catch (Exception e) {
-                LOG.warn("WalletStipendJob: deposit failed for wallet {} — skipping", wallet.id.getValue(), e);
+                LOG.warn("WalletStipendJob: deposit failed for wallet {} - skipping", wallet.id.getValue(), e);
             }
         }
     }

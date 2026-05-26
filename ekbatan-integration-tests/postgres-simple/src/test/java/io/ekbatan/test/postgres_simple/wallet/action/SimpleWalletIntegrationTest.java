@@ -93,7 +93,7 @@ public class SimpleWalletIntegrationTest {
         assertThat(persisted.get().state).isEqualTo(WalletState.OPENED);
         assertThat(persisted.get().balance).isEqualByComparingTo(BigDecimal.TEN);
 
-        // AND — one created event
+        // AND - one created event
         assertThat(eventTypes(wallet.id.getValue())).containsExactly("WalletCreatedEvent");
     }
 
@@ -116,7 +116,7 @@ public class SimpleWalletIntegrationTest {
         assertThat(persisted.balance).isEqualByComparingTo(new BigDecimal("125.50"));
         assertThat(persisted.version).isEqualTo(wallet.version + 1);
 
-        // AND — both events recorded
+        // AND - both events recorded
         assertThat(eventTypes(wallet.id.getValue()))
                 .containsExactlyInAnyOrder("WalletCreatedEvent", "WalletMoneyDepositedEvent");
     }
@@ -136,7 +136,7 @@ public class SimpleWalletIntegrationTest {
         var persisted = walletRepo.getById(wallet.id.getValue());
         assertThat(persisted.state).isEqualTo(WalletState.CLOSED);
 
-        // AND — create + close events
+        // AND - create + close events
         assertThat(eventTypes(wallet.id.getValue()))
                 .containsExactlyInAnyOrder("WalletCreatedEvent", "WalletClosedEvent");
     }
@@ -155,7 +155,7 @@ public class SimpleWalletIntegrationTest {
                 WalletDepositAction.class,
                 new WalletDepositAction.Params(wallet.id, BigDecimal.TEN));
 
-        // THEN — two distinct action ids added
+        // THEN - two distinct action ids added
         assertThat(countActionIds()).isEqualTo(beforeCount + 2);
     }
 

@@ -16,9 +16,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * throws). Spring Boot 4's blessed pattern is to make both the container and the property
  * registrar Spring beans:
  * <ul>
- *   <li>{@code PostgreSQLContainer} as a {@code @Bean} — Spring manages it as part of the
+ *   <li>{@code PostgreSQLContainer} as a {@code @Bean} - Spring manages it as part of the
  *       context lifecycle, including starting it before properties are read.</li>
- *   <li>{@link DynamicPropertyRegistrar} as a {@code @Bean} — the bean-based equivalent of
+ *   <li>{@link DynamicPropertyRegistrar} as a {@code @Bean} - the bean-based equivalent of
  *       {@code @DynamicPropertySource} that Spring AOT understands. The registrar's
  *       lambda runs at context refresh on both JVM and native, so the produced JDBC URL
  *       reflects whatever ephemeral port Docker assigns at THIS run, not the AOT-time
@@ -45,7 +45,7 @@ class TestcontainersConfiguration {
      * container-dependent properties (jdbc url / username / password). Static properties
      * live in the test's {@code @SpringBootTest(properties = ...)} because
      * {@link DynamicPropertyRegistrar} beans run as a {@code BeanFactoryPostProcessor}
-     * — i.e. AFTER {@code @ConditionalOnProperty} is evaluated. Anything the auto-config
+     * - i.e. AFTER {@code @ConditionalOnProperty} is evaluated. Anything the auto-config
      * gates on (e.g. {@code ekbatan.local-event-handler.handling.enabled}) must be set
      * earlier than that, hence the split.
      */

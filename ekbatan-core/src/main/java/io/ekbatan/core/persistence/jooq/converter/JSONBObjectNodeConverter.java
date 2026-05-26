@@ -10,7 +10,7 @@ import tools.jackson.databind.node.ObjectNode;
  * jOOQ converter mapping Postgres {@code JSONB} to Jackson 3's {@link ObjectNode}. Use for
  * object-typed JSONB columns; for array-typed columns use {@link JSONBArrayNodeConverter}.
  *
- * <p>For MySQL / MariaDB {@code JSON} columns, use {@link JSONObjectNodeConverter} — the
+ * <p>For MySQL / MariaDB {@code JSON} columns, use {@link JSONObjectNodeConverter} - the
  * jOOQ wrapper type differs.
  */
 public class JSONBObjectNodeConverter implements Converter<JSONB, ObjectNode> {

@@ -11,7 +11,7 @@ import java.util.UUID;
 
 /**
  * Emitted by the wallet that money is leaving in a cross-shard transfer. The counterpart wallet
- * may live on a different physical database — this event records the counterpart's ID so each
+ * may live on a different physical database - this event records the counterpart's ID so each
  * shard's row in {@code eventlog.events} carries the full transfer context.
  */
 public class WalletMoneyTransferredOutEvent extends ModelEvent<Wallet> {

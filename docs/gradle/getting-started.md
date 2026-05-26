@@ -264,6 +264,9 @@ implementation("io.github.zyraz-io:ekbatan-keyed-lock-redis:0.0.3")
 // GraalVM native-image Features (auto-loaded; include only if you build native binaries).
 implementation("io.github.zyraz-io:ekbatan-native:0.0.3")
 
+// ActionSpec, ActionAssert, VirtualClock, and classpath-resource Testcontainers helpers.
+testImplementation("io.github.zyraz-io:ekbatan-test-support:0.0.3")
+
 // Wire-format DTOs for Kafka consumer apps reading from the eventlog. Pick the one
 // matching your Kafka serializer; NOT needed in the producer app itself.
 implementation("io.github.zyraz-io:ekbatan-action-event-json:0.0.3")

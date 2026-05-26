@@ -79,7 +79,7 @@ class JobRegistryIntegrationTest {
             registry.stop();
         }
 
-        // 2s of runtime with 200ms FixedDelay → expect ~10 executions; allow for poll/startup lag.
+        // 2s of runtime with 200ms FixedDelay -> expect ~10 executions; allow for poll/startup lag.
         assertThat(counter.get()).isGreaterThanOrEqualTo(5);
     }
 
@@ -115,7 +115,7 @@ class JobRegistryIntegrationTest {
             registry2.stop();
         }
 
-        // 2s of runtime with 200ms FixedDelay → ~10 executions if coordinated, ~20 if not.
+        // 2s of runtime with 200ms FixedDelay -> ~10 executions if coordinated, ~20 if not.
         // The atomic-claim guarantee means both instances NEVER run the same slot, so the
         // total count is bounded by what one instance would do, plus a small slack for races.
         assertThat(counter.get()).isGreaterThanOrEqualTo(5);
@@ -129,7 +129,7 @@ class JobRegistryIntegrationTest {
         var jobName = "customize-" + UUID.randomUUID();
 
         // pollInterval(10s) is intentionally too slow to see meaningful executions in a 2s test
-        // window — without the customizer override, we'd see at most 1 execution.
+        // window - without the customizer override, we'd see at most 1 execution.
         var registry = jobRegistry()
                 .connectionProvider(CONNECTION_PROVIDER)
                 .withJob(new CountingJob(jobName, FixedDelay.ofMillis(200), counter))

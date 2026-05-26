@@ -18,7 +18,7 @@ final class ConfigTreeBuilder {
     private ConfigTreeBuilder() {}
 
     static Map<String, Object> readSubtree(PropertyResolver resolver, String rootPrefix) {
-        // RAW preserves the original key casing — Ekbatan's sharding YAML uses camelCase
+        // RAW preserves the original key casing - Ekbatan's sharding YAML uses camelCase
         // (jdbcUrl, primaryConfig) to match the Jackson Builder method names. Micronaut's default
         // convention rewrites to kebab-case (jdbc-url, primary-config), tripping
         // BuilderBasedDeserializer at convert time.
@@ -81,7 +81,7 @@ final class ConfigTreeBuilder {
                 if (seg.charAt(cursor) == '[') {
                     int end = seg.indexOf(']', cursor);
                     if (end < 0) {
-                        throw new IllegalStateException("Malformed property segment '" + seg + "' — unmatched [");
+                        throw new IllegalStateException("Malformed property segment '" + seg + "' - unmatched [");
                     }
                     out.add(new IndexToken(Integer.parseInt(seg.substring(cursor + 1, end))));
                     cursor = end + 1;

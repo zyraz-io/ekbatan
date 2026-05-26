@@ -12,9 +12,9 @@ import org.testcontainers.utility.MountableFile;
  * sets are exported:
  *
  * <ul>
- *   <li>{@code ekbatan.sharding.*} — consumed by Ekbatan's producer to build its
+ *   <li>{@code ekbatan.sharding.*} - consumed by Ekbatan's producer to build its
  *       sharding-aware {@code ConnectionProvider} used for runtime queries.</li>
- *   <li>{@code quarkus.datasource.*} — consumed by the {@code quarkus-flyway} extension
+ *   <li>{@code quarkus.datasource.*} - consumed by the {@code quarkus-flyway} extension
  *       (and its short-lived migration-time Hikari pool). The extension runs Flyway
  *       migrations against this datasource at app startup. Ekbatan never reads from it.</li>
  * </ul>
@@ -44,7 +44,7 @@ public class MariaDBTestResource implements QuarkusTestResourceLifecycleManager 
         var props = new HashMap<String, String>();
         props.put("ekbatan.namespace", "test.wallet");
 
-        // Sharding — single shard pointing at the Testcontainers MariaDB.
+        // Sharding - single shard pointing at the Testcontainers MariaDB.
         props.put("ekbatan.sharding.defaultShard.group", "0");
         props.put("ekbatan.sharding.defaultShard.member", "0");
         props.put("ekbatan.sharding.groups[0].group", "0");
@@ -58,14 +58,14 @@ public class MariaDBTestResource implements QuarkusTestResourceLifecycleManager 
                 "org.mariadb.jdbc.Driver");
         props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize", "5");
 
-        // jobsConfig — scheduler shares the same DB for this example.
+        // jobsConfig - scheduler shares the same DB for this example.
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl", container.getJdbcUrl());
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username", container.getUsername());
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password", container.getPassword());
         props.put(
                 "ekbatan.sharding.groups[0].members[0].configs.jobsConfig.driverClassName", "org.mariadb.jdbc.Driver");
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize", "4");
-        // Lock pool — backs the KeyedLockProvider.
+        // Lock pool - backs the KeyedLockProvider.
         props.put("ekbatan.sharding.groups[0].members[0].configs.lockConfig.jdbcUrl", container.getJdbcUrl());
         props.put("ekbatan.sharding.groups[0].members[0].configs.lockConfig.username", container.getUsername());
         props.put("ekbatan.sharding.groups[0].members[0].configs.lockConfig.password", container.getPassword());

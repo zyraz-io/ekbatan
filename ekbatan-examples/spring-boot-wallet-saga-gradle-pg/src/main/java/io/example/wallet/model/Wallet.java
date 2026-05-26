@@ -72,12 +72,12 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
         return copy().withEvent(new WalletClosedEvent(id)).state(CLOSED).build();
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Saga operations — each maps cleanly to one step of the transfer saga.
-    // ────────────────────────────────────────────────────────────────────────
+    // ------------------------------------------------------------------------
+    // Saga operations - each maps cleanly to one step of the transfer saga.
+    // ------------------------------------------------------------------------
 
     /**
-     * Saga step 1 — debit the source wallet and attach a {@link TransferInitiatedEvent}. The
+     * Saga step 1 - debit the source wallet and attach a {@link TransferInitiatedEvent}. The
      * action that calls this still has to {@code plan().update(this)} for the change to
      * commit; this method just produces the new wallet state + event in one place.
      */
@@ -91,7 +91,7 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
                 .build();
     }
 
-    /** Saga step 2 (happy path) — credit the destination wallet and attach a {@link TransferCompletedEvent}. */
+    /** Saga step 2 (happy path) - credit the destination wallet and attach a {@link TransferCompletedEvent}. */
     public Wallet completeTransferIn(UUID transferId, Id<Wallet> fromWalletId, BigDecimal amount) {
         Validate.isTrue(state.equals(OPENED), "Destination wallet must be OPEN to receive a transfer");
         final var newBalance = balance.add(amount);
@@ -102,7 +102,7 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
     }
 
     /**
-     * Saga step 2 (failure path) — record on the <em>source</em> wallet that the transfer can't
+     * Saga step 2 (failure path) - record on the <em>source</em> wallet that the transfer can't
      * complete. No balance change here; only the event is attached. The framework's update will
      * still bump version + {@code updated_date}, so the row writes and the event lands in the
      * outbox where the failure handler picks it up.
@@ -113,7 +113,7 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
                 .build();
     }
 
-    /** Saga compensation — credit the source wallet back and attach a {@link TransferRefundedEvent}. */
+    /** Saga compensation - credit the source wallet back and attach a {@link TransferRefundedEvent}. */
     public Wallet refundTransfer(UUID transferId, BigDecimal amount) {
         final var newBalance = balance.add(amount);
         return copy().withEvent(new TransferRefundedEvent(id, transferId, id.getValue(), amount, newBalance))

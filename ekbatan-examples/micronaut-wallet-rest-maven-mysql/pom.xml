@@ -26,7 +26,7 @@
         <micronaut.runtime>netty</micronaut.runtime>
         <exec.mainClass>io.example.wallet.Application</exec.mainClass>
 
-        <!-- Hyphenated property names — avoid the `flyway.*` / `jooq.*` namespace, which the
+        <!-- Hyphenated property names - avoid the `flyway.*` / `jooq.*` namespace, which the
              respective Maven plugins scan and reject for unrecognized keys. -->
         <flyway-version>12.0.0</flyway-version>
         <mysql-connector-version>9.4.0</mysql-connector-version>
@@ -74,7 +74,7 @@
              its BOM, but the jooq-codegen-maven plugin generates classes against 3.20 APIs (e.g.
              `VERSION_3_20`, `resetTouchedOnNotNull()`). Declared as a direct dependency so the
              explicit version wins over the BOM-managed transitive, without adding a
-             <dependencyManagement> block — that breaks micronaut-maven-plugin 4.11.5's
+             <dependencyManagement> block - that breaks micronaut-maven-plugin 4.11.5's
              aot-analysis mojo. -->
         <dependency>
             <groupId>org.jooq</groupId>
@@ -95,7 +95,7 @@
             <artifactId>micronaut-http-server-netty</artifactId>
             <scope>compile</scope>
         </dependency>
-        <!-- micronaut-serde-jackson — Jackson-compatible (de)serialization using
+        <!-- micronaut-serde-jackson - Jackson-compatible (de)serialization using
              compile-time generated serdes instead of Jackson Databind's reflection.
              This is the native-image-friendly path; standard Jackson annotations
              (@JsonProperty, @JsonCreator) are honoured. Types must carry @Serdeable

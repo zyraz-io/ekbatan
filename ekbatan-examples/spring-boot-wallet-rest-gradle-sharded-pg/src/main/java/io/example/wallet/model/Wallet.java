@@ -19,9 +19,9 @@ import java.util.UUID;
 import org.apache.commons.lang3.Validate;
 
 /**
- * Sharded {@code Wallet} — uses {@link ShardedId} instead of {@code Id} so the shard is encoded
+ * Sharded {@code Wallet} - uses {@link ShardedId} instead of {@code Id} so the shard is encoded
  * directly into the wallet's UUID at creation time. Every subsequent read or update finds its way
- * back to the right physical database without an explicit shard parameter — see
+ * back to the right physical database without an explicit shard parameter - see
  * {@link io.example.wallet.repository.WalletRepository} for the routing strategy.
  */
 @AutoBuilder
@@ -40,7 +40,7 @@ public final class Wallet extends Model<Wallet, ShardedId<Wallet>, WalletState> 
 
     /**
      * Creates a new wallet on the given shard. The shard bits are baked into the wallet's
-     * {@link ShardedId} via {@link ShardedId#generate(Class, ShardIdentifier)} — every later
+     * {@link ShardedId} via {@link ShardedId#generate(Class, ShardIdentifier)} - every later
      * lookup by id decodes those bits to route to the right database.
      */
     public static WalletBuilder createWallet(
@@ -78,7 +78,7 @@ public final class Wallet extends Model<Wallet, ShardedId<Wallet>, WalletState> 
 
     /**
      * Debit half of a cross-shard transfer. Emits a {@link WalletMoneyTransferredOutEvent} that
-     * names the counterpart wallet — under {@code allowCrossShard=true} the counterpart can live
+     * names the counterpart wallet - under {@code allowCrossShard=true} the counterpart can live
      * on a different physical database, and this event records the full action context so each
      * shard's row in {@code eventlog.events} tells the complete story on its own.
      */

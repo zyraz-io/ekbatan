@@ -72,11 +72,11 @@ class ShardingConfigYamlTest {
         // WHEN
         var config = parse(yaml);
 
-        // THEN — top level
+        // THEN - top level
         assertThat(config.defaultShard).isEqualTo(ShardIdentifier.of(0, 0));
         assertThat(config.groups).hasSize(2);
 
-        // AND — group 0
+        // AND - group 0
         var globalGroup = config.groups.get(0);
         assertThat(globalGroup.group).isEqualTo(0);
         assertThat(globalGroup.name).isEqualTo("global");
@@ -102,7 +102,7 @@ class ShardingConfigYamlTest {
         assertThat(lockConfig.get().maximumPoolSize).isEqualTo(50);
         assertThat(lockConfig.get().leakDetectionThreshold).contains(0L);
 
-        // AND — group 1
+        // AND - group 1
         var mexicoGroup = config.groups.get(1);
         assertThat(mexicoGroup.group).isEqualTo(1);
         assertThat(mexicoGroup.name).isEqualTo("mexico");
@@ -145,7 +145,7 @@ class ShardingConfigYamlTest {
 
     @Test
     void should_throw_clear_error_when_member_omits_primary_config() {
-        // GIVEN — secondary present but primary missing
+        // GIVEN - secondary present but primary missing
         var yaml = """
                 defaultShard: { group: 0, member: 0 }
                 groups:
@@ -166,7 +166,7 @@ class ShardingConfigYamlTest {
                 .hasMessageContaining("primaryConfig");
     }
 
-    // ----- YAML → builder traversal helpers -----
+    // ----- YAML -> builder traversal helpers -----
 
     private static ShardingConfig parse(String yaml) {
         @SuppressWarnings("unchecked")

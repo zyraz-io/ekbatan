@@ -23,7 +23,7 @@ import org.springframework.context.annotation.DependsOn;
  *
  * <p>Requires a {@code jobsConfig} {@link io.ekbatan.core.config.DataSourceConfig} under the
  * default shard's member (e.g.
- * {@code ekbatan.sharding.groups[0].members[0].configs.jobsConfig.*}) — db-scheduler holds
+ * {@code ekbatan.sharding.groups[0].members[0].configs.jobsConfig.*}) - db-scheduler holds
  * its own connection pool separately from the main {@link io.ekbatan.core.shard.DatabaseRegistry}
  * to keep job polling from competing with application traffic for connections.
  */
@@ -40,7 +40,7 @@ public class EkbatanDistributedJobsConfiguration {
      * from the main {@link io.ekbatan.core.shard.DatabaseRegistry} pools so job polling load
      * can't starve application traffic (or vice versa).
      *
-     * @param shardingConfig the sharding configuration — the jobs datasource is read from the
+     * @param shardingConfig the sharding configuration - the jobs datasource is read from the
      *     default shard's member under {@code configs.jobsConfig}.
      * @return a Hikari-backed provider; closed automatically by Spring via {@code destroyMethod="close"}.
      */
@@ -56,13 +56,13 @@ public class EkbatanDistributedJobsConfiguration {
                                 + shardingConfig.defaultShard.group
                                 + "].members["
                                 + shardingConfig.defaultShard.member
-                                + "].configs.jobsConfig in your application.yml — "
+                                + "].configs.jobsConfig in your application.yml - "
                                 + "or define an ekbatanJobsConnectionProvider @Bean of your own."));
         return ConnectionProvider.hikariConnectionProvider(jobsConfig);
     }
 
     // @DependsOn forces ActionRegistry/ActionExecutor to be fully initialized before
-    // JobRegistry.start() begins polling — otherwise a job could fire before the action graph
+    // JobRegistry.start() begins polling - otherwise a job could fire before the action graph
     // is wired. registerShutdownHook(false) hands lifecycle control to Spring (initMethod /
     // destroyMethod), which destroys in reverse-creation order so stop() drains in-flight jobs
     // before the data pools close.

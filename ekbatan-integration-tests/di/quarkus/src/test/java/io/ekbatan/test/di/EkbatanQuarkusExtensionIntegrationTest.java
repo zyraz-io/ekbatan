@@ -31,12 +31,12 @@ import org.junit.jupiter.api.Test;
  *   <li>The event handler is invoked asynchronously after the fan-out and handling jobs run.</li>
  * </ol>
  *
- * <p>This is the only place the full Quarkus wiring graph is exercised: Jandex discovery → Arc
- * {@code AdditionalBeanBuildItem} for stereotype singletons → {@code @ConfigMapping} for flat
- * properties → {@code EkbatanCoreConfiguration#ekbatanShardingConfig} via Jackson hybrid → real
- * {@code DatabaseRegistry} with Hikari pool → {@code SingleTableJsonEventPersister} writing to
- * {@code eventlog.events} → {@code EventFanoutJob} writing notifications →
- * {@code EventHandlingJob} draining them and invoking the handler → repository fetching from
+ * <p>This is the only place the full Quarkus wiring graph is exercised: Jandex discovery -> Arc
+ * {@code AdditionalBeanBuildItem} for stereotype singletons -> {@code @ConfigMapping} for flat
+ * properties -> {@code EkbatanCoreConfiguration#ekbatanShardingConfig} via Jackson hybrid -> real
+ * {@code DatabaseRegistry} with Hikari pool -> {@code SingleTableJsonEventPersister} writing to
+ * {@code eventlog.events} -> {@code EventFanoutJob} writing notifications ->
+ * {@code EventHandlingJob} draining them and invoking the handler -> repository fetching from
  * the real {@code widgets} table.
  *
  * <p>The {@code handling.enabled=true} flag is set at build time in

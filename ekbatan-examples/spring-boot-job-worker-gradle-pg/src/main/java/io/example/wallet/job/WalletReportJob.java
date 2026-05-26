@@ -11,12 +11,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Read-only periodic report — counts wallets and sums their balances, logs the result. No
+ * Read-only periodic report - counts wallets and sums their balances, logs the result. No
  * action invocation, no writes. Demonstrates the "scheduled query" pattern: useful for ops
  * dashboards, periodic metrics exporters, freshness probes.
  *
  * <p>Like every {@link DistributedJob}, this runs at most once per slot across the entire
- * cluster — three worker pods running this app share one scheduled_tasks row, so the report
+ * cluster - three worker pods running this app share one scheduled_tasks row, so the report
  * fires once every {@link #schedule() schedule period}, not three times.
  */
 @EkbatanDistributedJob

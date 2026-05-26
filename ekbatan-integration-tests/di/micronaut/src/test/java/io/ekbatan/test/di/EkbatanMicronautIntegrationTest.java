@@ -70,7 +70,7 @@ class EkbatanMicronautIntegrationTest implements TestPropertyProvider {
         FlywayHelper.migrate(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
 
         var props = new HashMap<String, String>();
-        // Sharding — single shard pointing at the Testcontainers PG. driverClassName is supplied
+        // Sharding - single shard pointing at the Testcontainers PG. driverClassName is supplied
         // explicitly because not every Micronaut/Hikari combo discovers the PG driver via the
         // SPI when the JVM is started by the Gradle test worker.
         props.put("ekbatan.sharding.defaultShard.group", "0");
@@ -85,7 +85,7 @@ class EkbatanMicronautIntegrationTest implements TestPropertyProvider {
                 "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.driverClassName", "org.postgresql.Driver");
         props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize", "5");
 
-        // jobsConfig — scheduler shares the same PG for this smoke test.
+        // jobsConfig - scheduler shares the same PG for this smoke test.
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl", postgres.getJdbcUrl());
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username", postgres.getUsername());
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password", postgres.getPassword());

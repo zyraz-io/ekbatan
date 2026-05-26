@@ -71,7 +71,7 @@ class InProcessKeyedLockProviderReentrancyTest {
 
         outer.close();
         assertThat(inner.isHeld()).isTrue();
-        // Lock still held — other threads blocked.
+        // Lock still held - other threads blocked.
         assertThat(otherThreadCanAcquire(lock, key)).isFalse();
 
         inner.close();
@@ -86,7 +86,7 @@ class InProcessKeyedLockProviderReentrancyTest {
 
         try (var outer = lock.acquire(key, FIVE_MIN);
                 var inner = lock.acquire(key, Duration.ofMillis(50))) {
-            // Inner specified a 50ms maxHold but it must be ignored — outer's 5min governs.
+            // Inner specified a 50ms maxHold but it must be ignored - outer's 5min governs.
             Thread.sleep(200);
             assertThat(outer.isHeld()).isTrue();
             assertThat(inner.isHeld()).isTrue();
@@ -102,7 +102,7 @@ class InProcessKeyedLockProviderReentrancyTest {
         var childError = new AtomicReference<Throwable>();
 
         try (var outer = lock.acquire(key, FIVE_MIN)) {
-            // A child VT trying to acquire the same key should NOT see the parent's hold —
+            // A child VT trying to acquire the same key should NOT see the parent's hold -
             // reentrancy is per-thread, not per-call-stack.
             var child = Thread.ofVirtual().start(() -> {
                 try {
@@ -135,7 +135,7 @@ class InProcessKeyedLockProviderReentrancyTest {
         Thread.sleep(200); // let the watchdog fire
         assertThat(first.isHeld()).isFalse();
 
-        // Same thread can now do a fresh acquire — no stale entry blocking us.
+        // Same thread can now do a fresh acquire - no stale entry blocking us.
         try (var second = lock.acquire(key, FIVE_MIN)) {
             assertThat(second.isHeld()).isTrue();
         }
@@ -203,7 +203,7 @@ class InProcessKeyedLockProviderReentrancyTest {
     /**
      * Runs {@code tryAcquire(key, ZERO, FIVE_MIN)} on a fresh virtual thread and returns whether
      * it succeeded. Used by reentrancy tests to assert mutual-exclusion against another caller
-     * — same-thread checks would always succeed via reentry and tell us nothing.
+     * - same-thread checks would always succeed via reentry and tell us nothing.
      */
     private static boolean otherThreadCanAcquire(KeyedLockProvider lock, String key) throws Exception {
         var got = new java.util.concurrent.atomic.AtomicBoolean(false);

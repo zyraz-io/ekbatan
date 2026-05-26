@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
  * Flat configuration for Ekbatan. The {@code sharding} subtree is bound separately by
- * {@code EkbatanCoreConfiguration} via the Jackson hybrid path — it does not map to a
+ * {@code EkbatanCoreConfiguration} via the Jackson hybrid path - it does not map to a
  * record component here.
  *
  * @param namespace logical namespace recorded on every persisted event ({@code "default"} if unset).
@@ -33,7 +33,7 @@ public record EkbatanProperties(
      *
      * <p>Plain nullable types (rather than {@code Optional<T>}) because Spring's {@code @DefaultValue}
      * on a nested record doesn't recursively initialize {@code Optional<T>} components to
-     * {@code Optional.empty()} — they remain null and NPE on {@code .ifPresent(...)}.
+     * {@code Optional.empty()} - they remain null and NPE on {@code .ifPresent(...)}.
      *
      * @param fanoutPollDelay delay between fanout job polls; framework default if null.
      * @param fanoutBatchSize batch size for fanout-job event reads; framework default if null.

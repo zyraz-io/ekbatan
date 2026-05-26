@@ -1,7 +1,7 @@
 package io.ekbatan.core.repository.exception;
 
 /**
- * Thrown when an optimistic-locked {@code UPDATE} affects zero rows — the version-in-DB
+ * Thrown when an optimistic-locked {@code UPDATE} affects zero rows - the version-in-DB
  * differed from the {@code version} attached to the {@code Persistable} being saved, meaning
  * some concurrent writer modified the row between read and write.
  *

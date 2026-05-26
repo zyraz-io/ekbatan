@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.security.Principal;
 import java.time.Clock;
 
-/** Single-aggregate deposit — kept for ad-hoc wallet top-ups outside the transfer saga. */
+/** Single-aggregate deposit - kept for ad-hoc wallet top-ups outside the transfer saga. */
 @EkbatanAction
 public class WalletDepositMoneyAction extends Action<WalletDepositMoneyAction.Params, Wallet> {
 

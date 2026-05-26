@@ -65,8 +65,8 @@ class TransactionManagerTest {
 
     @Test
     void evicts_connection_when_rollback_itself_throws_sqlexception() throws SQLException {
-        // Block throws → rollback() is called → connection.rollback() raises SQLException →
-        // Transaction.rollback() catches it, marks dirty → TransactionManager evicts instead of
+        // Block throws -> rollback() is called -> connection.rollback() raises SQLException ->
+        // Transaction.rollback() catches it, marks dirty -> TransactionManager evicts instead of
         // returning the connection (where Hikari's setAutoCommit(true) reset could implicitly
         // commit the failed-rollback transaction).
         doThrow(new SQLException("rollback failed", "55006")).when(connection).rollback();
@@ -84,8 +84,8 @@ class TransactionManagerTest {
 
     @Test
     void evicts_connection_when_autocommit_reset_throws_sqlexception() throws SQLException {
-        // Block throws → rollback() succeeds → setAutoCommit(initialAutoCommit) raises →
-        // dirty=true → evict. Same hygiene as above: a connection with the wrong autoCommit would
+        // Block throws -> rollback() succeeds -> setAutoCommit(initialAutoCommit) raises ->
+        // dirty=true -> evict. Same hygiene as above: a connection with the wrong autoCommit would
         // mis-behave for the next caller.
         doThrow(new SQLException("setAutoCommit failed", "08006"))
                 .when(connection)
@@ -117,7 +117,7 @@ class TransactionManagerTest {
 
     @Test
     void releases_connection_when_commit_fails_but_rollback_succeeds() throws SQLException {
-        // Commit fails → rollback succeeds → connection is in a clean state (autocommit reset,
+        // Commit fails -> rollback succeeds -> connection is in a clean state (autocommit reset,
         // no pending tx). Safe to return to pool.
         doThrow(new SQLException("commit failed")).when(connection).commit();
 

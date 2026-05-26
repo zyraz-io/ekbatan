@@ -8,7 +8,7 @@ import java.util.Optional;
 
 /**
  * Flat runtime configuration for Ekbatan. The {@code ekbatan.sharding} subtree is bound separately
- * by {@link EkbatanCoreConfiguration#ekbatanShardingConfig} via the Jackson hybrid path — SmallRye
+ * by {@link EkbatanCoreConfiguration#ekbatanShardingConfig} via the Jackson hybrid path - SmallRye
  * {@code @ConfigMapping} cannot bind the {@code configs} map of mixed builder-based
  * {@code DataSourceConfig} entries directly.
  */
@@ -67,7 +67,7 @@ public interface EkbatanProperties {
         HandlingConfig handling();
 
         /**
-         * Build-time toggle for the handling job — see
+         * Build-time toggle for the handling job - see
          * {@link EkbatanLocalEventHandlerConfiguration#ekbatanEventHandlingJob}.
          */
         interface HandlingConfig {

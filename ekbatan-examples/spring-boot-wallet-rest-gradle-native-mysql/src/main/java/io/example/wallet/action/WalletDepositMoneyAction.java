@@ -14,7 +14,7 @@ import java.time.Clock;
  *
  * <p>The notification side-effect lives in {@link io.example.wallet.handler.WalletMoneyDepositedEventHandler},
  * which receives the event in-process and creates a Notification via {@link CreateNotificationAction}.
- * That's the listen-to-yourself pattern — keeping notification concerns out of the deposit action
+ * That's the listen-to-yourself pattern - keeping notification concerns out of the deposit action
  * itself. The {@code recipient} is still part of {@link Params} so the handler can read it back
  * via {@code EventEnvelope.actionParams} without polluting the domain event payload.
  */

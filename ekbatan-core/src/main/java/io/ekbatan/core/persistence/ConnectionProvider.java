@@ -12,7 +12,7 @@ import java.sql.SQLException;
  * release()} rather than handing the {@link HikariDataSource} out directly so connection
  * lifecycle is centralised here.
  *
- * <p>Construct via {@link #hikariConnectionProvider(DataSourceConfig)} — the canonical
+ * <p>Construct via {@link #hikariConnectionProvider(DataSourceConfig)} - the canonical
  * factory wires {@code jdbcUrl}, {@code username}, {@code password}, pool sizes, and leak-
  * detection threshold straight from a {@link DataSourceConfig}. The constructor is private,
  * so the factory method is the only public construction path; the pool implementation is
@@ -67,13 +67,13 @@ public class ConnectionProvider implements AutoCloseable {
         pool.evictConnection(connection);
     }
 
-    /** {@return the underlying Hikari {@link HikariDataSource}; rarely needed — prefer acquire/release} */
+    /** {@return the underlying Hikari {@link HikariDataSource}; rarely needed - prefer acquire/release} */
     public HikariDataSource getDataSource() {
         return pool;
     }
 
     /**
-     * Closes the underlying Hikari pool. Idempotent — safe to call multiple times.
+     * Closes the underlying Hikari pool. Idempotent - safe to call multiple times.
      * After {@code close()}, no further {@link #acquire()} calls are valid.
      */
     @Override

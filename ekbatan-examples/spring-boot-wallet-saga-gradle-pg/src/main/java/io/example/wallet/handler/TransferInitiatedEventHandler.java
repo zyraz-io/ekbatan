@@ -13,12 +13,12 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Reacts to a committed {@link TransferInitiatedEvent} by invoking {@code CompleteTransferAction}
- * — the saga's step 2. The in-process local-event-handler picks up the event from the outbox
+ * - the saga's step 2. The in-process local-event-handler picks up the event from the outbox
  * shortly after step 1 commits and chains the next action.
  *
  * <p>Reading all four pieces of saga state ({@code transferId}, {@code fromWalletId},
  * {@code toWalletId}, {@code amount}) directly off the event payload keeps the handler stateless
- * — every retry sees the same envelope, so it's safe to re-invoke {@code CompleteTransferAction}
+ * - every retry sees the same envelope, so it's safe to re-invoke {@code CompleteTransferAction}
  * if the previous attempt failed mid-flight.
  */
 @EkbatanEventHandler

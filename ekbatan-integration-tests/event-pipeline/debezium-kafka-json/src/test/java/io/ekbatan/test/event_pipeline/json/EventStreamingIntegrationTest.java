@@ -232,7 +232,7 @@ class EventStreamingIntegrationTest {
 
     @Test
     void sentinel_row_skipped_by_router() throws Exception {
-        // GIVEN — insert a sentinel row (action with zero events)
+        // GIVEN - insert a sentinel row (action with zero events)
         try (var conn = java.sql.DriverManager.getConnection(PG.getJdbcUrl(), PG.getUsername(), PG.getPassword());
                 var stmt = conn.createStatement()) {
             stmt.execute("INSERT INTO eventlog.events (id, namespace, action_id, action_name, action_params, "
@@ -253,18 +253,18 @@ class EventStreamingIntegrationTest {
         Thread.sleep(5000);
         consumer.close();
 
-        // THEN — sentinel row was not routed
+        // THEN - sentinel row was not routed
         assertThat(consumer.getHandled()).isEmpty();
     }
 
     @Test
     void selective_consumer_receives_only_deposit_events_not_create_events() throws Exception {
-        // GIVEN — consumer only on the deposit event topic
+        // GIVEN - consumer only on the deposit event topic
         var consumer = new RetryingEventConsumer(
                 KAFKA.getBootstrapServers(), EVENT_TOPIC_DEPOSITED, "test-deposit-only", _ -> {}, DLQ_TOPIC, 3);
         consumer.start();
 
-        // WHEN — create then deposit
+        // WHEN - create then deposit
         var wallet = executor.execute(
                 () -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params("Deposit Wallet"));
         executor.execute(
@@ -272,7 +272,7 @@ class EventStreamingIntegrationTest {
                 WalletDepositMoneyAction.class,
                 new WalletDepositMoneyAction.Params(wallet.id, new BigDecimal("50.00")));
 
-        // THEN — only the deposit event, not the create event
+        // THEN - only the deposit event, not the create event
         waitForEvents(consumer::getHandled, 1);
         consumer.close();
 
@@ -287,7 +287,7 @@ class EventStreamingIntegrationTest {
 
     @Test
     void failing_handler_retries_then_sends_to_dlq() throws Exception {
-        // GIVEN — a handler that always fails
+        // GIVEN - a handler that always fails
         var failCount = new AtomicInteger(0);
         var consumer = new RetryingEventConsumer(
                 KAFKA.getBootstrapServers(),
@@ -309,7 +309,7 @@ class EventStreamingIntegrationTest {
                 WalletDepositMoneyAction.class,
                 new WalletDepositMoneyAction.Params(wallet.id, new BigDecimal("25.00")));
 
-        // THEN — retried 3 times, then DLQ'd
+        // THEN - retried 3 times, then DLQ'd
         waitForEvents(consumer::getDeadLettered, 1);
         consumer.close();
 

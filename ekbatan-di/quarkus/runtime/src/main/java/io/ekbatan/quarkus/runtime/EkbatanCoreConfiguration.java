@@ -55,7 +55,7 @@ public class EkbatanCoreConfiguration {
      * {@link ConfigTreeBuilder} reconstructs the nested tree from flat keys, then a private
      * {@link JsonMapper} (with the Ekbatan mix-in module) deserializes it into {@link ShardingConfig}.
      *
-     * <p>{@code @ConfigMapping} can't construct {@code DataSourceConfig} entries directly — they
+     * <p>{@code @ConfigMapping} can't construct {@code DataSourceConfig} entries directly - they
      * have private constructors + Builders, and the {@code configs} map uses user-defined keys.
      *
      * @param module the Ekbatan Jackson module produced by {@link #ekbatanConfigJacksonModule}.
@@ -93,7 +93,7 @@ public class EkbatanCoreConfiguration {
     }
 
     /**
-     * CDI disposer for {@link #ekbatanDatabaseRegistry} — drains connection pools at shutdown.
+     * CDI disposer for {@link #ekbatanDatabaseRegistry} - drains connection pools at shutdown.
      *
      * @param registry the registry being disposed.
      * @throws Exception if pool teardown fails.
@@ -104,7 +104,7 @@ public class EkbatanCoreConfiguration {
 
     /**
      * Produces the framework's default UTC {@link Clock}. Override by defining your own
-     * {@code @Produces Clock} bean (useful for tests that need a {@code VirtualClock}).
+     * {@code @Produces Clock} bean (useful for tests that need a test-support {@code VirtualClock}).
      *
      * @return a system UTC clock.
      */

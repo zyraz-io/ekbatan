@@ -19,7 +19,7 @@ import java.util.UUID;
  * executor-build time.
  *
  * <p>When an action emits zero events, the persister still writes one sentinel row per
- * action so downstream CDC consumers can correlate every action to a row in the eventlog —
+ * action so downstream CDC consumers can correlate every action to a row in the eventlog -
  * see the implementation classes for the sentinel encoding.
  */
 public interface EventPersister {
@@ -33,7 +33,7 @@ public interface EventPersister {
      * @param startedDate when the action's {@code perform()} began.
      * @param completionDate when the action's persist phase reached this call.
      * @param actionParams the action's typed params (serialized into the row).
-     * @param modelEvents the events produced by the action (possibly empty — a sentinel row may still be written).
+     * @param modelEvents the events produced by the action (possibly empty - a sentinel row may still be written).
      * @param shard the shard the events live on.
      * @param actionEventId executor-generated correlation id stamped on the action-level row.
      */

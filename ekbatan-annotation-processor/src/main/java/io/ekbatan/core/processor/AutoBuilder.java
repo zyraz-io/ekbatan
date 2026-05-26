@@ -11,7 +11,7 @@ import java.lang.annotation.Target;
  * framework's required fields (id, state, version, timestamps) into your user-defined fields.
  *
  * <p>Source-retention: discarded after compilation and never appears in the resulting class
- * files — the only artifact is the generated builder source.
+ * files - the only artifact is the generated builder source.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.SOURCE)

@@ -9,7 +9,7 @@ package io.ekbatan.core.domain;
  * clause derived from {@link #getVersion()} and increments to the value supplied by
  * {@link #nextVersion()}. A zero-row update therefore raises
  * {@link io.ekbatan.core.repository.exception.StaleRecordException} rather than silently
- * losing data — the canonical optimistic-concurrency contract.
+ * losing data - the canonical optimistic-concurrency contract.
  *
  * <p>{@link #isModel()} returns {@code true} for {@link Model} (event-emitting) and
  * {@code false} for {@link Entity} (no events). The persister branches on this when deciding

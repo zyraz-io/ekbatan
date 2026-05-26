@@ -31,7 +31,7 @@
         <jooq.version>3.20.10</jooq.version>
 
         <ekbatan.version>0.0.3</ekbatan.version>
-        <!-- Hyphenated property names — avoid the `flyway.*` / `jooq.*` namespace, which the
+        <!-- Hyphenated property names - avoid the `flyway.*` / `jooq.*` namespace, which the
              respective Maven plugins scan and reject for unrecognized keys. -->
         <flyway-version>12.0.0</flyway-version>
         <mysql-connector-version>9.4.0</mysql-connector-version>
@@ -44,7 +44,7 @@
 
         <!-- Single source of truth for the codegen-time database. Used by docker-maven-plugin (to start the
              container), flyway-maven-plugin (to migrate), and jooq-codegen-maven (to introspect).
-             We connect as root so the V0000 migration's `CREATE DATABASE eventlog` succeeds — the runtime
+             We connect as root so the V0000 migration's `CREATE DATABASE eventlog` succeeds - the runtime
              / test containers use a less-privileged `wallet` user with a mysql_init.sql GRANT, but the
              codegen container is throwaway and root is simpler. -->
         <codegen.db.port>13307</codegen.db.port>
@@ -84,7 +84,7 @@
 
         <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
              Flyway resource provider, etc.) that auto-apply when native-image runs. Also provides
-             FlywayHelper — see FlywayConfiguration. -->
+             FlywayHelper - see FlywayConfiguration. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-native</artifactId>
@@ -255,7 +255,7 @@
                    - mysql:9.4.0 + MYSQL_* env vars
                    - MySQL connector instead of MariaDB driver
                    - A third <forcedType> for CHAR(36) → UUID via UuidStringConverter
-                     (MySQL has no native UUID type — every UUID column is stored as CHAR(36)
+                     (MySQL has no native UUID type - every UUID column is stored as CHAR(36)
                      CHARACTER SET ascii, and the converter bridges back to java.util.UUID).
                  ════════════════════════════════════════════════════════════════════════════ -->
 
@@ -320,7 +320,7 @@
                     <user>${codegen.db.user}</user>
                     <password>${codegen.db.password}</password>
                     <schemas>
-                        <!-- On MariaDB / MySQL, "schema" and "database" are synonyms — so the two
+                        <!-- On MariaDB / MySQL, "schema" and "database" are synonyms - so the two
                              namespaces here are the main DB (`wallet`) and the framework's `eventlog`.
                              Flyway treats each name as its own database. The V0000 migration creates
                              `eventlog` from the main connection's privileges. -->
@@ -405,7 +405,7 @@
                                         <!-- MySQL-only: CHAR(36) → java.util.UUID. MySQL has no native
                                              UUID type, every UUID column is stored as CHAR(36) CHARACTER
                                              SET ascii. The expression scopes the converter to columns
-                                             whose name is `id` or ends in `_id` — without that scope,
+                                             whose name is `id` or ends in `_id` - without that scope,
                                              unrelated CHAR(36) columns (handler names, status enums)
                                              would also get bound to UUID and break. -->
                                         <forcedType>

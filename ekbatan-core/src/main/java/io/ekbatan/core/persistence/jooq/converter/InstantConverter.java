@@ -11,7 +11,7 @@ import org.jooq.Converter;
  * for timestamp fields ({@code createdDate}, {@code updatedDate}, etc.); this converter is
  * the bridge for any column generated as {@code TIMESTAMP} rather than {@code TIMESTAMPTZ}.
  *
- * <p>Wire-up: register via jOOQ codegen's {@code forcedTypes} block — see the integration-test
+ * <p>Wire-up: register via jOOQ codegen's {@code forcedTypes} block - see the integration-test
  * modules' {@code build.gradle.kts} for an example.
  */
 public class InstantConverter implements Converter<LocalDateTime, Instant> {

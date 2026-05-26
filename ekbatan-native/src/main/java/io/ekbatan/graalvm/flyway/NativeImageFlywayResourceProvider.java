@@ -21,7 +21,7 @@ import org.flywaydb.core.internal.resource.classpath.ClassPathResource;
 
 /**
  * Flyway {@link ResourceProvider} that walks GraalVM Substrate's {@code resource:/} NIO
- * file system to enumerate migrations on native image — needed because Flyway's default
+ * file system to enumerate migrations on native image - needed because Flyway's default
  * {@code ClassPathScanner} relies on {@code ClassLoader.getResources(dir)} returning a
  * {@code file:} or {@code jar:} URL, which native image cannot satisfy.
  *
@@ -72,7 +72,7 @@ public final class NativeImageFlywayResourceProvider implements ResourceProvider
                 if (!"classpath:".equals(loc.getPrefix())) {
                     continue;
                 }
-                // getRootPath() is the 11.x replacement for getPath() — always a real path component,
+                // getRootPath() is the 11.x replacement for getPath() - always a real path component,
                 // never a wildcard expression.
                 Path root = fs.getPath("/", loc.getRootPath());
                 if (!Files.isDirectory(root)) {

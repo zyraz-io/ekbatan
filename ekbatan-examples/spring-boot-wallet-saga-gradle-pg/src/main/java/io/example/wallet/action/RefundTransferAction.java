@@ -11,16 +11,16 @@ import java.time.Clock;
 import java.util.UUID;
 
 /**
- * Saga compensation — credits the source wallet back after a failed transfer. Emits a
+ * Saga compensation - credits the source wallet back after a failed transfer. Emits a
  * {@code TransferRefundedEvent} that closes the saga loop and leaves a complete audit trail
  * on the source wallet:
  *
  * <pre>
- *   TransferInitiated → TransferFailed → TransferRefunded
+ *   TransferInitiated -> TransferFailed -> TransferRefunded
  * </pre>
  *
  * <p>This is forward-only compensation, not a rollback. The original debit transaction is
- * already long committed by the time this runs — we simply add money back. The framework's
+ * already long committed by the time this runs - we simply add money back. The framework's
  * outbox guarantees this compensation runs exactly once per failure event.
  */
 @EkbatanAction

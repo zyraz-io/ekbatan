@@ -62,13 +62,13 @@ class MariaDBKeyedLockProviderIntegrationTest {
         var key = uniqueKey();
 
         try (var first = lock.acquire(key, FIVE_MIN)) {
-            // WHEN — another thread tries to acquire the same key. (Same-thread acquires would
+            // WHEN - another thread tries to acquire the same key. (Same-thread acquires would
             // succeed via reentry, so the cross-thread check is what proves mutual exclusion.)
             assertThat(first.isHeld()).isTrue();
             assertThat(otherThreadCanAcquire(key)).isFalse();
         }
 
-        // AND — once released, the lock is acquirable again
+        // AND - once released, the lock is acquirable again
         try (var third = lock.acquire(key, FIVE_MIN)) {
             assertThat(third.isHeld()).isTrue();
         }
@@ -109,7 +109,7 @@ class MariaDBKeyedLockProviderIntegrationTest {
         // GIVEN
         var key = uniqueKey();
         try (var ignored = lock.acquire(key, FIVE_MIN)) {
-            // WHEN / THEN — another thread sees the lock as taken
+            // WHEN / THEN - another thread sees the lock as taken
             assertThat(otherThreadCanAcquire(key)).isFalse();
         }
     }
@@ -118,7 +118,7 @@ class MariaDBKeyedLockProviderIntegrationTest {
 
     @Test
     void try_acquire_with_max_wait_should_succeed_when_holder_releases_in_time() throws Exception {
-        // GIVEN — first thread holds, releases after 200ms
+        // GIVEN - first thread holds, releases after 200ms
         var key = uniqueKey();
         var holder = lock.acquire(key, FIVE_MIN);
         Thread.ofVirtual().start(() -> {
@@ -129,7 +129,7 @@ class MariaDBKeyedLockProviderIntegrationTest {
             }
         });
 
-        // WHEN — wait up to 5s
+        // WHEN - wait up to 5s
         var start = System.nanoTime();
         var lease = lock.tryAcquire(key, Duration.ofSeconds(5), FIVE_MIN);
         var elapsed = Duration.ofNanos(System.nanoTime() - start);
@@ -142,10 +142,10 @@ class MariaDBKeyedLockProviderIntegrationTest {
 
     @Test
     void try_acquire_with_max_wait_should_return_empty_when_holder_does_not_release() throws Exception {
-        // GIVEN — main thread holds for the full FIVE_MIN
+        // GIVEN - main thread holds for the full FIVE_MIN
         var key = uniqueKey();
         try (var ignored = lock.acquire(key, FIVE_MIN)) {
-            // WHEN — a different thread tries to acquire with a 200ms wait
+            // WHEN - a different thread tries to acquire with a 200ms wait
             var elapsedHolder = new AtomicReference<Duration>();
             var leaseHolder = new AtomicReference<Optional<KeyedLockProvider.Lease>>();
             var thread = Thread.ofVirtual().start(() -> {
@@ -160,7 +160,7 @@ class MariaDBKeyedLockProviderIntegrationTest {
             });
             thread.join();
 
-            // THEN — empty, and the wait returned in well under the holder's hold time
+            // THEN - empty, and the wait returned in well under the holder's hold time
             // (proving GET_LOCK respected the timeout rather than blocking indefinitely)
             assertThat(leaseHolder.get()).isEmpty();
             assertThat(elapsedHolder.get()).isLessThan(Duration.ofSeconds(5));
@@ -169,16 +169,16 @@ class MariaDBKeyedLockProviderIntegrationTest {
 
     /**
      * Verifies modern MariaDB (10.0.2+) honors fractional-second {@code GET_LOCK} timeouts.
-     * Pre-modern versions rounded 500ms either to 0s (try-once → returns immediately) or to
+     * Pre-modern versions rounded 500ms either to 0s (try-once -> returns immediately) or to
      * 1s (waits a full second), so the elapsed time would be either much less than 200ms or
      * much greater than 900ms. Anything in between proves sub-second precision is in effect.
      */
     @Test
     void try_acquire_should_honor_sub_second_max_wait() throws Exception {
-        // GIVEN — main thread holds the lock
+        // GIVEN - main thread holds the lock
         var key = uniqueKey();
         try (var ignored = lock.acquire(key, FIVE_MIN)) {
-            // WHEN — a different thread does a half-second wait
+            // WHEN - a different thread does a half-second wait
             var elapsedHolder = new AtomicReference<Duration>();
             var leaseHolder = new AtomicReference<Optional<KeyedLockProvider.Lease>>();
             var thread = Thread.ofVirtual().start(() -> {
@@ -198,7 +198,7 @@ class MariaDBKeyedLockProviderIntegrationTest {
             assertThat(leaseHolder.get()).isEmpty();
             assertThat(elapsed)
                     .as(
-                            "elapsed=%dms — sub-second precision means ≈500ms, not 0ms (try-once) or 1000ms (rounded up)",
+                            "elapsed=%dms - sub-second precision means approx.500ms, not 0ms (try-once) or 1000ms (rounded up)",
                             elapsed.toMillis())
                     .isBetween(Duration.ofMillis(200), Duration.ofMillis(950));
         }
@@ -218,12 +218,12 @@ class MariaDBKeyedLockProviderIntegrationTest {
         // THEN
         assertThat(lease.isHeld()).isFalse();
 
-        // AND — another caller can now acquire the same key
+        // AND - another caller can now acquire the same key
         try (var next = lock.acquire(key, FIVE_MIN)) {
             assertThat(next.isHeld()).isTrue();
         }
 
-        // AND — close after auto-expire is safe (idempotent)
+        // AND - close after auto-expire is safe (idempotent)
         lease.close();
     }
 
@@ -382,7 +382,7 @@ class MariaDBKeyedLockProviderIntegrationTest {
     /**
      * Runs {@code tryAcquire(key, ZERO, FIVE_MIN)} on a fresh virtual thread and returns
      * whether it succeeded. Used by reentrancy tests to assert mutual-exclusion against
-     * another caller — same-thread checks would always succeed via re-entry and tell us
+     * another caller - same-thread checks would always succeed via re-entry and tell us
      * nothing.
      */
     private static boolean otherThreadCanAcquire(String key) throws Exception {

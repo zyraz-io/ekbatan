@@ -180,7 +180,7 @@ public abstract class BaseSingleTableJsonEventPersisterTest {
                 new TestActionParams("noop", 0),
                 List.of());
 
-        // THEN — sentinel row with null event fields
+        // THEN - sentinel row with null event fields
         assertThat(persisted).hasSize(1);
         var sentinel = persisted.getFirst();
 

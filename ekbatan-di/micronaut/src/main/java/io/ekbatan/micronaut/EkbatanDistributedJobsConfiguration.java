@@ -23,11 +23,11 @@ import java.util.List;
  * is in the build).
  *
  * <p>Requires a {@code jobsConfig} {@link io.ekbatan.core.config.DataSourceConfig} under the
- * default shard's member — db-scheduler holds its own connection pool separate from the
+ * default shard's member - db-scheduler holds its own connection pool separate from the
  * main {@code DatabaseRegistry} to isolate job polling from application traffic.
  *
  * <p>Wired into the Micronaut lifecycle via {@link StartupEvent} / {@link ShutdownEvent}
- * listeners — the scheduler thread starts when the app starts and shuts down cleanly on app
+ * listeners - the scheduler thread starts when the app starts and shuts down cleanly on app
  * stop.
  */
 @Factory
@@ -42,7 +42,7 @@ public class EkbatanDistributedJobsConfiguration {
      * from the main {@link io.ekbatan.core.shard.DatabaseRegistry} pools so job polling load
      * can't starve application traffic (or vice versa).
      *
-     * @param shardingConfig the sharding configuration — the jobs datasource is read from the
+     * @param shardingConfig the sharding configuration - the jobs datasource is read from the
      *     default shard's member under {@code configs.jobsConfig}.
      * @return a Hikari-backed provider; closed automatically by Micronaut via {@code preDestroy="close"}.
      */
@@ -60,7 +60,7 @@ public class EkbatanDistributedJobsConfiguration {
                                         + shardingConfig.defaultShard.group
                                         + "].members["
                                         + shardingConfig.defaultShard.member
-                                        + "].configs.jobsConfig in your application.yml — "
+                                        + "].configs.jobsConfig in your application.yml - "
                                         + "or define a @Named(\"ekbatanJobsConnectionProvider\") ConnectionProvider @Bean of your own."));
         return ConnectionProvider.hikariConnectionProvider(jobsConfig);
     }

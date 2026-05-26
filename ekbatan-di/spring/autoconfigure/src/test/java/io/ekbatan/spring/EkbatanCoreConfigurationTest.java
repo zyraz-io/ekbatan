@@ -24,7 +24,7 @@ import tools.jackson.databind.JacksonModule;
 
 /**
  * Component test for the auto-config wiring up to {@link ShardingConfig} and {@link ActionExecutor}
- * — without a real database. We mock the {@link DatabaseRegistry} so {@link ActionExecutor}
+ * - without a real database. We mock the {@link DatabaseRegistry} so {@link ActionExecutor}
  * builds without opening Hikari pools. End-to-end wiring with a real Postgres lives in
  * {@code ekbatan-integration-tests}.
  *
@@ -87,7 +87,7 @@ class EkbatanCoreConfigurationTest {
                         "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password=p")
                 .run(ctx -> {
                     // The JacksonModule bean we expose is auto-collected by Spring Boot 4's
-                    // JacksonAutoConfiguration via ObjectProvider<JacksonModule> — verify our
+                    // JacksonAutoConfiguration via ObjectProvider<JacksonModule> - verify our
                     // module appears among them.
                     var modules = ctx.getBeansOfType(JacksonModule.class);
                     assertThat(modules.values()).anyMatch(m -> m instanceof EkbatanConfigJacksonModule);
@@ -98,11 +98,11 @@ class EkbatanCoreConfigurationTest {
     void actionsShouldNotBeSpringBeansAndShouldBeRegisteredAsSingletons() {
         // Actions are framework-internal: discovered via classpath scan, instantiated once at
         // startup via AutowireCapableBeanFactory.createBean(...) (which wires constructor
-        // dependencies from existing singleton beans — Clock here, plus @EkbatanRepository
+        // dependencies from existing singleton beans - Clock here, plus @EkbatanRepository
         // beans in real apps), and registered in the ActionRegistry. The resulting instances
         // are NOT registered as managed Spring beans; they're reachable only via ActionExecutor
-        // / ActionSpec. Per-execution state lives in Action.plan() (a ScopedValue), not on the
-        // instance — so a single instance is shared across all concurrent executions.
+        // / test-support ActionSpec. Per-execution state lives in Action.plan() (a ScopedValue), not on the
+        // instance - so a single instance is shared across all concurrent executions.
         contextRunner
                 .withInitializer(ctx -> AutoConfigurationPackages.register(
                         (BeanDefinitionRegistry) ctx.getBeanFactory(),
@@ -122,7 +122,7 @@ class EkbatanCoreConfigurationTest {
                     // Action class is discoverable but NOT a Spring bean.
                     assertThat(ctx).doesNotHaveBean(FixtureAction.class);
 
-                    // It IS in the ActionRegistry — and resolves to the same singleton on every call.
+                    // It IS in the ActionRegistry - and resolves to the same singleton on every call.
                     var registry = ctx.getBean(ActionRegistry.class);
                     var first = registry.get(FixtureAction.class);
                     var second = registry.get(FixtureAction.class);

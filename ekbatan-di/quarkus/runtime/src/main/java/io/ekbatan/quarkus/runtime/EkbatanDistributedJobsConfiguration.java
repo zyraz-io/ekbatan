@@ -24,11 +24,11 @@ import java.util.List;
  * {@link JobRegistry} and its dedicated {@code ekbatanJobsConnectionProvider}.
  *
  * <p>Requires a {@code jobsConfig} {@link io.ekbatan.core.config.DataSourceConfig} under the
- * default shard's member — db-scheduler holds its own connection pool separate from the
+ * default shard's member - db-scheduler holds its own connection pool separate from the
  * main {@code DatabaseRegistry} to isolate job polling from application traffic.
  *
  * <p>Wired into the Quarkus lifecycle via {@link StartupEvent} / {@link ShutdownEvent}
- * observers — the scheduler thread starts when the app starts and shuts down cleanly when
+ * observers - the scheduler thread starts when the app starts and shuts down cleanly when
  * the app shuts down.
  */
 @Singleton
@@ -42,7 +42,7 @@ public class EkbatanDistributedJobsConfiguration {
      * from the main {@link io.ekbatan.core.shard.DatabaseRegistry} pools so job polling load can't
      * starve application traffic (or vice versa).
      *
-     * @param shardingConfig the sharding configuration — the jobs datasource is read from the
+     * @param shardingConfig the sharding configuration - the jobs datasource is read from the
      *     default shard's member under {@code configs.jobsConfig}.
      * @return a Hikari-backed provider; closed by {@link #closeJobsConnectionProvider}.
      */
@@ -60,13 +60,13 @@ public class EkbatanDistributedJobsConfiguration {
                                         + shardingConfig.defaultShard.group
                                         + "].members["
                                         + shardingConfig.defaultShard.member
-                                        + "].configs.jobsConfig in your application.yaml — "
+                                        + "].configs.jobsConfig in your application.yaml - "
                                         + "or define a @Named(\"ekbatanJobsConnectionProvider\") ConnectionProvider @Produces of your own."));
         return ConnectionProvider.hikariConnectionProvider(jobsConfig);
     }
 
     /**
-     * CDI disposer for {@link #ekbatanJobsConnectionProvider} — closes the dedicated Hikari pool
+     * CDI disposer for {@link #ekbatanJobsConnectionProvider} - closes the dedicated Hikari pool
      * for the job scheduler at shutdown.
      *
      * @param provider the provider being disposed.

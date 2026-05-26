@@ -21,7 +21,7 @@ import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.Repository;
 import io.ekbatan.core.shard.DatabaseRegistry;
-import io.ekbatan.core.time.VirtualClock;
+import io.ekbatan.testsupport.time.VirtualClock;
 import java.security.Principal;
 import java.time.Duration;
 import java.time.Instant;
@@ -41,7 +41,7 @@ import tools.jackson.databind.ObjectMapper;
 //   - GraalVM CE/Oracle 25.0.x bundle ASM 9.7.1 which can't read JDK 25 class files,
 //     surfacing as "Unsupported class file major version 69" in
 //     ClassPredefinitionFeature when the agent's predefined-class blobs are loaded
-//     (oracle/graal#12723, GR-72123 — backport not high priority).
+//     (oracle/graal#12723, GR-72123 - backport not high priority).
 //   - GraalVM 26 EA fixes that via the new ClassFileAPI but trips a different
 //     ClassFileAPI bug ("Could not resolve class ChannelMessage") on agent-recorded
 //     bytecode.
@@ -399,7 +399,7 @@ class ActionExecutorTest {
                         .withAction(FailingItemAction.class, new FailingItemAction(clock, attempts))
                         .build());
 
-        // WHEN / THEN — default config retries StaleRecordException 1 time, so failing 2 times exhausts retries
+        // WHEN / THEN - default config retries StaleRecordException 1 time, so failing 2 times exhausts retries
         assertThatThrownBy(
                         () -> executor.execute(() -> "user", FailingItemAction.class, new FailingItemAction.Params(5)))
                 .isInstanceOf(io.ekbatan.core.repository.exception.StaleRecordException.class);

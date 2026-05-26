@@ -26,7 +26,7 @@
         <micronaut.runtime>netty</micronaut.runtime>
         <exec.mainClass>io.example.wallet.Application</exec.mainClass>
 
-        <!-- Hyphenated property names — avoid the `flyway.*` / `jooq.*` namespace, which the
+        <!-- Hyphenated property names - avoid the `flyway.*` / `jooq.*` namespace, which the
              respective Maven plugins scan and reject for unrecognized keys. -->
         <flyway-version>12.0.0</flyway-version>
         <postgresql.version>42.7.10</postgresql.version>
@@ -81,7 +81,7 @@
              its BOM, but the jooq-codegen-maven plugin generates classes against 3.20 APIs (e.g.
              `VERSION_3_20`, `resetTouchedOnNotNull()`). Declared as a direct dependency so the
              explicit version wins over the BOM-managed transitive, without adding a
-             <dependencyManagement> block — that breaks micronaut-maven-plugin 4.11.5's
+             <dependencyManagement> block - that breaks micronaut-maven-plugin 4.11.5's
              aot-analysis mojo. -->
         <dependency>
             <groupId>org.jooq</groupId>
@@ -104,7 +104,7 @@
             <artifactId>micronaut-http-server-netty</artifactId>
             <scope>compile</scope>
         </dependency>
-        <!-- micronaut-serde-jackson — Jackson-compatible (de)serialization using
+        <!-- micronaut-serde-jackson - Jackson-compatible (de)serialization using
              compile-time generated serdes instead of Jackson Databind's reflection.
              This is the native-image-friendly path; standard Jackson annotations
              (@JsonProperty, @JsonCreator) are honoured. Types must carry @Serdeable
@@ -114,7 +114,7 @@
             <artifactId>micronaut-serde-jackson</artifactId>
             <scope>compile</scope>
         </dependency>
-        <!-- application.yml — Micronaut's classpath inspection requires snakeyaml whenever any
+        <!-- application.yml - Micronaut's classpath inspection requires snakeyaml whenever any
              *.yml is shipped, even though our config keys live under ekbatan.* not micronaut.*. -->
         <dependency>
             <groupId>org.yaml</groupId>
@@ -241,7 +241,7 @@
                              on classes compiled with this jar on the AP classpath. Without it,
                              @EkbatanAction / @EkbatanRepository / @EkbatanEventHandler /
                              @EkbatanDistributedJob classes never get lifted to @Singleton and
-                             Micronaut generates no BeanDefinitions for them — the app fails at
+                             Micronaut generates no BeanDefinitions for them - the app fails at
                              runtime with "no candidates for WalletDepositMoneyAction". -->
                         <path>
                             <groupId>io.github.zyraz-io</groupId>
@@ -327,7 +327,7 @@
 
             <!-- ════════════════════════════════════════════════════════════════════════════
                  jOOQ codegen chain (PostgreSQL flavour). Same shape as the Spring-Boot-on-Maven
-                 sibling — no Micronaut specifics in the codegen path; codegen only depends on
+                 sibling - no Micronaut specifics in the codegen path; codegen only depends on
                  the migrations + the database dialect.
                  ════════════════════════════════════════════════════════════════════════════ -->
 

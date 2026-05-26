@@ -7,7 +7,7 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
 
 /**
  * GraalVM Native Image {@link Feature} that registers every Java {@code record} found
- * under the configured package roots for full reflective access — including
+ * under the configured package roots for full reflective access - including
  * {@link Class#getRecordComponents() record components}, which Jackson 3
  * ({@code tools.jackson.databind}) requires to deserialize records.
  *
@@ -17,18 +17,18 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  *
  * <h2>What it registers</h2>
  * <ul>
- *   <li>Every Java {@code record} found under the scan roots — full reflective access plus
+ *   <li>Every Java {@code record} found under the scan roots - full reflective access plus
  *       {@code RuntimeReflection.registerAllRecordComponents}.</li>
- *   <li>Every class with a nested {@code Builder} inner class — Jackson uses reflection to
+ *   <li>Every class with a nested {@code Builder} inner class - Jackson uses reflection to
  *       call {@code build()} and the property setters (covers both
  *       {@code @JsonDeserialize(builder = ...)} and the project's {@code @AutoBuilder}
  *       annotation processor).</li>
  *   <li>Every class with at least one {@code @JsonCreator}-annotated method (Jackson 2 or
  *       Jackson 3 package). The declaring class is fully registered (so Jackson can read its
- *       annotations — important for the project's mixin pattern), and if any such method is
+ *       annotations - important for the project's mixin pattern), and if any such method is
  *       static its return type is also registered (so Jackson can invoke the real factory
- *       behind a mixin like {@code ShardIdentifierMixin.of() → ShardIdentifier}).</li>
- *   <li>Every class whose package name contains {@code .generated.jooq.} — jOOQ's codegen
+ *       behind a mixin like {@code ShardIdentifierMixin.of() -> ShardIdentifier}).</li>
+ *   <li>Every class whose package name contains {@code .generated.jooq.} - jOOQ's codegen
  *       output uses reflection to instantiate Records via no-arg constructors.</li>
  * </ul>
  *
@@ -64,7 +64,7 @@ public final class Jackson3RecordsFeature implements Feature {
 
     /**
      * Both Jackson 2 ({@code com.fasterxml.jackson.annotation.JsonCreator}) and Jackson 3
-     * ({@code tools.jackson.annotation.JsonCreator}) — Jackson 3 still recognises the
+     * ({@code tools.jackson.annotation.JsonCreator}) - Jackson 3 still recognises the
      * Jackson 2 annotation package for backward compatibility, and the project mixes them.
      */
     private static final String[] JSON_CREATOR_ANNOTATIONS = {
@@ -74,7 +74,7 @@ public final class Jackson3RecordsFeature implements Feature {
     /**
      * Per-build dedup of class registration. Inheritance walks for sibling leaf classes
      * (e.g. concrete event records that all extend the same {@code ModelEvent} super) hit
-     * the same superclass repeatedly — without this set we'd re-issue the same
+     * the same superclass repeatedly - without this set we'd re-issue the same
      * {@code RuntimeReflection.register*} calls dozens of times per shared superclass.
      */
     private final java.util.Set<Class<?>> registered = new java.util.HashSet<>();
@@ -82,7 +82,7 @@ public final class Jackson3RecordsFeature implements Feature {
     /**
      * Tracked separately because record / Builder leaves call us with
      * {@code includeFields=false} (Jackson 3 reads records via canonical constructor +
-     * record components, and Builders via setter methods — fields are unused). A later
+     * record components, and Builders via setter methods - fields are unused). A later
      * call for the same class with {@code includeFields=true} must still register the
      * fields, even if {@link #registered} already contains the class.
      */
@@ -106,10 +106,10 @@ public final class Jackson3RecordsFeature implements Feature {
                 .enableMethodInfo()
                 .enableAnnotationInfo()
                 // Mixin classes (e.g. ShardIdentifierMixin in EkbatanConfigJacksonModule)
-                // are package-private inner classes — without this, ClassGraph skips them.
+                // are package-private inner classes - without this, ClassGraph skips them.
                 .ignoreClassVisibility()
                 // Several @JsonCreator-annotated constructors in the project are private
-                // (e.g. WidgetCreatedEvent's deserialization ctor) — without this,
+                // (e.g. WidgetCreatedEvent's deserialization ctor) - without this,
                 // ClassGraph hides them and we miss the @JsonCreator marker.
                 .ignoreMethodVisibility()
                 .acceptPackages(scanRoots)
@@ -120,20 +120,20 @@ public final class Jackson3RecordsFeature implements Feature {
                 if (cls == null) continue;
                 if (ci.isRecord()) {
                     // Records: Jackson 3 reads via canonical constructor + record
-                    // components (accessor methods). Fields are unused — skip them. The
-                    // inheritance chain is always Record → Object, neither of which
+                    // components (accessor methods). Fields are unused - skip them. The
+                    // inheritance chain is always Record -> Object, neither of which
                     // contributes to deserialisation, so don't walk it.
                     register(cls, false, false);
                     RuntimeReflection.registerAllRecordComponents(cls);
                     recordCount++;
                 } else if (ci.getPackageName().contains(".generated.jooq.")) {
                     // jOOQ generated POJOs/Records use field-level reflection in
-                    // DefaultRecordUnmapper paths — keep fields registered. Walk the
+                    // DefaultRecordUnmapper paths - keep fields registered. Walk the
                     // chain because some jOOQ generated types extend abstract bases.
                     register(cls, true, true);
                     jooqRecordCount++;
                 }
-                // Any nested `Builder` inner class — covers both Jackson's
+                // Any nested `Builder` inner class - covers both Jackson's
                 // `@JsonDeserialize(builder = ...)` and the project's `@AutoBuilder`
                 // annotation processor pattern, which both produce `Outer$Builder` types
                 // that Jackson 3 invokes reflectively to call `build()` and the setters.
@@ -151,7 +151,7 @@ public final class Jackson3RecordsFeature implements Feature {
             //   - Real classes that annotate their own factories (e.g. a value class
             //     with @JsonCreator on a static `of(...)` or constructor).
             //   - Mixin classes (the project's bootstrap pattern) whose @JsonCreator
-            //     factory points at a real class — we register the mixin (annotations
+            //     factory points at a real class - we register the mixin (annotations
             //     reachable for Jackson) AND the real return type (so Jackson can invoke
             //     the corresponding method on the real class).
             for (var ci : scan.getAllClasses()) {
@@ -176,7 +176,7 @@ public final class Jackson3RecordsFeature implements Feature {
                     }
                     if (!methodHasCreator) continue;
                     classHasCreator = true;
-                    // Static factory methods produce a real class (mixin pattern → real
+                    // Static factory methods produce a real class (mixin pattern -> real
                     // type). Constructors return the declaring class itself, which is
                     // already covered by the register(cls, ...) call below.
                     if (mi.isStatic() && !mi.isConstructor()) {
@@ -221,7 +221,7 @@ public final class Jackson3RecordsFeature implements Feature {
     }
 
     /**
-     * Loads a class via ClassGraph but tolerates classes that can't be loaded — e.g. a
+     * Loads a class via ClassGraph but tolerates classes that can't be loaded - e.g. a
      * Micronaut {@code TypeElementVisitor} compile-time stub whose super-interface lives
      * in a build-time-only artifact. Skipping is safe: such classes aren't reachable at
      * native-image runtime anyway.
@@ -239,7 +239,7 @@ public final class Jackson3RecordsFeature implements Feature {
      *
      * <p><b>Why both bulk and per-element registration?</b> On GraalVM 25,
      * {@code registerAllDeclared*} only registers methods/constructors for the QUERY API
-     * (so {@code Class.getDeclaredMethods()} returns them) — it does NOT make them
+     * (so {@code Class.getDeclaredMethods()} returns them) - it does NOT make them
      * invocable through {@code Method.invoke} / {@code MethodHandle}. The explicit
      * per-element {@code RuntimeReflection.register(method)} / {@code register(ctor)}
      * calls add the invocation-path metadata Jackson 3 needs (it uses MethodHandles for

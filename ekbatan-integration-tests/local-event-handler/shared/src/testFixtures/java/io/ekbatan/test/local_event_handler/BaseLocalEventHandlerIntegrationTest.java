@@ -135,7 +135,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
                 .clock(Clock.systemUTC())
                 .build();
 
-        // WHEN — three widgets, one per (cycled) shard
+        // WHEN - three widgets, one per (cycled) shard
         var w1 = executor.execute(
                 () -> "tester", WidgetCreateAction.class, new WidgetCreateAction.Params(shardFor(0), "alpha", "red"));
         var w2 = executor.execute(
@@ -143,7 +143,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
         var w3 = executor.execute(
                 () -> "tester", WidgetCreateAction.class, new WidgetCreateAction.Params(shardFor(2), "gamma", "blue"));
 
-        // THEN — every widget landed on the shard encoded in its ID
+        // THEN - every widget landed on the shard encoded in its ID
         assertThat(shardOf(w1)).isEqualTo(shardFor(0));
         assertThat(shardOf(w2)).isEqualTo(shardFor(1));
         assertThat(shardOf(w3)).isEqualTo(shardFor(2));
@@ -154,7 +154,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
         assertThat(countEventsDelivered(true)).isZero();
         assertThat(countNotifications("PENDING")).isZero();
 
-        // AND — each widget's source event is on its own shard
+        // AND - each widget's source event is on its own shard
         assertThat(countEventsDeliveredOnShard(false, shardFor(0)))
                 .as("undelivered events on shard 0")
                 .isPositive();
@@ -165,12 +165,12 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
         // WHEN
         fanoutJob.drainOneRound();
 
-        // THEN — fan-out flipped delivered=true on every shard, materialized 6 notifications
+        // THEN - fan-out flipped delivered=true on every shard, materialized 6 notifications
         assertThat(countEventsDelivered(false)).isZero();
         assertThat(countEventsDelivered(true)).isEqualTo(3);
         assertThat(countNotifications("PENDING")).isEqualTo(6);
 
-        // AND — each shard has exactly the notifications for its own widget × 2 handlers
+        // AND - each shard has exactly the notifications for its own widget x 2 handlers
         for (int i = 0; i < 3; i++) {
             assertThat(countNotificationsOnShard("PENDING", shardFor(i)))
                     .as("PENDING notifications on shard " + i)
@@ -180,7 +180,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
         // WHEN
         handlingJob.drainOneRound();
 
-        // THEN — every notification reached SUCCEEDED, both handlers received all three widgets
+        // THEN - every notification reached SUCCEEDED, both handlers received all three widgets
         assertThat(countNotifications("SUCCEEDED")).isEqualTo(6);
         assertThat(countNotifications("PENDING")).isZero();
         assertThat(emailHandler.callCount()).isEqualTo(3);
@@ -209,7 +209,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
                 .clock(Clock.systemUTC())
                 .build();
 
-        // WHEN — one widget per shard
+        // WHEN - one widget per shard
         for (int i = 0; i < shards.size(); i++) {
             executor.execute(
                     () -> "tester",
@@ -218,7 +218,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
         }
         fanoutJob.drainOneRound();
 
-        // THEN — each shard's events are visited (delivered=true), no notifications anywhere
+        // THEN - each shard's events are visited (delivered=true), no notifications anywhere
         assertThat(countEventsDelivered(true)).isEqualTo(shards.size());
         assertThat(countNotifications("PENDING")).isZero();
     }
@@ -354,7 +354,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
                 .clock(Clock.fixed(Instant.now().plusSeconds(60), ZoneOffset.UTC))
                 .build();
 
-        // WHEN — three widgets across shards
+        // WHEN - three widgets across shards
         executor.execute(
                 () -> "tester", WidgetCreateAction.class, new WidgetCreateAction.Params(shardFor(0), "alpha", "red"));
         executor.execute(
@@ -394,7 +394,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
                 .clock(Clock.systemUTC())
                 .build();
 
-        // WHEN — three widgets across shards
+        // WHEN - three widgets across shards
         executor.execute(
                 () -> "tester", WidgetCreateAction.class, new WidgetCreateAction.Params(shardFor(0), "alpha", "red"));
         executor.execute(
@@ -475,7 +475,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
                 .clock(Clock.systemUTC())
                 .build();
 
-        // WHEN — widget on the LAST shard (so we exercise non-default routing when shards.size > 1)
+        // WHEN - widget on the LAST shard (so we exercise non-default routing when shards.size > 1)
         var widgetShard = shardFor(shards.size() - 1);
         var widget = executor.execute(
                 () -> "tester", WidgetCreateAction.class, new WidgetCreateAction.Params(widgetShard, "alpha", "red"));
@@ -483,7 +483,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
         fanoutJob.drainOneRound();
         handlingJob.drainOneRound();
 
-        // THEN — Round 1: widget is on its shard, the chained Note follows the widget's shard.
+        // THEN - Round 1: widget is on its shard, the chained Note follows the widget's shard.
         assertThat(autoNoteHandler.callCount()).isEqualTo(1);
         assertThat(shardOf(widget)).isEqualTo(widgetShard);
 
@@ -502,7 +502,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
         fanoutJob.drainOneRound();
         handlingJob.drainOneRound();
 
-        // THEN — NoteCreatedEvent dispatched: recorder fires, side-effect handler writes audit
+        // THEN - NoteCreatedEvent dispatched: recorder fires, side-effect handler writes audit
         assertThat(noteAuditHandler.callCount()).isEqualTo(1);
         var observedNoteEvent = noteAuditHandler.received().getFirst();
         assertThat(observedNoteEvent.modelId)
@@ -510,7 +510,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
         assertThat(observedNoteEvent.widgetId).isEqualTo(widget.id.getValue().toString());
         assertThat(observedNoteEvent.text).isEqualTo("auto-note for widget alpha");
 
-        // AND — audit entry written, on the same shard as the note
+        // AND - audit entry written, on the same shard as the note
         var entries = auditEntryRepo.findAll();
         assertThat(entries).hasSize(1);
         var entry = entries.getFirst();

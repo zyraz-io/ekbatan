@@ -62,13 +62,13 @@ class PostgresKeyedLockProviderIntegrationTest {
         var key = uniqueKey();
 
         try (var first = lock.acquire(key, FIVE_MIN)) {
-            // WHEN — another thread tries to acquire the same key. (Same-thread acquires would
+            // WHEN - another thread tries to acquire the same key. (Same-thread acquires would
             // succeed via reentry, so the cross-thread check is what proves mutual exclusion.)
             assertThat(first.isHeld()).isTrue();
             assertThat(otherThreadCanAcquire(key)).isFalse();
         }
 
-        // AND — once released, the lock is acquirable again
+        // AND - once released, the lock is acquirable again
         try (var third = lock.acquire(key, FIVE_MIN)) {
             assertThat(third.isHeld()).isTrue();
         }
@@ -80,7 +80,7 @@ class PostgresKeyedLockProviderIntegrationTest {
         var key1 = uniqueKey();
         var key2 = uniqueKey();
 
-        // WHEN / THEN — both held simultaneously without blocking
+        // WHEN / THEN - both held simultaneously without blocking
         try (var l1 = lock.acquire(key1, FIVE_MIN);
                 var l2 = lock.acquire(key2, FIVE_MIN)) {
             assertThat(l1.isHeld()).isTrue();
@@ -109,7 +109,7 @@ class PostgresKeyedLockProviderIntegrationTest {
         // GIVEN
         var key = uniqueKey();
         try (var ignored = lock.acquire(key, FIVE_MIN)) {
-            // WHEN / THEN — another thread sees the lock as taken
+            // WHEN / THEN - another thread sees the lock as taken
             assertThat(otherThreadCanAcquire(key)).isFalse();
         }
     }
@@ -118,7 +118,7 @@ class PostgresKeyedLockProviderIntegrationTest {
 
     @Test
     void try_acquire_with_max_wait_should_succeed_when_holder_releases_in_time() throws Exception {
-        // GIVEN — first thread holds, releases after 200ms
+        // GIVEN - first thread holds, releases after 200ms
         var key = uniqueKey();
         var holder = lock.acquire(key, FIVE_MIN);
         Thread.ofVirtual().start(() -> {
@@ -129,7 +129,7 @@ class PostgresKeyedLockProviderIntegrationTest {
             }
         });
 
-        // WHEN — wait up to 5s
+        // WHEN - wait up to 5s
         var start = System.nanoTime();
         var lease = lock.tryAcquire(key, Duration.ofSeconds(5), FIVE_MIN);
         var elapsed = Duration.ofNanos(System.nanoTime() - start);
@@ -142,10 +142,10 @@ class PostgresKeyedLockProviderIntegrationTest {
 
     @Test
     void try_acquire_with_max_wait_should_return_empty_when_holder_does_not_release() throws Exception {
-        // GIVEN — main thread holds for the full FIVE_MIN
+        // GIVEN - main thread holds for the full FIVE_MIN
         var key = uniqueKey();
         try (var ignored = lock.acquire(key, FIVE_MIN)) {
-            // WHEN — a different thread tries to acquire with a 200ms wait
+            // WHEN - a different thread tries to acquire with a 200ms wait
             var elapsedHolder = new AtomicReference<Duration>();
             var leaseHolder = new AtomicReference<Optional<KeyedLockProvider.Lease>>();
             var thread = Thread.ofVirtual().start(() -> {
@@ -160,7 +160,7 @@ class PostgresKeyedLockProviderIntegrationTest {
             });
             thread.join();
 
-            // THEN — empty, and the wait returned in well under the holder's hold time
+            // THEN - empty, and the wait returned in well under the holder's hold time
             // (proving lock_timeout fired server-side rather than us waiting for the holder)
             assertThat(leaseHolder.get()).isEmpty();
             assertThat(elapsedHolder.get()).isLessThan(Duration.ofSeconds(5));
@@ -175,18 +175,18 @@ class PostgresKeyedLockProviderIntegrationTest {
         var key = uniqueKey();
         var lease = lock.acquire(key, Duration.ofMillis(200));
 
-        // WHEN — let maxHold elapse
+        // WHEN - let maxHold elapse
         Thread.sleep(600);
 
         // THEN
         assertThat(lease.isHeld()).isFalse();
 
-        // AND — another caller can now acquire the same key
+        // AND - another caller can now acquire the same key
         try (var next = lock.acquire(key, FIVE_MIN)) {
             assertThat(next.isHeld()).isTrue();
         }
 
-        // AND — close after auto-expire is safe (idempotent)
+        // AND - close after auto-expire is safe (idempotent)
         lease.close();
     }
 
@@ -198,14 +198,14 @@ class PostgresKeyedLockProviderIntegrationTest {
         var hikari = provider.getDataSource();
         var beforeActive = hikari.getHikariPoolMXBean().getActiveConnections();
 
-        // WHEN — many sequential acquire/release cycles on distinct keys
+        // WHEN - many sequential acquire/release cycles on distinct keys
         for (var i = 0; i < 50; i++) {
             try (var ignored = lock.acquire(uniqueKey(), FIVE_MIN)) {
                 // hold briefly
             }
         }
 
-        // THEN — pool's active-connection count returns to its starting value (no leaks)
+        // THEN - pool's active-connection count returns to its starting value (no leaks)
         assertThat(hikari.getHikariPoolMXBean().getActiveConnections()).isEqualTo(beforeActive);
     }
 
@@ -256,7 +256,7 @@ class PostgresKeyedLockProviderIntegrationTest {
                 var inner = lock.acquire(key, FIVE_MIN)) {
             assertThat(outer.isHeld()).isTrue();
             assertThat(inner.isHeld()).isTrue();
-            // Re-entry shares the outer's connection — no extra borrow.
+            // Re-entry shares the outer's connection - no extra borrow.
             assertThat(hikari.getHikariPoolMXBean().getActiveConnections() - beforeActive)
                     .isEqualTo(1);
         }
@@ -298,7 +298,7 @@ class PostgresKeyedLockProviderIntegrationTest {
 
         try (var outer = lock.acquire(key, FIVE_MIN);
                 var inner = lock.acquire(key, Duration.ofMillis(50))) {
-            // Inner specified a 50ms maxHold but it must be ignored — outer's 5min governs.
+            // Inner specified a 50ms maxHold but it must be ignored - outer's 5min governs.
             Thread.sleep(200);
             assertThat(outer.isHeld()).isTrue();
             assertThat(inner.isHeld()).isTrue();
@@ -350,7 +350,7 @@ class PostgresKeyedLockProviderIntegrationTest {
     /**
      * Runs {@code tryAcquire(key, ZERO, FIVE_MIN)} on a fresh virtual thread and returns
      * whether it succeeded. Used by reentrancy tests to assert mutual-exclusion against
-     * another caller — same-thread checks would always succeed via re-entry and tell us
+     * another caller - same-thread checks would always succeed via re-entry and tell us
      * nothing.
      */
     private static boolean otherThreadCanAcquire(String key) throws Exception {

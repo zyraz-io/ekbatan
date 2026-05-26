@@ -5,7 +5,7 @@ import java.util.List;
 import org.apache.commons.lang3.Validate;
 
 /**
- * Mid-level config describing one group within a {@link ShardingConfig} — a logical cluster
+ * Mid-level config describing one group within a {@link ShardingConfig} - a logical cluster
  * of physical databases that share a routing concern (e.g. "all US-region wallets,"
  * "free-tier tenants"). Each group has a numeric {@code group} key that pairs with a member
  * key to form a {@link io.ekbatan.core.shard.ShardIdentifier}.

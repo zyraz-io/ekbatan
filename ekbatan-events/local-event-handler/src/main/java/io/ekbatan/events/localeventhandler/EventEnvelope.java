@@ -14,7 +14,7 @@ import tools.jackson.databind.node.ObjectNode;
  *
  * <p>Built once per delivery by {@code EventHandlingJob}, immediately before invoking the
  * handler. The field set mirrors the wire-side {@code ActionEvent} envelope published by
- * the {@code streaming/action-event:json} module — same conceptual shape, just typed.
+ * the {@code streaming/action-event:json} module - same conceptual shape, just typed.
  *
  * @param <E> the {@link ModelEvent} subtype the receiving handler subscribes to
  */
@@ -23,13 +23,13 @@ public final class EventEnvelope<E extends ModelEvent<?>> {
     /** The typed event payload. */
     public final E event;
 
-    /** {@code eventlog.events.id} of the source event row. Stable across retries — usable as an idempotency key. */
+    /** {@code eventlog.events.id} of the source event row. Stable across retries - usable as an idempotency key. */
     public final UUID eventId;
 
     /** Service identifier set on {@code ActionExecutor.namespace(...)}. */
     public final String namespace;
 
-    /** {@code eventlog.events.action_id} — same UUID across all events emitted by the same action. */
+    /** {@code eventlog.events.action_id} - same UUID across all events emitted by the same action. */
     public final UUID actionId;
 
     /** Simple class name of the action that emitted the event, e.g. {@code "WalletDepositAction"}. */

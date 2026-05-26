@@ -147,7 +147,7 @@ class DatabaseRegistryFromConfigTest {
         // WHEN
         var registry = DatabaseRegistry.fromConfig(config);
 
-        // THEN — dialect derived from JDBC URL
+        // THEN - dialect derived from JDBC URL
         assertThat(registry.transactionManager(ShardIdentifier.of(0, 0)).dialect)
                 .isEqualTo(SQLDialect.POSTGRES);
     }
@@ -202,7 +202,7 @@ class DatabaseRegistryFromConfigTest {
         // WHEN
         var registry = DatabaseRegistry.fromConfig(config);
 
-        // THEN — default points to (1, 0), not (0, 0)
+        // THEN - default points to (1, 0), not (0, 0)
         assertThat(registry.defaultShard).isEqualTo(ShardIdentifier.of(1, 0));
         assertThat(registry.defaultTransactionManager())
                 .isSameAs(registry.transactionManager(ShardIdentifier.of(1, 0)));

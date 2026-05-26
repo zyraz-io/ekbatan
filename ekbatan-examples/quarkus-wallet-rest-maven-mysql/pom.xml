@@ -252,7 +252,7 @@
             <!-- ════════════════════════════════════════════════════════════════════════════
                  jOOQ codegen chain (MySQL flavour). Same as MariaDB sibling plus a third
                  <forcedType> for CHAR(36) → UUID via UuidStringConverter (MySQL has no native
-                 UUID type — every UUID column is stored as CHAR(36) CHARACTER SET ascii).
+                 UUID type - every UUID column is stored as CHAR(36) CHARACTER SET ascii).
                  ════════════════════════════════════════════════════════════════════════════ -->
 
             <plugin>

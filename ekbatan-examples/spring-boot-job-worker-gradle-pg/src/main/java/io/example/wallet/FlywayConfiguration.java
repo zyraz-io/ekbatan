@@ -10,13 +10,13 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Runs Flyway migrations against the same Postgres Ekbatan reads from {@code ekbatan.sharding.*}.
- * One bean for both production startup and Testcontainers-based integration tests — under tests
+ * One bean for both production startup and Testcontainers-based integration tests - under tests
  * the {@link ShardingConfig} reflects whatever {@code DynamicPropertyRegistrar} injected (the
  * testcontainer's URL), so the same migration code path works without a separate test-side run.
  *
  * <p>The {@link BeanFactoryPostProcessor} below augments the framework-defined
  * {@code ekbatanJobRegistry} bean definition with a {@code dependsOn} edge pointing at
- * {@code flywayMigration} — that way db-scheduler's {@code start()} can't poll
+ * {@code flywayMigration} - that way db-scheduler's {@code start()} can't poll
  * {@code scheduled_tasks} before migrations have created the table. We can't put
  * {@code @DependsOn} on a bean we don't define, so we mutate its definition during the BFPP
  * phase instead.
@@ -51,6 +51,6 @@ public class FlywayConfiguration {
         };
     }
 
-    /** Marker — its only purpose is to be a Spring bean other beans can {@code dependsOn}. */
+    /** Marker - its only purpose is to be a Spring bean other beans can {@code dependsOn}. */
     public static final class FlywayMigration {}
 }

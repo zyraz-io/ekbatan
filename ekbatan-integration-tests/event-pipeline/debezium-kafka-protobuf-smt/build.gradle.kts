@@ -43,7 +43,7 @@ dependencies {
     testImplementation("com.google.protobuf:protobuf-java:${project.property("protobufVersion")}")
     testImplementation("com.google.protobuf:protobuf-java-util:${project.property("protobufVersion")}")
 
-    testImplementation(testFixtures(project(":ekbatan-core")))
+    testImplementation(project(":ekbatan-native"))
     testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))

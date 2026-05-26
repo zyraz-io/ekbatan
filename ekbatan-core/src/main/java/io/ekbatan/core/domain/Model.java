@@ -9,7 +9,7 @@ import org.apache.commons.lang3.Validate;
 
 /**
  * A persistent aggregate that emits domain events. Every state change worth telling the rest
- * of the system about — created, transferred, closed, refunded — gets attached to the
+ * of the system about - created, transferred, closed, refunded - gets attached to the
  * {@code Model} as a {@link ModelEvent} on its builder, then atomically persisted by
  * {@code ChangePersister} alongside the domain row when the action commits.
  *
@@ -22,7 +22,7 @@ import org.apache.commons.lang3.Validate;
  * <p>Subclasses are immutable. A generated {@code *Builder} via {@code @AutoBuilder} (from
  * {@code ekbatan-annotation-processor}) constructs new instances; mutations produce a new
  * instance via {@code copy()...build()}. {@code createdDate} / {@code updatedDate} are
- * truncated to microsecond precision at the constructor — Postgres and MariaDB lose
+ * truncated to microsecond precision at the constructor - Postgres and MariaDB lose
  * sub-microsecond detail, so the in-memory representation matches what comes back from the DB.
  *
  * <h2>Events</h2>
@@ -166,7 +166,7 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
         }
 
         /**
-         * Attaches an event to the model — flushed to the eventlog when the action commits.
+         * Attaches an event to the model - flushed to the eventlog when the action commits.
          *
          * @param event the event to attach.
          * @return this builder, for chaining.
@@ -210,7 +210,7 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
         }
 
         /**
-         * Initializes the version to 1 — used by callers staging a new model for first insert.
+         * Initializes the version to 1 - used by callers staging a new model for first insert.
          *
          * @return this builder, for chaining.
          */
@@ -222,7 +222,7 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
         /**
          * Sets the model's optimistic-locking version explicitly.
          *
-         * @param version the version value (must be ≥ 1 at build time).
+         * @param version the version value (must be >= 1 at build time).
          * @return this builder, for chaining.
          */
         public B version(Long version) {
@@ -231,7 +231,7 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
         }
 
         /**
-         * Increments the accumulated version by one — used by {@link Model#nextVersion}.
+         * Increments the accumulated version by one - used by {@link Model#nextVersion}.
          *
          * @return this builder, for chaining.
          */
@@ -256,7 +256,7 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
 
         /**
          * Copies an existing model's id, state, timestamps, version, and events onto this
-         * builder — used to start a mutation from a fully-loaded model.
+         * builder - used to start a mutation from a fully-loaded model.
          *
          * @param model the model to copy from.
          * @return this builder, for chaining.

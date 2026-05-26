@@ -24,7 +24,7 @@ import org.apache.commons.lang3.Validate;
  * </ul>
  *
  * <p>Both methods are public for cross-package access from the framework's job classes;
- * application code should not need to call them directly — they are framework hooks, not
+ * application code should not need to call them directly - they are framework hooks, not
  * part of the user-facing API.
  */
 public final class EventHandlerRegistry {

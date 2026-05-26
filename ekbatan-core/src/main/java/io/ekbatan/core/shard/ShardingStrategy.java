@@ -16,8 +16,8 @@ import java.util.Optional;
  *       the UUID bytes of {@link io.ekbatan.core.domain.ShardedId}. No table lookup required.</li>
  * </ul>
  *
- * <p>For shard layouts where the shard isn't derivable from the ID — say, "shard by tenant
- * lookup table" — implement this interface yourself and have your repository return it from
+ * <p>For shard layouts where the shard isn't derivable from the ID - say, "shard by tenant
+ * lookup table" - implement this interface yourself and have your repository return it from
  * {@link io.ekbatan.core.repository.Repository#shardingStrategy()}.
  *
  * @param <DB_ID> the storage-level identifier type (typically {@link java.util.UUID})

@@ -6,7 +6,7 @@ import io.micronaut.context.annotation.Context;
 
 /**
  * Runs Flyway migrations at application startup using connection coordinates from
- * {@code ekbatan.sharding.*} — single source of truth, no separate {@code flyway.*}
+ * {@code ekbatan.sharding.*} - single source of truth, no separate {@code flyway.*}
  * YAML block, no {@code micronaut-flyway} auto-configured beans.
  *
  * <p>Native variant: delegates to {@link FlywayHelper#migrate(String, String, String)}

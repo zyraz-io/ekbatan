@@ -4,7 +4,7 @@ import static io.ekbatan.core.action.ActionRegistry.Builder.actionRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.ekbatan.core.time.VirtualClock;
+import io.ekbatan.testsupport.time.VirtualClock;
 import org.junit.jupiter.api.Test;
 
 class ActionRegistryTest {
@@ -50,7 +50,7 @@ class ActionRegistryTest {
 
     @Test
     void get_returns_the_registered_singleton_on_every_call() {
-        // GIVEN — Action is a singleton: registered once, shared across all executions.
+        // GIVEN - Action is a singleton: registered once, shared across all executions.
         // Per-call mutable state lives in ActionPlan via ScopedValue, not on the instance.
         var clock = new VirtualClock();
         var action = new CreateAction(clock);

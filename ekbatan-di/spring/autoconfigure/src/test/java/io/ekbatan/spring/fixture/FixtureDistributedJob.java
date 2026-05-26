@@ -8,7 +8,7 @@ import io.ekbatan.distributedjobs.DistributedJob;
 
 /**
  * Test-only DistributedJob used to verify {@code @EkbatanDistributedJob} discovery and the
- * conditional auto-config wiring of {@code JobRegistry}. Not invoked — tests only check that
+ * conditional auto-config wiring of {@code JobRegistry}. Not invoked - tests only check that
  * the registry bean exists (or doesn't) and is correctly configured.
  */
 @EkbatanDistributedJob

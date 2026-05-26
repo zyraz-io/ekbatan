@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Multi-shard Flyway migrator. Iterates every {@code (group, member)} pair in
  * {@link ShardingConfig} and runs the {@code classpath:db/migration/*.sql} bundle once per
- * shard's {@code primaryConfig}. Migration files are identical across shards — each shard is a
+ * shard's {@code primaryConfig}. Migration files are identical across shards - each shard is a
  * self-contained schema (no cross-shard FKs) and the framework writes its outbox into the
  * shard the action runs on.
  *
@@ -25,7 +25,7 @@ import org.springframework.context.annotation.Configuration;
  * {@code dependsOn} so db-scheduler can't start polling {@code scheduled_tasks} until every
  * shard has its schema in place.
  *
- * <p>Mirrors the Quarkus / Micronaut / single-shard Spring Boot wallets' customizer pattern —
+ * <p>Mirrors the Quarkus / Micronaut / single-shard Spring Boot wallets' customizer pattern -
  * same intent (programmatic, ShardingConfig-driven), different shape because the framework
  * hook (auto-configured Flyway) doesn't extend to multi-shard scenarios.
  */
@@ -39,7 +39,7 @@ public class EkbatanShardFlywayMigrator {
         for (var group : shardingConfig.groups) {
             for (var member : group.members) {
                 var primary = member.primaryConfig();
-                LOG.info("Running Flyway on shard ({}, {}) → {}", group.group, member.member, primary.jdbcUrl);
+                LOG.info("Running Flyway on shard ({}, {}) -> {}", group.group, member.member, primary.jdbcUrl);
                 Flyway.configure()
                         .dataSource(primary.jdbcUrl, primary.username, primary.password)
                         .locations("classpath:db/migration")
@@ -52,12 +52,12 @@ public class EkbatanShardFlywayMigrator {
 
     /**
      * {@code dependsOn} edge: makes the framework-defined {@code ekbatanJobRegistry} wait until
-     * {@code flywayMigration} has run on every shard — db-scheduler polls
+     * {@code flywayMigration} has run on every shard - db-scheduler polls
      * {@code scheduled_tasks} from inside that registry, and the table only exists post-migration.
      *
      * <p>{@code BeanFactoryPostProcessor} (declared as a {@code static @Bean} so it runs before
      * the surrounding configuration class is instantiated) is the right hook here because
-     * {@code @DependsOn} can only be placed on a bean we declare ourselves —
+     * {@code @DependsOn} can only be placed on a bean we declare ourselves -
      * {@code ekbatanJobRegistry} is contributed by the starter, not by this project.
      */
     @Bean

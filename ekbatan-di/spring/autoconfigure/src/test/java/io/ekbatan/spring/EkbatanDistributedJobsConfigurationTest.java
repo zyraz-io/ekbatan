@@ -46,7 +46,7 @@ class EkbatanDistributedJobsConfigurationTest {
 
     @Test
     void shouldNotCreateJobRegistryWhenNoDistributedJobBeansExist() {
-        // No fixture base-package registration → no @EkbatanDistributedJob beans discovered →
+        // No fixture base-package registration -> no @EkbatanDistributedJob beans discovered ->
         // @ConditionalOnBean(DistributedJob.class) suppresses the entire auto-config.
         contextRunner.withPropertyValues(shardingPropertiesWithoutJobsConfig()).run(ctx -> {
             assertThat(ctx).hasNotFailed();
@@ -79,7 +79,7 @@ class EkbatanDistributedJobsConfigurationTest {
         // the ConnectionProvider factory succeed. Hikari's initializationFailTimeout(-1) keeps
         // the pool from attempting an actual connection at startup, so a fake JDBC URL is fine.
         // We provide a stub JobRegistry @Bean so @ConditionalOnMissingBean skips the auto-config's
-        // real one — actually starting db-scheduler against a fake DB is integration-test territory.
+        // real one - actually starting db-scheduler against a fake DB is integration-test territory.
         contextRunner
                 .withInitializer(ctx -> AutoConfigurationPackages.register(
                         (BeanDefinitionRegistry) ctx.getBeanFactory(),
@@ -140,7 +140,7 @@ class EkbatanDistributedJobsConfigurationTest {
 
     /**
      * Provides a stub {@link JobRegistry} bean so the auto-config's own factory is skipped by
-     * {@code @ConditionalOnMissingBean(JobRegistry.class)} — used by the "happy path" test
+     * {@code @ConditionalOnMissingBean(JobRegistry.class)} - used by the "happy path" test
      * that just wants to confirm conditional wiring without spinning up real db-scheduler.
      */
     @Configuration

@@ -71,7 +71,7 @@ class RetryTest {
                 }))
                 .isInstanceOf(IllegalStateException.class);
 
-        // AND — 1 initial + 1 retry = 2 total attempts
+        // AND - 1 initial + 1 retry = 2 total attempts
         assertThat(attempts.get()).isEqualTo(2);
     }
 
@@ -129,7 +129,7 @@ class RetryTest {
         // THEN
         assertThat(result).isEqualTo("ok");
 
-        // AND — 1 initial + 3 retries = 4 total
+        // AND - 1 initial + 3 retries = 4 total
         assertThat(attempts.get()).isEqualTo(4);
     }
 }

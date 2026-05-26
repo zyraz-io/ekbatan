@@ -11,8 +11,8 @@ import org.apache.commons.lang3.Validate;
  * container), shared across every {@code ActionExecutor.execute(...)} call, and resolved here
  * by the executor at lookup time.
  *
- * <p>Per-execution state lives elsewhere — see {@link Action#runIn(ActionPlan, java.security.Principal, Object)}
- * — so storing the instance directly (rather than a {@code Supplier}) is correct.
+ * <p>Per-execution state lives elsewhere - see {@link Action#runIn(ActionPlan, java.security.Principal, Object)}
+ * - so storing the instance directly (rather than a {@code Supplier}) is correct.
  */
 public class ActionRegistry {
 

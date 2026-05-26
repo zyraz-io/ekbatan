@@ -31,6 +31,7 @@ ekbatan/
 │   │   ├── concurrent/                    # KeyedLockProvider family (Postgres, MariaDB, MySQL, InProcess) + KeyedReentrantHolder
 │   │   ├── persistence/                   # Transaction management, JOOQ converters
 │   │   └── config/                        # DataSourceConfig
+├── ekbatan-test-support/                  # Public test helpers (ActionSpec, VirtualClock, Testcontainers utilities)
 ├── ekbatan-annotation-processor/          # @AutoBuilder annotation processor (JavaPoet)
 ├── ekbatan-distributed-jobs/              # Distributed background jobs (db-scheduler facade)
 │   └── src/main/java/io/ekbatan/distributedjobs/
@@ -964,7 +965,7 @@ void retry_recovers_after_transient_failure() throws Exception {
 - **JOOQ Docker Plugin** (Gradle) — Generates type-safe SQL classes from Flyway migrations via Docker
 - **Dependency versions** — Centralized in `gradle.properties`
 
-The framework repo itself is Gradle-only — `buildSrc/` convention plugins, the `ekbatan.publishing` plugin, and the `dev.monosoul.jooq-docker` integration assume Gradle. **Downstream consumers, however, can use either Gradle or Maven** — the 15 published JARs have plain Maven POMs with no Gradle-only metadata. The runnable proof is the Maven `(DI × dialect)` matrix under `ekbatan-examples/` — a 3×3 grid (Spring Boot × Quarkus × Micronaut, each in PG/MariaDB/MySQL flavours):
+The framework repo itself is Gradle-only — `buildSrc/` convention plugins, the `ekbatan.publishing` plugin, and the `dev.monosoul.jooq-docker` integration assume Gradle. **Downstream consumers, however, can use either Gradle or Maven** — the 16 published JARs have plain Maven POMs with no Gradle-only metadata. The runnable proof is the Maven `(DI × dialect)` matrix under `ekbatan-examples/` — a 3×3 grid (Spring Boot × Quarkus × Micronaut, each in PG/MariaDB/MySQL flavours):
 
 - **Spring Boot:** [`spring-boot-wallet-rest-maven-pg`](./ekbatan-examples/spring-boot-wallet-rest-maven-pg), [`-mariadb`](./ekbatan-examples/spring-boot-wallet-rest-maven-mariadb), [`-mysql`](./ekbatan-examples/spring-boot-wallet-rest-maven-mysql)
 - **Quarkus:** [`quarkus-wallet-rest-maven-pg`](./ekbatan-examples/quarkus-wallet-rest-maven-pg), [`-mariadb`](./ekbatan-examples/quarkus-wallet-rest-maven-mariadb), [`-mysql`](./ekbatan-examples/quarkus-wallet-rest-maven-mysql)
@@ -1017,7 +1018,7 @@ Ekbatan is published on Maven Central under groupId `io.github.zyraz-io`. Note t
 
 Full release procedure — one-time Sonatype/GPG setup, per-release workflow, troubleshooting, GPG keyring recovery — lives in [RELEASE.md](./RELEASE.md). Load-bearing facts for agents working in the codebase:
 
-- **15 modules are published** (anything applying the `ekbatan.publishing` Gradle convention plugin). The 2 Debezium SMT shadow jars ship via GitHub Releases only, not Maven Central. Adding the `ekbatan.publishing` plugin to a new module makes it part of the published surface.
+- **16 modules are published** (anything applying the `ekbatan.publishing` Gradle convention plugin). The 2 Debezium SMT shadow jars ship via GitHub Releases only, not Maven Central. Adding the `ekbatan.publishing` plugin to a new module makes it part of the published surface.
 - **Tag-driven releases**. Pushing `vX.Y.Z` to `main` fires `.github/workflows/release.yml` → builds → JReleaser signs every artifact and uploads to Sonatype's validation window → **stops there**. A human verifies on `central.sonatype.com` and clicks Publish (or Drop). Controlled by `stage.set(UPLOAD)` in `build.gradle.kts`'s `jreleaser` block; switching to `Stage.FULL` would re-enable auto-publish.
 - **Coordinates are permanent**. Once `<groupId>:<artifactId>:<version>` lands on Maven Central it cannot be removed, modified, or overwritten. Public API changes in a published module are visible to every downstream consumer at that exact coordinate forever — treat each release as final.
 - **Client-side git hooks**. `.githooks/pre-commit` blocks commits when `./gradlew spotlessCheck` fails. `.githooks/pre-push` blocks `vX.Y.Z` tag pushes when `gradle.properties` `version` at the tagged commit doesn't match. Opt in once per clone via `git config core.hooksPath .githooks`; the release workflow re-checks the tag/version condition as a safety net.

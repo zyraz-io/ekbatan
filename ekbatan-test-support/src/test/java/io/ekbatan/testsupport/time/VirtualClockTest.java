@@ -1,10 +1,14 @@
-package io.ekbatan.core.time;
+package io.ekbatan.testsupport.time;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 
 class VirtualClockTest {
@@ -131,5 +135,40 @@ class VirtualClockTest {
 
         // AND
         assertThat(frozen).isAfter(target);
+    }
+
+    @Test
+    void concurrent_advances_do_not_lose_updates() throws Exception {
+        // GIVEN
+        final var clock = new VirtualClock();
+        final var start = Instant.parse("2025-06-15T12:00:00Z");
+        final var threads = 8;
+        final var advancesPerThread = 1_000;
+        final var ready = new CountDownLatch(threads);
+        final var go = new CountDownLatch(1);
+        clock.pauseAt(start);
+
+        // WHEN
+        try (var executor = Executors.newFixedThreadPool(threads)) {
+            final var futures = IntStream.range(0, threads)
+                    .mapToObj(i -> executor.submit(() -> {
+                        ready.countDown();
+                        go.await();
+                        for (int j = 0; j < advancesPerThread; j++) {
+                            clock.advance(Duration.ofMillis(1));
+                        }
+                        return null;
+                    }))
+                    .toList();
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            go.countDown();
+            for (var future : futures) {
+                future.get();
+            }
+        }
+
+        // THEN
+        assertThat(clock.instant()).isEqualTo(start.plusMillis((long) threads * advancesPerThread));
     }
 }

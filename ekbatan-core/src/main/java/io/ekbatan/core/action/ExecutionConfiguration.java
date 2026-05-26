@@ -18,7 +18,7 @@ import java.util.Map;
  * <h2>Cross-shard semantics</h2>
  *
  * <p>{@link #allowCrossShard} = {@code true} lets the executor commit per-shard transactions
- * independently. This is NOT two-phase commit — if a later shard fails, earlier shards stay
+ * independently. This is NOT two-phase commit - if a later shard fails, earlier shards stay
  * committed. Use only when the action is genuinely idempotent on retry and the cross-shard
  * change is acceptable as an at-least-once side-effect.
  */
@@ -27,7 +27,7 @@ public final class ExecutionConfiguration {
     /** Immutable map of retry policies, keyed by exception class; consulted by the executor on each failure. */
     public final Map<Class<? extends Exception>, RetryConfig> retryConfigs;
 
-    /** Whether the action is allowed to touch more than one shard (no atomic cross-shard commit — see class docs). */
+    /** Whether the action is allowed to touch more than one shard (no atomic cross-shard commit - see class docs). */
     public final boolean allowCrossShard;
 
     private ExecutionConfiguration(Builder builder) {
@@ -86,7 +86,7 @@ public final class ExecutionConfiguration {
          * Sets the cross-shard policy.
          *
          * @param allowCrossShard {@code true} to allow per-shard transactions on multiple shards
-         *     within one action invocation (no atomic cross-shard commit — see class docs).
+         *     within one action invocation (no atomic cross-shard commit - see class docs).
          * @return this builder, for chaining.
          */
         public Builder allowCrossShard(boolean allowCrossShard) {

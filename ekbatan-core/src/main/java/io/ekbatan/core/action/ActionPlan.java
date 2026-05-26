@@ -10,10 +10,10 @@ import java.util.Map;
 /**
  * The accumulator for one action execution's intended persistence changes.
  *
- * <p>An {@code ActionPlan} is created fresh per {@code ActionExecutor.execute(...)} call (or
- * per {@code ActionSpec.execute(...)} in tests) and bound as a {@link java.lang.ScopedValue} for
- * the duration of {@link Action#perform(java.security.Principal, Object)}. Inside the action,
- * code reaches it via {@link Action#plan()}.
+ * <p>An {@code ActionPlan} is created fresh per {@code ActionExecutor.execute(...)} call (or per
+ * test-support {@code ActionSpec.execute(...)} in tests) and bound as a {@link
+ * java.lang.ScopedValue} for the duration of {@link Action#perform(java.security.Principal,
+ * Object)}. Inside the action, code reaches it via {@link Action#plan()}.
  *
  * <h2>Single-writer; not thread-safe</h2>
  *
@@ -23,7 +23,7 @@ import java.util.Map;
  *
  * <p>If the action spawns parallel work to gather data, join the children first and only then
  * mutate the plan from the thread that invoked {@code perform()}. Calling {@code plan.add(...)}
- * from inside a spawned task is undefined behavior — concurrent mutations of the underlying
+ * from inside a spawned task is undefined behavior - concurrent mutations of the underlying
  * map are a data race.
  */
 public class ActionPlan {

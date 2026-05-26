@@ -15,8 +15,8 @@ import org.apache.commons.lang3.Validate;
  * {@link io.ekbatan.core.action.ActionPlan}.
  *
  * <p>Build it via {@link Builder#withModelRepository(Class, Repository)} /
- * {@link Builder#withEntityRepository(Class, Repository)}, or — when DI has already
- * collected the repositories into a {@code Collection} — via
+ * {@link Builder#withEntityRepository(Class, Repository)}, or - when DI has already
+ * collected the repositories into a {@code Collection} - via
  * {@link Builder#withRepositories(Collection)}, which dispatches each repo to the correct
  * Model/Entity setter based on its declared {@code domainClass}.
  *
@@ -91,7 +91,7 @@ public final class RepositoryRegistry {
         }
 
         /**
-         * Registers a collection of repositories — each is dispatched to either
+         * Registers a collection of repositories - each is dispatched to either
          * {@link #withModelRepository} or {@link #withEntityRepository} based on whether its
          * declared {@code domainClass} is a {@link Model} or an {@link Entity}.
          *
@@ -109,7 +109,7 @@ public final class RepositoryRegistry {
                     withEntityRepository((Class) domain, (AbstractRepository) repo);
                 } else {
                     throw new IllegalStateException("Repository domainClass " + domain.getName()
-                            + " is neither a Model nor an Entity — "
+                            + " is neither a Model nor an Entity - "
                             + repo.getClass().getName() + " cannot be registered.");
                 }
             }

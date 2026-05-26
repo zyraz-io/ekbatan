@@ -46,7 +46,7 @@ import tools.jackson.databind.json.JsonMapper;
  * stereotypes and registers them as Spring beans so they reach the registries above without
  * manual wiring.
  *
- * <p>Every bean is {@code @ConditionalOnMissingBean} — users can override any one piece by
+ * <p>Every bean is {@code @ConditionalOnMissingBean} - users can override any one piece by
  * declaring their own. This is the canonical Spring Boot starter idiom.
  */
 @AutoConfiguration
@@ -147,7 +147,7 @@ public class EkbatanCoreConfiguration {
     public ActionRegistry ekbatanActionRegistry(
             BeanFactory beanFactory, Environment environment, AutowireCapableBeanFactory autowireBeanFactory) {
         // createBean() instead of registering bean definitions: action instances are
-        // framework-private (reachable only via ActionExecutor / ActionSpec) and per-call mutable
+        // framework-private (reachable only via ActionExecutor / test-support ActionSpec) and per-call mutable
         // state on Action.plan is bound via runIn(...) using a ScopedValue, so a single instance
         // is safely shared across concurrent execute(...) calls.
         var actionClasses = scanActionClasses(beanFactory, environment);
@@ -205,7 +205,7 @@ public class EkbatanCoreConfiguration {
             BeanFactory beanFactory, Environment environment) {
         // AOT mode (including native image): EkbatanActionsAotProcessor ran the scan at
         // AOT processing time and emitted an initializer that populates this holder
-        // before the auto-config runs. We just read the prepared list — the runtime
+        // before the auto-config runs. We just read the prepared list - the runtime
         // classpath scan below would silently return empty on native because there are
         // no .class files to walk in a native binary.
         var aotDiscovered = EkbatanActionsHolder.get();
@@ -233,7 +233,7 @@ public class EkbatanCoreConfiguration {
                 Class<?> cls = ClassUtils.resolveClassName(bd.getBeanClassName(), null);
                 if (!Action.class.isAssignableFrom(cls)) {
                     throw new IllegalStateException(
-                            "@EkbatanAction on " + cls.getName() + " — class must extend " + Action.class.getName());
+                            "@EkbatanAction on " + cls.getName() + " - class must extend " + Action.class.getName());
                 }
                 classes.add((Class<? extends Action<?, ?>>) cls);
             }

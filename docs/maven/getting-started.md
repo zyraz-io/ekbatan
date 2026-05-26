@@ -471,6 +471,14 @@ The integration jars (`ekbatan-spring-boot-starter` / `ekbatan-quarkus` / `ekbat
     <version>${ekbatan.version}</version>
 </dependency>
 
+<!-- ActionSpec, ActionAssert, VirtualClock, and classpath-resource Testcontainers helpers. -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-test-support</artifactId>
+    <version>${ekbatan.version}</version>
+    <scope>test</scope>
+</dependency>
+
 <!-- Wire-format DTOs for Kafka consumer apps reading from the eventlog. Pick the
      one matching your Kafka serializer; NOT needed in the producer app. -->
 <dependency>

@@ -12,7 +12,7 @@ import org.eclipse.microprofile.config.Config;
  * prefix. SmallRye exposes hierarchical YAML as flat keys with index notation
  * ({@code groups[0].members[0].configs.primaryConfig.jdbcUrl}); Jackson needs the nested form.
  *
- * <p>Keys are stored verbatim — Ekbatan's sharding YAML uses camelCase ({@code jdbcUrl},
+ * <p>Keys are stored verbatim - Ekbatan's sharding YAML uses camelCase ({@code jdbcUrl},
  * {@code primaryConfig}) to match the Jackson Builder method names resolved via
  * {@code @JsonPOJOBuilder(withPrefix = "")}.
  */
@@ -77,7 +77,7 @@ final class ConfigTreeBuilder {
                 if (seg.charAt(cursor) == '[') {
                     int end = seg.indexOf(']', cursor);
                     if (end < 0) {
-                        throw new IllegalStateException("Malformed property segment '" + seg + "' — unmatched [");
+                        throw new IllegalStateException("Malformed property segment '" + seg + "' - unmatched [");
                     }
                     out.add(new IndexToken(Integer.parseInt(seg.substring(cursor + 1, end))));
                     cursor = end + 1;

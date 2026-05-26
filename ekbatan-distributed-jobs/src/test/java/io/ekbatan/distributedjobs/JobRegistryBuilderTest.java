@@ -58,7 +58,7 @@ class JobRegistryBuilderTest {
     }
 
     /**
-     * Real {@link ConnectionProvider} backed by a Hikari pool with a bogus URL — never opens a
+     * Real {@link ConnectionProvider} backed by a Hikari pool with a bogus URL - never opens a
      * connection because validation fails first and Hikari is configured with
      * {@code initializationFailTimeout = -1}.
      */

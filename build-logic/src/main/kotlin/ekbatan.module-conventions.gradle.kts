@@ -35,7 +35,7 @@ configure<SpotlessExtension> {
 }
 
 dependencies {
-    if (project.path != ":ekbatan-annotation-processor") {
+    if (project.path != ":ekbatan-annotation-processor" && project.path != ":ekbatan-test-support") {
         "annotationProcessor"(project(":ekbatan-annotation-processor"))
         "implementation"(project(":ekbatan-annotation-processor"))
     }

@@ -23,12 +23,12 @@ import org.junit.jupiter.api.Test;
  * connection coordinates as runtime SmallRye Config properties before the Quarkus app boots;
  * the {@code quarkus-flyway} extension then runs migrations at app startup against the
  * datasource overridden by {@code EkbatanShardFlywayCustomizer} (which points at the
- * default shard's {@code primaryConfig} — single source of truth for connection coordinates).
+ * default shard's {@code primaryConfig} - single source of truth for connection coordinates).
  *
  * <p>Companion to {@code WalletResourceNativeIT} in {@code src/integrationTest}, which
  * runs the same REST flow against the packaged JAR (or native binary), out-of-process.
  * This test additionally asserts internal state via {@code @Inject NotificationRepository}
- * to verify the listen-to-yourself fan-out wrote a notification row — something the
+ * to verify the listen-to-yourself fan-out wrote a notification row - something the
  * out-of-process IT can't see.
  */
 @QuarkusTest
@@ -40,7 +40,7 @@ class WalletResourceIntegrationTest {
 
     @Test
     void deposit_emits_event_and_handler_creates_notification() {
-        // GIVEN — a freshly created wallet
+        // GIVEN - a freshly created wallet
         final var ownerId = UUID.randomUUID();
         final var walletId = UUID.fromString(given().contentType("application/json")
                 .body(Map.of(
@@ -57,7 +57,7 @@ class WalletResourceIntegrationTest {
                 .extract()
                 .path("id"));
 
-        // WHEN — deposit $100 with a notification recipient
+        // WHEN - deposit $100 with a notification recipient
         given().contentType("application/json")
                 .body(Map.of("amount", "100.00", "recipient", "alice@example.com"))
                 .when()
@@ -66,10 +66,10 @@ class WalletResourceIntegrationTest {
                 .statusCode(200)
                 .body("balance", equalTo(100.00f));
 
-        // THEN — GET returns the updated balance
+        // THEN - GET returns the updated balance
         given().when().get("/wallets/" + walletId).then().statusCode(200).body("balance", equalTo(100.00f));
 
-        // AND — the listen-to-yourself handler eventually creates the Notification row.
+        // AND - the listen-to-yourself handler eventually creates the Notification row.
         await().atMost(Duration.ofSeconds(15))
                 .pollInterval(Duration.ofMillis(200))
                 .untilAsserted(() -> {
@@ -83,7 +83,7 @@ class WalletResourceIntegrationTest {
 
     @Test
     void close_transitions_wallet_to_closed_state() {
-        // GIVEN — a freshly created wallet
+        // GIVEN - a freshly created wallet
         final var ownerId = UUID.randomUUID();
         final var walletId = UUID.fromString(given().contentType("application/json")
                 .body(Map.of(

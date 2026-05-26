@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Wires the dialect-specific {@link KeyedLockProvider} from the {@code lockConfig} datasource
  * declared in {@code ekbatan.sharding.groups[0].members[0].configs.lockConfig}. The framework
- * doesn't autoconfigure {@code KeyedLockProvider} — applications declare the bean explicitly.
+ * doesn't autoconfigure {@code KeyedLockProvider} - applications declare the bean explicitly.
  */
 @Configuration
 public class KeyedLockProviderConfiguration {

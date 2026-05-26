@@ -40,7 +40,7 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_add_to_correct_shard_and_find_on_that_shard() {
-        // GIVEN — a dummy with ShardedUUID targeting SHARD_A
+        // GIVEN - a dummy with ShardedUUID targeting SHARD_A
         var dummyA = createShardedDummy(SHARD_A);
 
         // WHEN
@@ -48,17 +48,17 @@ public abstract class BaseShardedRepositoryTest {
             repository.add(dummyA);
         });
 
-        // THEN — findable via the sharded repo
+        // THEN - findable via the sharded repo
         assertThat(repository.findById(dummyA.id.getValue())).isPresent();
     }
 
     @Test
     void should_isolate_data_between_shards() {
-        // GIVEN — dummies on different shards
+        // GIVEN - dummies on different shards
         var dummyA = createShardedDummy(SHARD_A);
         var dummyB = createShardedDummy(SHARD_B);
 
-        // WHEN — add each to its shard
+        // WHEN - add each to its shard
         databaseRegistry.transactionManager(SHARD_A).inTransaction(_ -> {
             repository.add(dummyA);
         });
@@ -66,11 +66,11 @@ public abstract class BaseShardedRepositoryTest {
             repository.add(dummyB);
         });
 
-        // THEN — sharded repo can find both (routes by UUID bits)
+        // THEN - sharded repo can find both (routes by UUID bits)
         assertThat(repository.findById(dummyA.id.getValue())).isPresent();
         assertThat(repository.findById(dummyB.id.getValue())).isPresent();
 
-        // AND — create per-shard repos to verify isolation
+        // AND - create per-shard repos to verify isolation
         var shardATm = databaseRegistry.transactionManager(SHARD_A);
         var shardAOnlyRegistry = databaseRegistry().withDatabase(shardATm).build();
         var shardAOnlyRepo = createRepository(shardAOnlyRegistry);
@@ -79,30 +79,30 @@ public abstract class BaseShardedRepositoryTest {
         var shardBOnlyRegistry = databaseRegistry().withDatabase(shardBTm).build();
         var shardBOnlyRepo = createRepository(shardBOnlyRegistry);
 
-        // THEN — shard A repo sees dummyA but NOT dummyB
+        // THEN - shard A repo sees dummyA but NOT dummyB
         assertThat(shardAOnlyRepo.findById(dummyA.id.getValue())).isPresent();
         assertThat(shardAOnlyRepo.findById(dummyB.id.getValue())).isEmpty();
 
-        // AND — shard B repo sees dummyB but NOT dummyA
+        // AND - shard B repo sees dummyB but NOT dummyA
         assertThat(shardBOnlyRepo.findById(dummyB.id.getValue())).isPresent();
         assertThat(shardBOnlyRepo.findById(dummyA.id.getValue())).isEmpty();
     }
 
     @Test
     void should_update_on_correct_shard() {
-        // GIVEN — a dummy on SHARD_A
+        // GIVEN - a dummy on SHARD_A
         var dummy = createShardedDummy(SHARD_A);
         databaseRegistry.transactionManager(SHARD_A).inTransaction(_ -> {
             repository.add(dummy);
         });
 
-        // WHEN — update (deposit)
+        // WHEN - update (deposit)
         var updated = dummy.deposit(BigDecimal.valueOf(50));
         databaseRegistry.transactionManager(SHARD_A).inTransaction(_ -> {
             repository.update(updated);
         });
 
-        // THEN — updated on shard A
+        // THEN - updated on shard A
         var fetched = repository.findById(dummy.id.getValue());
         assertThat(fetched).isPresent();
         assertThat(fetched.get().balance).isEqualByComparingTo(BigDecimal.valueOf(60)); // 10 + 50
@@ -110,10 +110,10 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_rollback_on_correct_shard() {
-        // GIVEN — a dummy on SHARD_B
+        // GIVEN - a dummy on SHARD_B
         var dummy = createShardedDummy(SHARD_B);
 
-        // WHEN — add in transaction that throws
+        // WHEN - add in transaction that throws
         try {
             databaseRegistry
                     .transactionManager(SHARD_B)
@@ -124,25 +124,25 @@ public abstract class BaseShardedRepositoryTest {
         } catch (Exception _) {
         }
 
-        // THEN — not persisted on shard B
+        // THEN - not persisted on shard B
         assertThat(repository.findById(dummy.id.getValue())).isEmpty();
     }
 
     @Test
     void should_add_without_transaction_routes_to_correct_shard() {
-        // GIVEN — dummies on different shards
+        // GIVEN - dummies on different shards
         var dummyA = createShardedDummy(SHARD_A);
         var dummyB = createShardedDummy(SHARD_B);
 
-        // WHEN — add WITHOUT transaction (goes through db(PERSISTABLE) directly)
+        // WHEN - add WITHOUT transaction (goes through db(PERSISTABLE) directly)
         repository.add(dummyA);
         repository.add(dummyB);
 
-        // THEN — each routed to correct shard
+        // THEN - each routed to correct shard
         assertThat(repository.findById(dummyA.id.getValue())).isPresent();
         assertThat(repository.findById(dummyB.id.getValue())).isPresent();
 
-        // AND — verify isolation
+        // AND - verify isolation
         var shardAOnlyRepo = createRepository(singleShardRegistry(SHARD_A));
         var shardBOnlyRepo = createRepository(singleShardRegistry(SHARD_B));
 
@@ -154,13 +154,13 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_findById_inside_transaction_on_correct_shard() {
-        // GIVEN — a dummy on SHARD_B
+        // GIVEN - a dummy on SHARD_B
         var dummy = createShardedDummy(SHARD_B);
         databaseRegistry.transactionManager(SHARD_B).inTransaction(_ -> {
             repository.add(dummy);
         });
 
-        // WHEN / THEN — findById inside a transaction on SHARD_B sees the dummy
+        // WHEN / THEN - findById inside a transaction on SHARD_B sees the dummy
         databaseRegistry.transactionManager(SHARD_B).inTransaction(_ -> {
             var found = repository.findById(dummy.id.getValue());
             assertThat(found).isPresent();
@@ -170,20 +170,20 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_addAll_in_transaction_on_correct_shard() {
-        // GIVEN — two dummies on SHARD_A
+        // GIVEN - two dummies on SHARD_A
         var dummy1 = createShardedDummy(SHARD_A);
         var dummy2 = createShardedDummy(SHARD_A);
 
-        // WHEN — addAll in transaction
+        // WHEN - addAll in transaction
         databaseRegistry.transactionManager(SHARD_A).inTransaction(_ -> {
             repository.addAllNoResult(java.util.List.of(dummy1, dummy2));
         });
 
-        // THEN — both on shard A
+        // THEN - both on shard A
         assertThat(repository.findById(dummy1.id.getValue())).isPresent();
         assertThat(repository.findById(dummy2.id.getValue())).isPresent();
 
-        // AND — not on shard B
+        // AND - not on shard B
         var shardBOnlyRepo = createRepository(singleShardRegistry(SHARD_B));
         assertThat(shardBOnlyRepo.findById(dummy1.id.getValue())).isEmpty();
         assertThat(shardBOnlyRepo.findById(dummy2.id.getValue())).isEmpty();
@@ -191,21 +191,21 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_updateAll_in_transaction_on_correct_shard() {
-        // GIVEN — two dummies on SHARD_A
+        // GIVEN - two dummies on SHARD_A
         var dummy1 = createShardedDummy(SHARD_A);
         var dummy2 = createShardedDummy(SHARD_A);
         databaseRegistry.transactionManager(SHARD_A).inTransaction(_ -> {
             repository.addAllNoResult(java.util.List.of(dummy1, dummy2));
         });
 
-        // WHEN — update both
+        // WHEN - update both
         var updated1 = dummy1.deposit(BigDecimal.valueOf(5));
         var updated2 = dummy2.deposit(BigDecimal.valueOf(7));
         databaseRegistry.transactionManager(SHARD_A).inTransaction(_ -> {
             repository.updateAllNoResult(java.util.List.of(updated1, updated2));
         });
 
-        // THEN — both updated on shard A
+        // THEN - both updated on shard A
         var fetched1 = repository.findById(dummy1.id.getValue());
         var fetched2 = repository.findById(dummy2.id.getValue());
         assertThat(fetched1).isPresent();
@@ -216,11 +216,11 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_rollback_addAll_on_correct_shard() {
-        // GIVEN — two dummies on SHARD_B
+        // GIVEN - two dummies on SHARD_B
         var dummy1 = createShardedDummy(SHARD_B);
         var dummy2 = createShardedDummy(SHARD_B);
 
-        // WHEN — addAll in transaction that throws
+        // WHEN - addAll in transaction that throws
         try {
             databaseRegistry
                     .transactionManager(SHARD_B)
@@ -231,14 +231,14 @@ public abstract class BaseShardedRepositoryTest {
         } catch (Exception _) {
         }
 
-        // THEN — neither persisted
+        // THEN - neither persisted
         assertThat(repository.findById(dummy1.id.getValue())).isEmpty();
         assertThat(repository.findById(dummy2.id.getValue())).isEmpty();
     }
 
     @Test
     void transaction_on_shard_A_does_not_affect_shard_B() {
-        // GIVEN — a dummy on each shard, persisted
+        // GIVEN - a dummy on each shard, persisted
         var dummyA = createShardedDummy(SHARD_A);
         var dummyB = createShardedDummy(SHARD_B);
         databaseRegistry.transactionManager(SHARD_A).inTransaction(_ -> {
@@ -248,7 +248,7 @@ public abstract class BaseShardedRepositoryTest {
             repository.add(dummyB);
         });
 
-        // WHEN — rollback an update on shard A
+        // WHEN - rollback an update on shard A
         var updatedA = dummyA.deposit(BigDecimal.valueOf(100));
         try {
             databaseRegistry
@@ -260,12 +260,12 @@ public abstract class BaseShardedRepositoryTest {
         } catch (Exception _) {
         }
 
-        // THEN — shard A dummy unchanged (rollback worked)
+        // THEN - shard A dummy unchanged (rollback worked)
         var fetchedA = repository.findById(dummyA.id.getValue());
         assertThat(fetchedA).isPresent();
         assertThat(fetchedA.get().balance).isEqualByComparingTo(BigDecimal.TEN); // original
 
-        // AND — shard B dummy unaffected
+        // AND - shard B dummy unaffected
         var fetchedB = repository.findById(dummyB.id.getValue());
         assertThat(fetchedB).isPresent();
         assertThat(fetchedB.get().balance).isEqualByComparingTo(BigDecimal.TEN); // untouched
@@ -275,7 +275,7 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_findAll_across_shards() {
-        // GIVEN — one dummy per shard
+        // GIVEN - one dummy per shard
         var dummyA = createShardedDummy(SHARD_A);
         var dummyB = createShardedDummy(SHARD_B);
         repository.add(dummyA);
@@ -284,7 +284,7 @@ public abstract class BaseShardedRepositoryTest {
         // WHEN
         var all = repository.findAll();
 
-        // THEN — sees both
+        // THEN - sees both
         assertThat(all).extracting(d -> d.id).contains(dummyA.id, dummyB.id);
     }
 
@@ -314,7 +314,7 @@ public abstract class BaseShardedRepositoryTest {
         // WHEN
         var eurCount = repository.countWhere(DSL.field("currency").eq("EUR"));
 
-        // THEN — at least 2 EUR (one per shard)
+        // THEN - at least 2 EUR (one per shard)
         assertThat(eurCount).isGreaterThanOrEqualTo(2);
     }
 
@@ -335,7 +335,7 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_findOneWhere_across_shards() {
-        // GIVEN — a dummy with unique currency on SHARD_B
+        // GIVEN - a dummy with unique currency on SHARD_B
         var dummy = createShardedDummy(SHARD_B, "CHF");
         repository.add(dummy);
 
@@ -349,7 +349,7 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_existsWhere_across_shards() {
-        // GIVEN — a dummy with unique currency on SHARD_B
+        // GIVEN - a dummy with unique currency on SHARD_B
         var dummy = createShardedDummy(SHARD_B, "SEK");
         repository.add(dummy);
 
@@ -408,7 +408,7 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_reject_addAll_across_shards() {
-        // GIVEN — dummies on different shards
+        // GIVEN - dummies on different shards
         var dummyA = createShardedDummy(SHARD_A);
         var dummyB = createShardedDummy(SHARD_B);
 
@@ -429,7 +429,7 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_reject_updateAll_across_shards() {
-        // GIVEN — persisted dummies on different shards
+        // GIVEN - persisted dummies on different shards
         var dummyA = createShardedDummy(SHARD_A);
         var dummyB = createShardedDummy(SHARD_B);
         repository.add(dummyA);
@@ -470,25 +470,25 @@ public abstract class BaseShardedRepositoryTest {
         // WHEN / THEN
         assertThatThrownBy(() -> repository.addAll(List.of(dummyA, dummyB))).isInstanceOf(CrossShardException.class);
 
-        // AND — no new dummies on either shard
+        // AND - no new dummies on either shard
         assertThat(countDummies(SHARD_A)).isEqualTo(beforeA);
         assertThat(countDummies(SHARD_B)).isEqualTo(beforeB);
     }
 
-    // --- Effective shard fallback tests (unregistered shard → default) ---
+    // --- Effective shard fallback tests (unregistered shard -> default) ---
 
     @Test
     void should_add_unregistered_shard_to_default_shard() {
-        // GIVEN — a dummy with UUID targeting unregistered shard (2,0)
+        // GIVEN - a dummy with UUID targeting unregistered shard (2,0)
         var dummy = createShardedDummy(UNREGISTERED_SHARD);
 
         // WHEN
         repository.add(dummy);
 
-        // THEN — findable via the sharded repo
+        // THEN - findable via the sharded repo
         assertThat(repository.findById(dummy.id.getValue())).isPresent();
 
-        // AND — physically stored on default shard (SHARD_A), not on SHARD_B
+        // AND - physically stored on default shard (SHARD_A), not on SHARD_B
         var shardBOnlyRepo = createRepository(singleShardRegistry(SHARD_B));
         assertThat(shardBOnlyRepo.findById(dummy.id.getValue())).isEmpty();
     }
@@ -499,12 +499,12 @@ public abstract class BaseShardedRepositoryTest {
         var dummy = createShardedDummy(UNREGISTERED_SHARD);
         var beforeA = countDummies(SHARD_A);
 
-        // WHEN — transaction on default shard
+        // WHEN - transaction on default shard
         databaseRegistry.transactionManager(SHARD_A).inTransaction(_ -> {
             repository.add(dummy);
         });
 
-        // THEN — one new dummy on default shard
+        // THEN - one new dummy on default shard
         assertThat(countDummies(SHARD_A)).isEqualTo(beforeA + 1);
         assertThat(repository.findById(dummy.id.getValue())).isPresent();
     }
@@ -529,7 +529,7 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_findById_unregistered_shard_from_default_shard() {
-        // GIVEN — dummies on default, SHARD_B, and unregistered shard
+        // GIVEN - dummies on default, SHARD_B, and unregistered shard
         var dummyDefault = createShardedDummy(SHARD_A);
         var dummyB = createShardedDummy(SHARD_B);
         var dummyUnregistered = createShardedDummy(UNREGISTERED_SHARD);
@@ -537,7 +537,7 @@ public abstract class BaseShardedRepositoryTest {
         repository.add(dummyB);
         repository.add(dummyUnregistered);
 
-        // WHEN / THEN — all findable
+        // WHEN / THEN - all findable
         assertThat(repository.findById(dummyDefault.id.getValue())).isPresent();
         assertThat(repository.findById(dummyB.id.getValue())).isPresent();
         assertThat(repository.findById(dummyUnregistered.id.getValue())).isPresent();
@@ -555,7 +555,7 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_findAllByIds_with_unregistered_shard() {
-        // GIVEN — dummies across registered and unregistered shards
+        // GIVEN - dummies across registered and unregistered shards
         var dummyA = createShardedDummy(SHARD_A);
         var dummyB = createShardedDummy(SHARD_B);
         var dummyUnregistered = createShardedDummy(UNREGISTERED_SHARD);
@@ -567,7 +567,7 @@ public abstract class BaseShardedRepositoryTest {
         var found = repository.findAllByIds(
                 List.of(dummyA.id.getValue(), dummyB.id.getValue(), dummyUnregistered.id.getValue()));
 
-        // THEN — all three found
+        // THEN - all three found
         assertThat(found).hasSize(3);
         assertThat(found).extracting(d -> d.id).containsExactlyInAnyOrder(dummyA.id, dummyB.id, dummyUnregistered.id);
     }
@@ -585,7 +585,7 @@ public abstract class BaseShardedRepositoryTest {
         // WHEN
         var nokDummies = repository.findAllWhere(DSL.field("currency").eq("NOK"));
 
-        // THEN — all three found (unregistered shard data lives on default)
+        // THEN - all three found (unregistered shard data lives on default)
         assertThat(nokDummies).extracting(d -> d.id).contains(dummyA.id, dummyB.id, dummyUnregistered.id);
     }
 
@@ -597,13 +597,13 @@ public abstract class BaseShardedRepositoryTest {
         repository.add(createShardedDummy(SHARD_B));
         repository.add(createShardedDummy(UNREGISTERED_SHARD));
 
-        // WHEN / THEN — all three counted
+        // WHEN / THEN - all three counted
         assertThat(repository.count()).isEqualTo(beforeCount + 3);
     }
 
     @Test
     void should_addAll_unregistered_shard_to_default_shard() {
-        // GIVEN — two dummies on unregistered shard
+        // GIVEN - two dummies on unregistered shard
         var dummy1 = createShardedDummy(UNREGISTERED_SHARD);
         var dummy2 = createShardedDummy(UNREGISTERED_SHARD);
         var beforeA = countDummies(SHARD_A);
@@ -611,7 +611,7 @@ public abstract class BaseShardedRepositoryTest {
         // WHEN
         repository.addAll(List.of(dummy1, dummy2));
 
-        // THEN — both on default shard
+        // THEN - both on default shard
         assertThat(countDummies(SHARD_A)).isEqualTo(beforeA + 2);
         assertThat(repository.findById(dummy1.id.getValue())).isPresent();
         assertThat(repository.findById(dummy2.id.getValue())).isPresent();
@@ -619,22 +619,22 @@ public abstract class BaseShardedRepositoryTest {
 
     @Test
     void should_reject_batch_mixing_registered_and_unregistered_shards() {
-        // GIVEN — one on SHARD_B, one on unregistered (falls back to SHARD_A)
+        // GIVEN - one on SHARD_B, one on unregistered (falls back to SHARD_A)
         var dummyB = createShardedDummy(SHARD_B);
         var dummyUnregistered = createShardedDummy(UNREGISTERED_SHARD);
 
-        // WHEN / THEN — different effective shards → CrossShardException
+        // WHEN / THEN - different effective shards -> CrossShardException
         assertThatThrownBy(() -> repository.addAll(List.of(dummyB, dummyUnregistered)))
                 .isInstanceOf(CrossShardException.class);
     }
 
     @Test
     void should_allow_batch_mixing_default_and_unregistered_shards() {
-        // GIVEN — one on SHARD_A (default), one on unregistered (also falls back to default)
+        // GIVEN - one on SHARD_A (default), one on unregistered (also falls back to default)
         var dummyA = createShardedDummy(SHARD_A);
         var dummyUnregistered = createShardedDummy(UNREGISTERED_SHARD);
 
-        // WHEN — both resolve to same effective shard (default) → no exception
+        // WHEN - both resolve to same effective shard (default) -> no exception
         repository.addAll(List.of(dummyA, dummyUnregistered));
 
         // THEN

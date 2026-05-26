@@ -28,7 +28,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * <p>{@link TestPropertyProvider#getProperties()} runs <em>before</em> the Micronaut application
  * context is built, so the testcontainer is up by the time {@code EkbatanCoreConfiguration} resolves
  * {@code ekbatan.sharding.*}. {@code micronaut-flyway} then runs migrations on startup against
- * {@code flyway.datasources.default} — {@code EkbatanShardFlywayCustomizer} overrides the dataSource
+ * {@code flyway.datasources.default} - {@code EkbatanShardFlywayCustomizer} overrides the dataSource
  * from the same {@code ekbatan.sharding.*} block, so connection coordinates have a single source
  * of truth. Works identically on JVM and under substrate-VM (no FlywayHelper needed).
  *
@@ -70,14 +70,14 @@ class WalletControllerIntegrationTest implements TestPropertyProvider {
         props.put("ekbatan.sharding.groups[0].group", "0");
         props.put("ekbatan.sharding.groups[0].name", "default");
         props.put("ekbatan.sharding.groups[0].members[0].member", "0");
-        // Primary pool — the one Ekbatan uses for application traffic.
+        // Primary pool - the one Ekbatan uses for application traffic.
         props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl", postgres.getJdbcUrl());
         props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username", postgres.getUsername());
         props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password", postgres.getPassword());
         props.put(
                 "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.driverClassName", "org.postgresql.Driver");
         props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize", "5");
-        // Jobs pool — isolated from primary so polling load can't starve app traffic.
+        // Jobs pool - isolated from primary so polling load can't starve app traffic.
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl", postgres.getJdbcUrl());
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username", postgres.getUsername());
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password", postgres.getPassword());
@@ -88,7 +88,7 @@ class WalletControllerIntegrationTest implements TestPropertyProvider {
 
     @Test
     void deposit_emits_event_and_handler_creates_notification() {
-        // GIVEN — a freshly created wallet
+        // GIVEN - a freshly created wallet
         final var ownerId = UUID.randomUUID();
         final HttpResponse<Map> createResponse = httpClient
                 .toBlocking()
@@ -100,7 +100,7 @@ class WalletControllerIntegrationTest implements TestPropertyProvider {
         assertThat(createResponse.code()).isEqualTo(201);
         final var walletId = UUID.fromString((String) createResponse.body().get("id"));
 
-        // WHEN — deposit $100 with a notification recipient
+        // WHEN - deposit $100 with a notification recipient
         final HttpResponse<Map> depositResponse = httpClient
                 .toBlocking()
                 .exchange(
@@ -109,11 +109,11 @@ class WalletControllerIntegrationTest implements TestPropertyProvider {
                                 Map.of("amount", "100.00", "recipient", "alice@example.com")),
                         Map.class);
 
-        // THEN — the synchronous response reflects the new balance
+        // THEN - the synchronous response reflects the new balance
         assertThat(depositResponse.code()).isEqualTo(200);
         assertThat(depositResponse.body()).containsEntry("balance", 100.00);
 
-        // AND — the listen-to-yourself handler eventually creates the Notification row.
+        // AND - the listen-to-yourself handler eventually creates the Notification row.
         await().atMost(Duration.ofSeconds(15))
                 .pollInterval(Duration.ofMillis(200))
                 .untilAsserted(() -> {
@@ -127,7 +127,7 @@ class WalletControllerIntegrationTest implements TestPropertyProvider {
 
     @Test
     void close_transitions_wallet_to_closed_state() {
-        // GIVEN — a freshly created wallet
+        // GIVEN - a freshly created wallet
         final var ownerId = UUID.randomUUID();
         final HttpResponse<Map> createResponse = httpClient
                 .toBlocking()

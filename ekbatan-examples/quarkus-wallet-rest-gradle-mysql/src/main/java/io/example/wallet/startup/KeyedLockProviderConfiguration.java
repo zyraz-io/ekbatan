@@ -11,7 +11,7 @@ import jakarta.inject.Singleton;
 /**
  * Produces the dialect-specific {@link KeyedLockProvider} from the {@code lockConfig}
  * datasource declared in application.properties. The framework doesn't autoconfigure
- * KeyedLockProvider — applications declare the producer explicitly.
+ * KeyedLockProvider - applications declare the producer explicitly.
  */
 @ApplicationScoped
 public class KeyedLockProviderConfiguration {

@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Each registered job is translated to a {@link RecurringTask} and started on
  * {@link #start()}. A JVM shutdown hook that calls {@link #stop()} is installed by default
- * — pass {@code false} to {@link Builder#registerShutdownHook(boolean)} to opt out (e.g.,
+ * - pass {@code false} to {@link Builder#registerShutdownHook(boolean)} to opt out (e.g.,
  * in tests or when the host application owns shutdown).
  *
  * <p>The {@code ConnectionProvider} should typically wrap a <em>dedicated</em> pool, separate
@@ -102,7 +102,7 @@ public final class JobRegistry {
 
         /**
          * Adds a batch of jobs to the registry. Job {@code name()}s must be unique within the
-         * resulting registry — duplicates fail {@link #build()}.
+         * resulting registry - duplicates fail {@link #build()}.
          *
          * @param jobs the jobs to schedule; must not be null.
          * @return this builder, for chaining.
@@ -139,7 +139,7 @@ public final class JobRegistry {
 
         /**
          * Maximum time {@link #stop()} will wait for in-flight executions to finish before
-         * forcing termination. db-scheduler's default is 30 min — useful to lower in tests.
+         * forcing termination. db-scheduler's default is 30 min - useful to lower in tests.
          *
          * @param d the max wait duration at shutdown.
          * @return this builder, for chaining.
@@ -165,7 +165,7 @@ public final class JobRegistry {
          * Escape hatch for advanced db-scheduler settings not exposed by this builder (e.g.
          * {@code missedHeartbeatsLimit}, {@code deleteUnresolvedAfter}, custom polling
          * strategy). Applied <em>last</em> in {@link #build()}, so anything set here wins
-         * over Ekbatan's defaults. Use sparingly — overriding {@code executorService} or
+         * over Ekbatan's defaults. Use sparingly - overriding {@code executorService} or
          * {@code threads} defeats the framework's threading model.
          *
          * @param customizer a callback that mutates the underlying {@link SchedulerBuilder}.

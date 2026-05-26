@@ -30,7 +30,7 @@ import org.jboss.jandex.DotName;
  * {@code @EkbatanEventHandler} / {@code @EkbatanDistributedJob} bean discovered through the
  * Jandex index.
  *
- * <p>This is the canonical Quarkus extension entry point — Quarkus locates it via the
+ * <p>This is the canonical Quarkus extension entry point - Quarkus locates it via the
  * {@code META-INF/quarkus-extension.yaml} metadata in the runtime jar. Application authors
  * never reference {@code EkbatanProcessor} directly; they get its effects by depending on
  * {@code ekbatan-quarkus} and letting Quarkus's deployment phase do the rest.
@@ -58,7 +58,7 @@ public class EkbatanProcessor {
     AdditionalBeanBuildItem registerCoreProducers() {
         // Class name as String (not Class<?>) so the deployment classloader doesn't resolve
         // producer method signatures referencing ShardingConfig / DatabaseRegistry / ActionExecutor
-        // — that would conflict with QuarkusClassLoader's later load of the same types.
+        // - that would conflict with QuarkusClassLoader's later load of the same types.
         return AdditionalBeanBuildItem.builder()
                 .addBeanClass(EkbatanCoreConfiguration.class.getName())
                 .setUnremovable()
@@ -104,7 +104,7 @@ public class EkbatanProcessor {
         additionalBeans.produce(builder.build());
     }
 
-    // QuarkusClassLoader.isClassPresentAtRuntime (not Class.forName) — the canonical Quarkus
+    // QuarkusClassLoader.isClassPresentAtRuntime (not Class.forName) - the canonical Quarkus
     // idiom (cf. ScalaProcessor, VertxKotlinProcessor). Class.forName loads the class via the
     // deployment classloader, which then conflicts with the runtime classloader's later load and
     // trips a LinkageError.

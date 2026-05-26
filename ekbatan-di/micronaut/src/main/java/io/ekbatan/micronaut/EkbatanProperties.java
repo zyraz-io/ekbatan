@@ -5,7 +5,7 @@ import java.time.Duration;
 
 /**
  * Typed configuration for Ekbatan. The {@code ekbatan.sharding} subtree is bound separately by
- * {@link EkbatanCoreConfiguration} via the Jackson hybrid path — Micronaut's
+ * {@link EkbatanCoreConfiguration} via the Jackson hybrid path - Micronaut's
  * {@code @ConfigurationProperties} cannot bind the {@code configs} map of mixed builder-based
  * {@code DataSourceConfig} entries directly.
  */

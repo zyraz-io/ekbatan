@@ -11,7 +11,7 @@ import tools.jackson.databind.node.ObjectNode;
  * {@link ObjectNode}. Use for object-typed JSON columns; for array-typed columns use
  * {@link JSONArrayNodeConverter}.
  *
- * <p>For Postgres {@code JSONB} columns, use {@link JSONBObjectNodeConverter} instead — the
+ * <p>For Postgres {@code JSONB} columns, use {@link JSONBObjectNodeConverter} instead - the
  * jOOQ wrapper type differs.
  */
 public class JSONObjectNodeConverter implements Converter<JSON, ObjectNode> {

@@ -35,7 +35,7 @@ import tools.jackson.databind.ObjectMapper;
  * {@link DistributedJob} that drains every shard's due {@code event_notifications}. Each
  * notification row carries a denormalized copy of the event and action context (snapshotted
  * by the fan-out job at write time), so dispatch reads everything it needs from the single
- * row — no JOIN, no second query.
+ * row - no JOIN, no second query.
  *
  * <p>Behavior per claimed row:
  * <ol>
@@ -46,7 +46,7 @@ import tools.jackson.databind.ObjectMapper;
  *       deploy), the row is treated as a delivery failure and retried until the cap.</li>
  *   <li><b>Deserialize</b> the row's {@code payload} into the handler's
  *       {@link EventHandler#eventType()} via the configured {@link ObjectMapper}.</li>
- *   <li><b>Invoke</b> the handler. Success → SUCCEEDED. Throw → bump attempts, schedule
+ *   <li><b>Invoke</b> the handler. Success -> SUCCEEDED. Throw -> bump attempts, schedule
  *       next retry via {@link Backoff} capped at {@code maxBackoffCap}, or EXPIRED if the
  *       proposed retry would land past the deadline.</li>
  * </ol>
@@ -56,7 +56,7 @@ import tools.jackson.databind.ObjectMapper;
  * returns, the outcomes are bucketed (succeeded, retry, post-failure expired) and each
  * non-empty bucket is committed in a single batch UPDATE. Worst case: one UPDATE per bucket
  * plus one UPDATE per distinct {@code attempts} value among retries. Crash mid-batch is
- * safe under idempotent handlers — uncommitted rows are picked up on the next round.
+ * safe under idempotent handlers - uncommitted rows are picked up on the next round.
  *
  * <p>Across shards: each {@code execute()} runs a continuous round-by-round loop where one
  * round drains a single batch from every shard in parallel on virtual threads, waits for
@@ -136,7 +136,7 @@ public final class EventHandlingJob extends DistributedJob {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            // graceful return — db-scheduler is interrupting us during shutdown
+            // graceful return - db-scheduler is interrupting us during shutdown
         }
         // RuntimeException propagates: db-scheduler re-invokes execute() after FixedDelay
         // (which equals our pollDelay). Per-handler exceptions are already absorbed in

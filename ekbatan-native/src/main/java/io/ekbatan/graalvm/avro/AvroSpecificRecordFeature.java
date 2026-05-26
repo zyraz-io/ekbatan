@@ -14,7 +14,7 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  * no-arg constructors, and walk the class hierarchy with
  * {@code SpecificRecord.class.isAssignableFrom(c)}. None of that works on native image
  * unless the generated classes are registered for reflection. The upstream Avro RMR
- * doesn't cover user-generated classes (it can't — they're project-specific).
+ * doesn't cover user-generated classes (it can't - they're project-specific).
  *
  * <p><b>What it registers</b>: every class found under the configured scan roots that
  * either subclasses {@code org.apache.avro.specific.SpecificRecordBase} or implements
@@ -60,7 +60,7 @@ public final class AvroSpecificRecordFeature implements Feature {
                 .scan()) {
 
             // ClassGraph already gives us the interface-implements relation cheaply via
-            // getClassesImplementing — no need for a per-class Class.forName lookup of the
+            // getClassesImplementing - no need for a per-class Class.forName lookup of the
             // SpecificRecord interface.
             for (var ci : scan.getClassesImplementing(SPECIFIC_RECORD_INTERFACE)) {
                 Class<?> cls;
@@ -81,7 +81,7 @@ public final class AvroSpecificRecordFeature implements Feature {
     /**
      * Both bulk and per-element registration are required: on GraalVM 25,
      * {@code registerAllDeclared*} only allows the QUERY API (so
-     * {@code Class.getDeclaredMethods()} returns them) — explicit
+     * {@code Class.getDeclaredMethods()} returns them) - explicit
      * {@code RuntimeReflection.register(method)} / {@code register(ctor)} adds the
      * invocation path. Avro's {@code SpecificDatumReader} instantiates records via the
      * no-arg constructor and reads {@code SCHEMA$} via {@code Field.get}, which requires

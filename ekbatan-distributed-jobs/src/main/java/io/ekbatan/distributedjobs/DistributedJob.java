@@ -25,7 +25,7 @@ public abstract class DistributedJob {
 
     /**
      * The actual work; runs on a worker thread of the local {@link JobRegistry}. Throwing an
-     * exception is treated as a failed execution by db-scheduler — {@code consecutive_failures}
+     * exception is treated as a failed execution by db-scheduler - {@code consecutive_failures}
      * is incremented on the task row and the next run is rescheduled per the {@link Schedule}.
      *
      * @param ctx the db-scheduler execution context carrying timing + retry metadata.

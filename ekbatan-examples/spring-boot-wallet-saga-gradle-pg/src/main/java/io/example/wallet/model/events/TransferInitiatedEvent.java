@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
- * Saga step 1 — emitted by {@code InitiateTransferAction} on the source wallet. Records that
+ * Saga step 1 - emitted by {@code InitiateTransferAction} on the source wallet. Records that
  * money has been debited and a transfer is in flight. The {@code transferId} correlates this
  * event with the rest of the saga's chain (the credit, optional failure, optional refund).
  *

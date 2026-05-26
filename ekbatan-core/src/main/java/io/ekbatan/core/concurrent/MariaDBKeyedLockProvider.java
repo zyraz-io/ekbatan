@@ -22,17 +22,17 @@ import org.slf4j.LoggerFactory;
  * takes the wait timeout as a function argument, so a bounded acquire is one statement.
  * Postgres' {@code pg_advisory_lock(key)} doesn't accept a timeout, forcing a
  * {@code SET lock_timeout} / {@code RESET} dance that can leave a connection in an
- * unexpected session state if the reset fails. None of that exists here — the only failure
+ * unexpected session state if the reset fails. None of that exists here - the only failure
  * that can corrupt the connection's state is {@code RELEASE_LOCK} itself failing, so that
  * is the single eviction trigger.
  *
  * <p><b>Targets MariaDB 10.0.2+ / MySQL 5.7.5+.</b> These versions accept a fractional
  * {@code DOUBLE} timeout (so {@code Duration} maps cleanly to millisecond-ish precision)
  * and allow multiple locks per session. Older versions silently round sub-second waits
- * and only allow one lock per session — both regressions if you must support them.
+ * and only allow one lock per session - both regressions if you must support them.
  *
  * <p><b>Galera caveat.</b> {@code GET_LOCK} is <i>node-local</i> in MariaDB Galera Cluster
- * — two clients connected to different nodes can both acquire the same lock simultaneously.
+ * - two clients connected to different nodes can both acquire the same lock simultaneously.
  * This implementation is safe for single-node MariaDB or primary-only deployments
  * (asynchronous / semi-synchronous replication). For Galera multi-master, a token+TTL
  * implementation is required instead.
@@ -45,7 +45,7 @@ public final class MariaDBKeyedLockProvider implements KeyedLockProvider {
      * Effectively-infinite GET_LOCK timeout used by {@link #acquire(Object, Duration)}
      * (~68 years). Older MariaDB documentation suggested {@code -1} or {@code NULL} mean
      * "wait forever," but current servers (verified against MariaDB 12.x) reject both with
-     * a NULL response — the timeout is mandatory and must be a non-negative finite number.
+     * a NULL response - the timeout is mandatory and must be a non-negative finite number.
      * Passing the largest practical finite value preserves the indefinite-block semantic
      * promised by {@link KeyedLockProvider#acquire}.
      */

@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Configuration;
  * coordinates live under one config tree, never duplicated in {@code spring.datasource.*}.
  *
  * <p>{@link FlywayDataSource @FlywayDataSource} scopes this bean to the Flyway
- * auto-configuration only — Spring Boot does NOT pick it up as the application's main
+ * auto-configuration only - Spring Boot does NOT pick it up as the application's main
  * {@code DataSource}. Ekbatan keeps owning the application's runtime pools
  * (sharding-aware {@code ConnectionProvider}); this pool exists solely for the Flyway
  * migration burst on startup. Sized at 2 connections because that's all Flyway needs.
@@ -22,7 +22,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>Why a {@code @Bean} (Spring) instead of a
  * {@code org.springframework.boot.flyway.autoconfigure.FlywayConfigurationCustomizer}
  * (Quarkus/Micronaut wallet pattern): Spring Boot's {@code FlywayAutoConfiguration} is
- * gated on {@code @ConditionalOnBean(DataSource.class)} — without a {@code DataSource}
+ * gated on {@code @ConditionalOnBean(DataSource.class)} - without a {@code DataSource}
  * bean it never creates a Flyway instance, and the customizer never fires. Producing the
  * {@code DataSource} programmatically from {@code ShardingConfig} satisfies that gate AND
  * provides the right coordinates in one step. A separate customizer would be redundant

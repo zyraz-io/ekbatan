@@ -146,7 +146,7 @@ public final class RedisKeyedLockProvider implements KeyedLockProvider {
 
         /**
          * Prefix for the Redis keys this provider creates (default {@code "ekbatan-lock"}).
-         * Lets multiple lock providers — or multiple unrelated apps — share one Redis instance
+         * Lets multiple lock providers - or multiple unrelated apps - share one Redis instance
          * without colliding.
          *
          * @param namespace a non-blank prefix; the colon separator is added automatically.

@@ -1,6 +1,5 @@
 plugins {
     `java-library`
-    `java-test-fixtures`
     id("ekbatan.publishing")
 }
 
@@ -45,21 +44,8 @@ dependencies {
     testImplementation("org.mockito:mockito-core:${project.property("mockitoVersion")}")
     testImplementation("net.javacrumbs.json-unit:json-unit-assertj:${project.property("jsonUnitVersion")}")
     testImplementation("tools.jackson.dataformat:jackson-dataformat-yaml:${project.property("jacksonDatabindVersion")}")
+    testImplementation(project(":ekbatan-test-support"))
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-
-    // testFixtures consumers (the integration-test modules) need access to the
-    // GraalVM-native helpers — FlywayHelper, NativeImageFlywayResourceProvider, and the
-    // auto-registered Jackson3RecordsFeature — which now live in :ekbatan-native (the
-    // publishable module any downstream user adds when they want their app to build as
-    // a native image). `testFixturesApi` so the dependency reaches the integration tests
-    // transitively via `testFixtures(project(":ekbatan-core"))`.
-    testFixturesApi(project(":ekbatan-native"))
-
-    // ClasspathTransferable in testFixtures wraps a classpath resource into a
-    // Testcontainers Transferable so test setups can use `withCopyToContainer(...)`
-    // (works under native image) instead of `MountableFile.forClasspathResource(...)`
-    // (broken under native image because the resource has no filesystem path).
-    testFixturesImplementation("org.testcontainers:testcontainers:${project.property("testcontainersVersion")}")
 
     // Apache Commons Lang3
     implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")

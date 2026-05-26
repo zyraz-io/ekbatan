@@ -24,17 +24,17 @@ import org.apache.kafka.connect.transforms.Transformation;
 /**
  * Encodes a Debezium outbox record end-to-end into Avro binary: the JSON {@code payload} field is
  * encoded against a per-event-type schema, and the whole row is then encoded against the
- * {@code ActionEvent} schema. The record value becomes raw {@code byte[]} — the connector
+ * {@code ActionEvent} schema. The record value becomes raw {@code byte[]} - the connector
  * should use {@code ByteArrayConverter}.
  *
  * <p>Records without an {@code event_type} (sentinel rows) pass through unchanged.
  *
  * <p>Config:
  * <ul>
- *   <li>{@code payloadSchemas} — comma-separated {@code eventType:/path/to/schema.avsc} pairs</li>
- *   <li>{@code actionEventSchema} — path to the ActionEvent Avro schema (mandatory)</li>
- *   <li>{@code payload.field} — name of the JSON payload field (default: {@code payload})</li>
- *   <li>{@code event.type.field} — name of the event type field (default: {@code event_type})</li>
+ *   <li>{@code payloadSchemas} - comma-separated {@code eventType:/path/to/schema.avsc} pairs</li>
+ *   <li>{@code actionEventSchema} - path to the ActionEvent Avro schema (mandatory)</li>
+ *   <li>{@code payload.field} - name of the JSON payload field (default: {@code payload})</li>
+ *   <li>{@code event.type.field} - name of the event type field (default: {@code event_type})</li>
  * </ul>
  */
 public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transformation<R> {
@@ -114,23 +114,23 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
      * <p>The {@code eventlog.events} outbox is append-only from the application's
      * perspective. The only {@code op} values that represent real business events are
      * <ul>
-     *   <li>{@code "c"} (create) — a new event row inserted by the action persister, atomic
+     *   <li>{@code "c"} (create) - a new event row inserted by the action persister, atomic
      *       with the action's data writes.</li>
-     *   <li>{@code "r"} (read) — an existing row delivered during Debezium's initial
+     *   <li>{@code "r"} (read) - an existing row delivered during Debezium's initial
      *       snapshot. From the consumer's perspective this is a past business event being
      *       (re)played.</li>
      * </ul>
      *
      * <p>Other ops are filtered out so they never become Kafka messages:
      * <ul>
-     *   <li>{@code "u"} (update) — fires when the in-process consumer path
+     *   <li>{@code "u"} (update) - fires when the in-process consumer path
      *       ({@code local-event-handler}) flips {@code delivered = TRUE} after fanout. This
      *       is internal bookkeeping, not a new fact.</li>
-     *   <li>{@code "d"} (delete) — events are append-only; a deletion is either a
+     *   <li>{@code "d"} (delete) - events are append-only; a deletion is either a
      *       housekeeping action or noise, never a business fact.</li>
      * </ul>
      *
-     * <p>A {@code null} {@code op} (rare — record without a Debezium envelope, or an
+     * <p>A {@code null} {@code op} (rare - record without a Debezium envelope, or an
      * envelope schema lacking the {@code op} field) is passed through: we don't drop
      * records we don't have enough information to classify.
      */

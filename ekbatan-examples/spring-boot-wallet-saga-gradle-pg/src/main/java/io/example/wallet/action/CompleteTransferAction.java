@@ -12,12 +12,12 @@ import java.time.Clock;
 import java.util.UUID;
 
 /**
- * Saga step 2 — tries to credit the destination wallet. Emits one of two events:
+ * Saga step 2 - tries to credit the destination wallet. Emits one of two events:
  *
  * <ul>
  *   <li>{@code TransferCompletedEvent} on the destination wallet on success.</li>
  *   <li>{@code TransferFailedEvent} on the <em>source</em> wallet when the destination is
- *       missing, closed, or otherwise unable to receive — which triggers the compensation
+ *       missing, closed, or otherwise unable to receive - which triggers the compensation
  *       (refund) chain via {@code TransferFailedEventHandler}.</li>
  * </ul>
  *
@@ -63,7 +63,7 @@ public class CompleteTransferAction extends Action<CompleteTransferAction.Params
                             + destination.currency.getCurrencyCode());
         }
 
-        // Happy path — credit destination.
+        // Happy path - credit destination.
         final var credited =
                 destination.completeTransferIn(params.transferId(), params.fromWalletId(), params.amount());
         plan().update(credited);

@@ -69,7 +69,7 @@ public class EventRouter implements AutoCloseable {
                     }
                     consumer.commitSync();
                 } catch (Exception e) {
-                    LOG.error("Failed to route batch, offsets not committed — will retry on next poll", e);
+                    LOG.error("Failed to route batch, offsets not committed - will retry on next poll", e);
                 }
             }
         });
@@ -78,7 +78,7 @@ public class EventRouter implements AutoCloseable {
     private void routeEvent(String value) throws Exception {
         var root = (ObjectNode) objectMapper.readTree(value);
 
-        // Unwrap Debezium envelope — the actual row data is in "after"
+        // Unwrap Debezium envelope - the actual row data is in "after"
         // Debezium sends: { "before": null, "after": { ...row... }, "op": "c", ... }
         var event = root.has("after") ? (ObjectNode) root.get("after") : root;
 

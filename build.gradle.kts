@@ -23,7 +23,7 @@ spotless {
         target("**/*.java")
         // ekbatan-examples/* are independent Gradle builds with their own settings.gradle.kts
         // and their own (simpler) formatting conventions. Don't impose Palantir on them from
-        // here — the root glob would otherwise reach across the build boundary.
+        // here - the root glob would otherwise reach across the build boundary.
         targetExclude("ekbatan-examples/**/*.java")
         palantirJavaFormat("2.81.0")
     }
@@ -72,7 +72,7 @@ subprojects {
 
 // =====================================================================================
 // JReleaser — orchestrates the release flow:
-//   1. Maven Central via Central Portal (deploy.maven.mavenCentral.sonatype) — the 15
+//   1. Maven Central via Central Portal (deploy.maven.mavenCentral.sonatype) — the 16
 //      publishable jars + their sources/javadoc jars + POMs are staged from
 //      build/staging-deploy/ (populated by `./gradlew publish`), signed with GPG, and
 //      uploaded to Sonatype's staging area. `active = RELEASE` means stage-and-confirm:

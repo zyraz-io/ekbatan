@@ -31,7 +31,7 @@
         <micronaut.runtime>netty</micronaut.runtime>
         <exec.mainClass>io.example.wallet.Application</exec.mainClass>
 
-        <!-- Hyphenated property names — avoid the `flyway.*` / `jooq.*` namespace, which the
+        <!-- Hyphenated property names - avoid the `flyway.*` / `jooq.*` namespace, which the
              respective Maven plugins scan and reject for unrecognized keys. -->
         <flyway-version>12.0.0</flyway-version>
         <postgresql.version>42.7.10</postgresql.version>
@@ -79,7 +79,7 @@
              its BOM, but the jooq-codegen-maven plugin generates classes against 3.20 APIs (e.g.
              `VERSION_3_20`, `resetTouchedOnNotNull()`). Declared as a direct dependency so the
              explicit version wins over the BOM-managed transitive, without adding a
-             <dependencyManagement> block — that breaks micronaut-maven-plugin 4.11.5's
+             <dependencyManagement> block - that breaks micronaut-maven-plugin 4.11.5's
              aot-analysis mojo. -->
         <dependency>
             <groupId>org.jooq</groupId>
@@ -90,7 +90,7 @@
 
         <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
              Flyway resource provider, etc.) that auto-apply when native-image runs. Also provides
-             FlywayHelper — see FlywayConfiguration. Only needed because we want a native binary;
+             FlywayHelper - see FlywayConfiguration. Only needed because we want a native binary;
              the JVM-only sibling doesn't include it. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
@@ -110,7 +110,7 @@
             <artifactId>micronaut-http-server-netty</artifactId>
             <scope>compile</scope>
         </dependency>
-        <!-- micronaut-serde-jackson — Jackson-compatible (de)serialization using
+        <!-- micronaut-serde-jackson - Jackson-compatible (de)serialization using
              compile-time generated serdes instead of Jackson Databind's reflection.
              This is the native-image-friendly path; standard Jackson annotations
              (@JsonProperty, @JsonCreator) are honoured. Types must carry @Serdeable
@@ -248,14 +248,14 @@
                 <groupId>io.micronaut.maven</groupId>
                 <artifactId>micronaut-maven-plugin</artifactId>
                 <configuration>
-                    <!-- Enable Micronaut AOT for native builds — gives smaller binaries and faster
+                    <!-- Enable Micronaut AOT for native builds - gives smaller binaries and faster
                          startup. The JVM-only sibling disables this for simplicity. -->
                     <aotDependencies>true</aotDependencies>
                 </configuration>
             </plugin>
 
             <!-- ════════════════════════════════════════════════════════════════════════════
-                 native-maven-plugin (GraalVM Build Tools) — declared by the Micronaut parent POM
+                 native-maven-plugin (GraalVM Build Tools) - declared by the Micronaut parent POM
                  in its `native` profile. We add our build args here unconditionally so they
                  take effect whenever the plugin runs (i.e. when -Dpackaging=native-image
                  triggers native compilation). combine.children="append" preserves the parent
@@ -266,7 +266,7 @@
                 <artifactId>native-maven-plugin</artifactId>
                 <configuration>
                     <buildArgs combine.children="append">
-                        <!-- Tell Ekbatan's Jackson3RecordsFeature to also scan our app's package —
+                        <!-- Tell Ekbatan's Jackson3RecordsFeature to also scan our app's package -
                              by default it only scans `io.ekbatan`, but our Action.Params records
                              live under `io.example`. Without this, native-image fails at runtime
                              with: UnsupportedFeatureError: Record components not available for

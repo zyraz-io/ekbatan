@@ -10,10 +10,10 @@ import tools.jackson.databind.node.ObjectNode;
  *
  * <p>Carries the dispatch-side delivery state plus a denormalized copy of the event and
  * action context the fan-out job snapshotted from {@code eventlog.events}. The dispatch
- * job reads this entire row and invokes the handler without a second query — no JOIN,
+ * job reads this entire row and invokes the handler without a second query - no JOIN,
  * no hydration round-trip.
  *
- * <p>Not a {@code Model} or {@code Entity} in the framework sense — no version field, no
+ * <p>Not a {@code Model} or {@code Entity} in the framework sense - no version field, no
  * soft-delete state. The dispatch job is the sole writer; rows transition through
  * {@link EventNotificationState} via direct UPDATEs.
  */
@@ -24,7 +24,7 @@ public final class EventNotification {
     /** Stable per-notification identifier (primary key in {@code event_notifications}). */
     public final UUID id;
 
-    /** {@code eventlog.events.id} of the source event — same value across all handler notifications for one event. */
+    /** {@code eventlog.events.id} of the source event - same value across all handler notifications for one event. */
     public final UUID eventId;
 
     /** Cluster-stable handler name (see {@link io.ekbatan.events.localeventhandler.EventHandler#name}). */
@@ -45,7 +45,7 @@ public final class EventNotification {
     /** When the notification row was last updated by the dispatch job. */
     public final Instant updatedDate;
 
-    // denormalized event + action context — copied from eventlog.events at fan-out time
+    // denormalized event + action context - copied from eventlog.events at fan-out time
 
     /** Service namespace (copied from the source event). */
     public final String namespace;

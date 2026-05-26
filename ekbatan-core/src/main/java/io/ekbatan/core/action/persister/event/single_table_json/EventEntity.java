@@ -13,7 +13,7 @@ import tools.jackson.databind.node.ObjectNode;
  *
  * <p>For actions that emit zero events, one sentinel row is still written with
  * {@code modelId}, {@code modelType}, {@code eventType}, and {@code payload} all {@code null}
- * — downstream CDC consumers can correlate every action to a row in the eventlog regardless
+ * - downstream CDC consumers can correlate every action to a row in the eventlog regardless
  * of whether it emitted events.
  */
 public final class EventEntity {

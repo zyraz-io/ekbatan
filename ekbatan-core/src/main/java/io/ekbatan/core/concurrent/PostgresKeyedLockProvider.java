@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
  * <p>Keys are hashed via SipHash-2-4 into Postgres's 64-bit advisory-lock identifier.
  * Collisions are statistically irrelevant for any practical key cardinality. Note that the
  * 64-bit advisory-lock identifier space is shared with anything else in the database using
- * advisory locks — if an external service uses the same Postgres instance with overlapping
+ * advisory locks - if an external service uses the same Postgres instance with overlapping
  * hashes, collisions across applications are possible (though hash-distance makes them very
  * unlikely in practice).
  *

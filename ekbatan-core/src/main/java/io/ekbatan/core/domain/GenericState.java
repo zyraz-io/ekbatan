@@ -2,7 +2,7 @@ package io.ekbatan.core.domain;
 
 /**
  * Default state enum for {@link Model} / {@link Entity} subclasses that don't need a richer
- * lifecycle of their own. {@code DELETED} is the canonical soft-delete sentinel — the
+ * lifecycle of their own. {@code DELETED} is the canonical soft-delete sentinel - the
  * {@code AbstractRepository.notDeleted(...)} predicate filters on it.
  *
  * <p>Aggregates with a domain-specific lifecycle (e.g. {@code OPENED, CLOSED, FROZEN} for an

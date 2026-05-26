@@ -23,7 +23,7 @@ import io.ekbatan.core.repository.Repository;
 import io.ekbatan.core.repository.exception.StaleRecordException;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
-import io.ekbatan.core.time.VirtualClock;
+import io.ekbatan.testsupport.time.VirtualClock;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.sdk.testing.junit5.OpenTelemetryExtension;
@@ -48,7 +48,7 @@ import tools.jackson.databind.ObjectMapper;
 // Mockito spy/mock isn't supported on GraalVM native image (closed-world model rejects
 // runtime ByteBuddy subclass proxies). See ActionExecutorTest for the full upstream
 // blocker chain (ASM 9.7.1 / JDK 25 / ClassFileAPI). OpenTelemetry itself is fine on
-// native via the Reachability Metadata Repo — Mockito is the disqualifier here.
+// native via the Reachability Metadata Repo - Mockito is the disqualifier here.
 @DisabledInNativeImage
 @Tag("tracing")
 class ActionExecutorTracingTest {
@@ -215,7 +215,7 @@ class ActionExecutorTracingTest {
         // THEN
         var actionSpan = findSpan("ekbatan.action.execute");
 
-        // AND — retry event recorded
+        // AND - retry event recorded
         var retryEvents = actionSpan.getEvents().stream()
                 .filter(e -> e.getName().equals("retry"))
                 .toList();
@@ -225,7 +225,7 @@ class ActionExecutorTracingTest {
         assertThat(retryEvents.getFirst().getAttributes().get(AttributeKey.stringKey("retry.exception")))
                 .isEqualTo("StaleRecordException");
 
-        // AND — retry count attribute
+        // AND - retry count attribute
         assertThat(actionSpan.getAttributes().get(AttributeKey.longKey("ekbatan.action.retry.count")))
                 .isEqualTo(1L);
     }
@@ -245,7 +245,7 @@ class ActionExecutorTracingTest {
         assertThat(actionSpan.getAttributes().get(AttributeKey.longKey("ekbatan.action.retry.count")))
                 .isEqualTo(0L);
 
-        // AND — no retry events
+        // AND - no retry events
         var retryEvents = actionSpan.getEvents().stream()
                 .filter(e -> e.getName().equals("retry"))
                 .toList();
@@ -272,7 +272,7 @@ class ActionExecutorTracingTest {
         assertThat(actionSpan.getAttributes().get(AttributeKey.longKey("ekbatan.action.retry.count")))
                 .isEqualTo(2L);
 
-        // AND — 2 retry events
+        // AND - 2 retry events
         var retryEvents = actionSpan.getEvents().stream()
                 .filter(e -> e.getName().equals("retry"))
                 .toList();
@@ -281,7 +281,7 @@ class ActionExecutorTracingTest {
 
     @Test
     void no_otel_sdk_does_not_affect_execution() throws Exception {
-        // GIVEN / WHEN / THEN — this test class uses OpenTelemetryExtension which registers an SDK,
+        // GIVEN / WHEN / THEN - this test class uses OpenTelemetryExtension which registers an SDK,
         // but the test validates that tracing doesn't break the action result
         var executor = buildExecutor(actionRegistry()
                 .withAction(CreateItemAction.class, new CreateItemAction(clock))

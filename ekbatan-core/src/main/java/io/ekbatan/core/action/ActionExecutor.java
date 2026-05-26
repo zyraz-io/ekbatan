@@ -30,7 +30,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * Executes {@link Action}s atomically against the configured shards. The framework's main
- * entry point — typical application code calls
+ * entry point - typical application code calls
  * {@code actionExecutor.execute(principal, MyAction.class, params)} and never touches an
  * {@code Action} directly.
  *
@@ -43,21 +43,21 @@ import tools.jackson.databind.ObjectMapper;
  * {@link io.ekbatan.core.persistence.TransactionManager#inTransactionChecked} per shard. If
  * any per-shard transaction fails, that shard rolls back. Within a single shard the domain
  * rows and the corresponding {@code action_event} rows are committed in the same transaction
- * — so the outbox is always consistent with the data it describes.
+ * - so the outbox is always consistent with the data it describes.
  *
  * <h2>Cross-shard behaviour</h2>
  *
  * <p>By default an action that touches more than one shard is rejected with
  * {@link io.ekbatan.core.shard.CrossShardException}. Set
  * {@link ExecutionConfiguration#allowCrossShard} to {@code true} to opt in to per-shard
- * commits (each shard commits independently — there is no 2PC). The framework logs and
+ * commits (each shard commits independently - there is no 2PC). The framework logs and
  * traces the cross-shard count and shard set when this happens.
  *
  * <h2>Retries</h2>
  *
  * <p>Each {@code execute(...)} call is wrapped in a {@link Retry} driver keyed on the
  * configured {@link RetryConfig}s. The default {@link ExecutionConfiguration} retries
- * {@link io.ekbatan.core.repository.exception.StaleRecordException} once after 100ms — enough
+ * {@link io.ekbatan.core.repository.exception.StaleRecordException} once after 100ms - enough
  * to absorb a transient optimistic-lock conflict without hiding a deeper problem. A retry
  * builds a brand-new {@code ActionPlan} so each attempt is logically independent.
  *
@@ -162,7 +162,7 @@ public class ActionExecutor {
                     .execute(() -> {
                         final var actionStartDate = clock.instant();
 
-                        // Per-call plan — fresh on each execute() (and on each retry attempt).
+                        // Per-call plan - fresh on each execute() (and on each retry attempt).
                         // Action is a singleton; the plan is never stored on it.
                         final var plan = new ActionPlan();
 

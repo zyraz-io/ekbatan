@@ -14,16 +14,16 @@ import java.util.Set;
  *
  * <p>{@link TypeElementVisitor} (not {@code AnnotationMapper}) because Micronaut 4.x's
  * incremental Gradle AP only fires for annotations declared in
- * {@code -Amicronaut.processing.annotations=…}; an {@code AnnotationMapper} keyed by a
+ * {@code -Amicronaut.processing.annotations=...}; an {@code AnnotationMapper} keyed by a
  * third-party stereotype silently stops firing on incremental rebuilds (cf. micronaut-core#7340).
  * {@code TypeElementVisitor.getSupportedAnnotationNames()} feeds the AP's incremental-trigger
- * set automatically — same pattern as {@code micronaut-data}'s {@code RepositoryTypeElementVisitor}.
+ * set automatically - same pattern as {@code micronaut-data}'s {@code RepositoryTypeElementVisitor}.
  *
  * <p>Registered <em>twice</em>:
  * {@code META-INF/services/io.micronaut.inject.visitor.TypeElementVisitor} (legacy) and
  * {@code META-INF/micronaut/io.micronaut.inject.visitor.TypeElementVisitor/...} (the per-impl
  * marker file Micronaut 4.x's SoftServiceLoader actually reads). The {@code META-INF/services}
- * path alone isn't sufficient — without the new-format file the class isn't loaded by the AP.
+ * path alone isn't sufficient - without the new-format file the class isn't loaded by the AP.
  */
 public class EkbatanStereotypeVisitor implements TypeElementVisitor<Object, Object> {
 

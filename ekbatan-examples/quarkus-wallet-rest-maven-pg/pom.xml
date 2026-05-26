@@ -17,7 +17,7 @@
         <maven.compiler.release>25</maven.compiler.release>
 
         <!-- Quarkus' BOM doesn't pin jOOQ, but the codegen plugin's default may not match
-             what Ekbatan was built against. Pin explicitly anyway — the failure mode if you
+             what Ekbatan was built against. Pin explicitly anyway - the failure mode if you
              skip this is a NoSuchMethodError at runtime. -->
         <jooq.version>3.20.10</jooq.version>
 
@@ -26,7 +26,7 @@
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.version>3.34.6</quarkus.platform.version>
 
-        <!-- Hyphenated property names — avoid the `flyway.*` / `jooq.*` namespace, which the
+        <!-- Hyphenated property names - avoid the `flyway.*` / `jooq.*` namespace, which the
              respective Maven plugins scan and reject for unrecognized keys. -->
         <flyway-version>12.0.0</flyway-version>
         <postgresql.version>42.7.10</postgresql.version>
@@ -127,8 +127,8 @@
         </dependency>
 
         <!-- ── PostgreSQL ────────────────────────────────────────────────────────── -->
-        <!-- Ekbatan's ConnectionProvider runs Hikari itself — we don't use Quarkus's Agroal
-             datasource — but the driver still needs to be on the classpath for Hikari's
+        <!-- Ekbatan's ConnectionProvider runs Hikari itself - we don't use Quarkus's Agroal
+             datasource - but the driver still needs to be on the classpath for Hikari's
              Class.forName(...). The driver is declared compile-scoped (not runtime) because
              Quarkus' build steps inspect it at deploy time. -->
         <dependency>
@@ -207,7 +207,7 @@
             </plugin>
 
             <!-- ════════════════════════════════════════════════════════════════════════════
-                 Quarkus Maven plugin — produces the runnable artifact (`./mvnw quarkus:dev`,
+                 Quarkus Maven plugin - produces the runnable artifact (`./mvnw quarkus:dev`,
                  `./mvnw package` produces `target/quarkus-app/`). Hooked into the build via
                  `<extensions>true</extensions>` so its lifecycle bindings register automatically.
                  ════════════════════════════════════════════════════════════════════════════ -->
@@ -275,7 +275,7 @@
             <!-- ════════════════════════════════════════════════════════════════════════════
                  jOOQ codegen chain (PostgreSQL flavour). Three plugins in `initialize` /
                  `generate-sources` / `prepare-package`. Declared AFTER quarkus-maven-plugin
-                 so within `generate-sources` they run after Quarkus's code generation — but
+                 so within `generate-sources` they run after Quarkus's code generation - but
                  it doesn't matter for correctness; the jooq generator only needs the live
                  schema and emits its output independently.
                  ════════════════════════════════════════════════════════════════════════════ -->
