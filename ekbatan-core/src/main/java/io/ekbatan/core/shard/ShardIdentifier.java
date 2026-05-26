@@ -1,6 +1,7 @@
 package io.ekbatan.core.shard;
 
 import java.util.Objects;
+import org.apache.commons.lang3.Validate;
 
 /**
  * Two-tier shard coordinate: a {@code group} (logical grouping — e.g. region, tenant tier)
@@ -12,6 +13,18 @@ import java.util.Objects;
  * {@link java.util.Optional#empty()} for an aggregate's shard.
  */
 public final class ShardIdentifier {
+
+    /** Minimum supported shard group. */
+    public static final int MIN_GROUP = 0;
+
+    /** Maximum supported shard group. Encoded into 8 bits. */
+    public static final int MAX_GROUP = 255;
+
+    /** Minimum supported shard member. */
+    public static final int MIN_MEMBER = 0;
+
+    /** Maximum supported shard member. Encoded into 6 bits. */
+    public static final int MAX_MEMBER = 63;
 
     /** Sentinel used by single-DB deployments and as the framework's fallback shard. */
     public static final ShardIdentifier DEFAULT = new ShardIdentifier(0, 0);
@@ -28,13 +41,17 @@ public final class ShardIdentifier {
     }
 
     /**
-     * Constructs a shard identifier from raw {@code (group, member)} coordinates.
+     * Constructs a shard identifier from raw {@code (group, member)} coordinates. The
+     * coordinates must fit the bits reserved in {@link ShardedUUID}: group 0..255 and
+     * member 0..63.
      *
      * @param group the logical group component.
      * @param member the physical member component.
      * @return a new {@link ShardIdentifier}.
      */
     public static ShardIdentifier of(int group, int member) {
+        Validate.inclusiveBetween(MIN_GROUP, MAX_GROUP, group, "group must be 0 or 255 or between them");
+        Validate.inclusiveBetween(MIN_MEMBER, MAX_MEMBER, member, "member must be 0 or 63 or between them");
         return new ShardIdentifier(group, member);
     }
 

@@ -1,6 +1,10 @@
 # Claude Code
 .claude/
 
+# Codex / local agent tooling
+.codex/
+.agents/
+
 # OpenSpec
 openspec/
 

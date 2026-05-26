@@ -64,7 +64,7 @@ public class SingleTableJsonEventPersister implements EventPersister {
                 .setAttribute("ekbatan.event.count", modelEvents.size())
                 .startSpan();
         try (var _ = span.makeCurrent()) {
-            final var serializedParams = (ObjectNode) objectMapper.valueToTree(actionParams);
+            final var serializedParams = serializeActionParams(actionParams);
 
             final List<EventEntity> entities;
             if (modelEvents.isEmpty()) {
@@ -109,5 +109,14 @@ public class SingleTableJsonEventPersister implements EventPersister {
         } finally {
             span.end();
         }
+    }
+
+    private ObjectNode serializeActionParams(Object actionParams) {
+        final var serializedParams = objectMapper.valueToTree(actionParams);
+        Validate.isInstanceOf(
+                ObjectNode.class,
+                serializedParams,
+                "actionParams must serialize to a JSON object; use a record/class params object, not null/scalar/list");
+        return (ObjectNode) serializedParams;
     }
 }

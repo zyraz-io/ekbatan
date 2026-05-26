@@ -6,9 +6,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.redis.testcontainers.RedisContainer;
 import io.ekbatan.core.concurrent.KeyedLockProvider;
+import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -18,6 +20,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.redisson.Redisson;
+import org.redisson.api.RFuture;
+import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 import org.testcontainers.junit.jupiter.Container;
@@ -206,6 +210,42 @@ class RedisKeyedLockProviderIntegrationTest {
         lease.close();
     }
 
+    @Test
+    void close_should_release_redis_with_owner_checked_unlock() throws Exception {
+        var unlockCalls = new AtomicInteger();
+        var forceUnlockCalls = new AtomicInteger();
+        var lock = redisKeyedLockProvider()
+                .redissonClient(fakeRedisson(fakeLock(unlockCalls, forceUnlockCalls)))
+                .build();
+
+        var lease = lock.acquire(uniqueKey(), FIVE_MIN);
+        lease.close();
+
+        assertThat(unlockCalls).hasValue(1);
+        assertThat(forceUnlockCalls).hasValue(0);
+    }
+
+    @Test
+    void max_hold_watchdog_should_not_send_stale_redis_unlock() throws Exception {
+        var unlockCalls = new AtomicInteger();
+        var forceUnlockCalls = new AtomicInteger();
+        var lock = redisKeyedLockProvider()
+                .redissonClient(fakeRedisson(fakeLock(unlockCalls, forceUnlockCalls)))
+                .build();
+
+        var lease = lock.acquire(uniqueKey(), Duration.ofMillis(50));
+
+        Thread.sleep(250);
+
+        assertThat(lease.isHeld()).isFalse();
+        assertThat(unlockCalls).hasValue(0);
+        assertThat(forceUnlockCalls).hasValue(0);
+
+        lease.close();
+        assertThat(unlockCalls).hasValue(0);
+        assertThat(forceUnlockCalls).hasValue(0);
+    }
+
     // ----- Correctness under contention -----
 
     @Test
@@ -358,6 +398,68 @@ class RedisKeyedLockProviderIntegrationTest {
             throw new RuntimeException(error.get());
         }
         return got.get();
+    }
+
+    private static RedissonClient fakeRedisson(RLock lock) {
+        return (RedissonClient) Proxy.newProxyInstance(
+                RedisKeyedLockProviderIntegrationTest.class.getClassLoader(),
+                new Class<?>[] {RedissonClient.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "getLock" -> lock;
+                    case "toString" -> "fake-redisson-client";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.toString());
+                });
+    }
+
+    private static RLock fakeLock(AtomicInteger unlockCalls, AtomicInteger forceUnlockCalls) {
+        return (RLock) Proxy.newProxyInstance(
+                RedisKeyedLockProviderIntegrationTest.class.getClassLoader(),
+                new Class<?>[] {RLock.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "lockInterruptibly" -> null;
+                    case "tryLock" -> true;
+                    case "unlockAsync" -> {
+                        unlockCalls.incrementAndGet();
+                        yield completedFuture(null);
+                    }
+                    case "forceUnlock" -> {
+                        forceUnlockCalls.incrementAndGet();
+                        yield true;
+                    }
+                    case "getName" -> "fake-lock";
+                    case "isLocked", "isHeldByThread", "isHeldByCurrentThread" -> true;
+                    case "getHoldCount" -> 1;
+                    case "remainTimeToLive" -> 1L;
+                    case "toString" -> "fake-rlock";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.toString());
+                });
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> RFuture<T> completedFuture(T value) {
+        var future = CompletableFuture.completedFuture(value);
+        return (RFuture<T>) Proxy.newProxyInstance(
+                RedisKeyedLockProviderIntegrationTest.class.getClassLoader(),
+                new Class<?>[] {RFuture.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "toCompletableFuture" -> future;
+                    case "join" -> future.join();
+                    case "get" -> args == null ? future.get() : future.get((long) args[0], (TimeUnit) args[1]);
+                    case "isDone" -> future.isDone();
+                    case "isCancelled" -> future.isCancelled();
+                    case "cancel" -> future.cancel((boolean) args[0]);
+                    case "isSuccess" -> future.isDone() && !future.isCompletedExceptionally();
+                    case "cause" -> null;
+                    case "getNow" -> future.getNow(null);
+                    case "toString" -> "completed-rfuture";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.toString());
+                });
     }
 
     private static String uniqueKey() {

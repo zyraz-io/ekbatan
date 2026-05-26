@@ -185,6 +185,27 @@ class ModelTest {
     }
 
     @Test
+    void events_are_snapshot_from_builder() {
+        // GIVEN
+        var id = Id.random(SampleModel.class);
+        var builder = SampleModel.Builder.sampleModel()
+                .id(id)
+                .state(GenericState.ACTIVE)
+                .createdDate(Instant.now())
+                .withInitialVersion();
+        var first = builder.build();
+
+        // WHEN
+        var second = builder.withEvent(new SampleEvent(id)).build();
+
+        // THEN
+        assertThat(first.events).isEmpty();
+
+        // AND
+        assertThat(second.events).hasSize(1);
+    }
+
+    @Test
     void builder_without_events_has_empty_list() {
         // WHEN
         var model = createSample();

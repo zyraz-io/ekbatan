@@ -3,6 +3,7 @@ package io.ekbatan.core.action.persister.event.single_table_json;
 import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.ekbatan.core.domain.ModelEvent;
 import io.ekbatan.core.persistence.TransactionManager;
@@ -315,5 +316,36 @@ public abstract class BaseSingleTableJsonEventPersisterTest {
         assertThat(found.getFirst().actionId).isEqualTo(actionEventId);
         assertThat(found.getFirst().actionName).isEqualTo("FindAction");
         assertThatJson(found.getFirst().payload).node("description").isEqualTo("findable");
+    }
+
+    @Test
+    void should_reject_null_action_params() {
+        assertRejectsInvalidActionParams(null);
+    }
+
+    @Test
+    void should_reject_scalar_action_params() {
+        assertRejectsInvalidActionParams("not-an-object");
+    }
+
+    @Test
+    void should_reject_list_action_params() {
+        assertRejectsInvalidActionParams(List.of("not", "an", "object"));
+    }
+
+    private void assertRejectsInvalidActionParams(Object actionParams) {
+        var persister = createPersister(new ObjectMapper());
+
+        assertThatThrownBy(() -> persister.persistActionEvents(
+                        "com.example.finance",
+                        "InvalidParamsAction",
+                        Instant.now(),
+                        Instant.now(),
+                        actionParams,
+                        List.of(),
+                        ShardIdentifier.DEFAULT,
+                        UUID.randomUUID()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("actionParams must serialize to a JSON object");
     }
 }

@@ -79,7 +79,7 @@ public final class InProcessKeyedLockProvider implements KeyedLockProvider {
         return locks.size();
     }
 
-    private void backendRelease(InProcessPayload payload) {
+    private void backendRelease(InProcessPayload payload, KeyedReentrantHolder.ReleaseReason reason) {
         payload.entry.semaphore.release();
         releaseEntry(payload.userKey);
     }

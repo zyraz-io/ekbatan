@@ -81,13 +81,14 @@ Each inherited method:
 - Applies optimistic locking automatically (writes include `WHERE version = ?` and increment).
 - Filters soft-deleted records (`WHERE state <> 'DELETED'`) on reads.
 - Routes to the right shard via the configured `ShardingStrategy` — for ID-based reads (`findById`, `existsById`), via `effectiveShard(id)`; for condition-based reads (`findAllWhere`, `count`, `findOneWhere`), via scatter-gather across all shards (see [Sharding](sharding.md)).
+- Uses primary connections for inherited reads by design. Replica reads are opt-in through `readonlyDb(...)` in custom queries where eventual consistency is acceptable.
 - Resolves the dialect per-shard, so mixed-dialect setups are theoretically supported.
 
 Pagination caveat: there is **no** `findAll(offset, limit)` or `findAllWhere(condition, offset, limit)`. Offset/limit pagination doesn't work correctly across shards. Sharded systems should use cursor-based (keyset/temporal) pagination, implemented in concrete repository subclasses.
 
 ## Custom queries
 
-When the inherited CRUD methods aren't enough, drop down to JOOQ. To pull a `DSLContext` for the right shard, use one of four helper families. Each family has overloads for *no argument* (default shard), *id*, *persistable*, *shard identifier* — and `db()` / `readonlyDb()` also expose `dbs()` / `readonlyDbs()` for scatter-gather across all shards.
+When the inherited CRUD methods aren't enough, drop down to JOOQ. Inherited reads use primary connections, and inherited writes join an open transaction via `txDbElseDb(...)`. For custom queries, choose the helper that matches the consistency you need. Each family has overloads for *no argument* (default shard), *id*, *persistable*, *shard identifier* — and `db()` / `readonlyDb()` also expose `dbs()` / `readonlyDbs()` for scatter-gather across all shards.
 
 ```java
 // --- db() — primary writes / strongly-consistent reads ---
@@ -120,7 +121,9 @@ protected DSLContext txDbElseDb(ShardIdentifier shard);
 
 | You want to… | Use |
 |---|---|
-| Read rows that don't have to see writes from the *current* transaction | `readonlyDb(...)` — pulls from the replica |
+| Use the default repository read behavior | Inherited CRUD reads (`findById`, `getById`, `findAllWhere`, `count`, etc.) — primary-consistent by design |
+| Write a custom primary-consistent read | `db(...)` / `dbs()` — pulls from primary |
+| Write a custom eventually-consistent read | `readonlyDb(...)` / `readonlyDbs()` — pulls from the replica |
 | Read rows that *must* reflect uncommitted writes from the current action | `txDbElseDb(...)` — reuses the action's transactional connection if one is open |
 | Insert / update / delete | `txDbElseDb(...)` — atomically joins the action's transaction when called from inside `Action.perform()` or `tm.inTransaction(...)`; falls back to primary outside |
 | Scatter-gather a query across every shard | `readonlyDbs()` (or `dbs()` for primary), then `.flatMap` over the resulting `Collection<DSLContext>` |

@@ -164,7 +164,7 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
         }
     }
 
-    private void backendRelease(MySQLPayload payload) {
+    private void backendRelease(MySQLPayload payload, KeyedReentrantHolder.ReleaseReason reason) {
         Integer result = null;
         try (var stmt = payload.connection.prepareStatement("SELECT RELEASE_LOCK(?)")) {
             stmt.setString(1, payload.hashedKey);

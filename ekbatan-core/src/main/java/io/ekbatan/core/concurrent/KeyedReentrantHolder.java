@@ -46,8 +46,17 @@ public final class KeyedReentrantHolder<LOCK_PAYLOAD> {
          * Releases the underlying backend lock.
          *
          * @param payload the backend payload registered with the holder at acquire time.
+         * @param reason why the holder is releasing the payload.
          */
-        void release(LOCK_PAYLOAD payload);
+        void release(LOCK_PAYLOAD payload, ReleaseReason reason);
+    }
+
+    /** Why the holder is releasing a backend payload. */
+    public enum ReleaseReason {
+        /** The outermost lease was closed explicitly. */
+        CLOSE,
+        /** The max-hold watchdog fired. */
+        WATCHDOG
     }
 
     private record EntryKey(long threadId, String userKey) {}
@@ -109,7 +118,7 @@ public final class KeyedReentrantHolder<LOCK_PAYLOAD> {
                 if (holding.markReleasedByWatchdog()) {
                     LOG.warn("Auto-released held lock for key {} (hold limit exceeded)", userKey);
                     map.remove(rkey, holding);
-                    lockReleaseCallback.release(payload);
+                    lockReleaseCallback.release(payload, ReleaseReason.WATCHDOG);
                 }
             } catch (InterruptedException ignored) {
             }
@@ -206,7 +215,7 @@ public final class KeyedReentrantHolder<LOCK_PAYLOAD> {
             if (w != null) {
                 w.interrupt();
             }
-            holding.lockReleaseCallback.release(holding.payload);
+            holding.lockReleaseCallback.release(holding.payload, ReleaseReason.CLOSE);
         }
     }
 }

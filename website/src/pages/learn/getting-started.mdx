@@ -965,8 +965,8 @@ create table scheduled_tasks (
     owner_id      UUID         NOT NULL,
     currency      CHAR(3)      NOT NULL,
     balance       NUMERIC(20,4) NOT NULL,
-    created_date  TIMESTAMPTZ  NOT NULL,
-    updated_date  TIMESTAMPTZ  NOT NULL
+    created_date  TIMESTAMP    NOT NULL,
+    updated_date  TIMESTAMP    NOT NULL
 );
 CREATE INDEX wallets_owner_id ON wallets (owner_id);`} />
 

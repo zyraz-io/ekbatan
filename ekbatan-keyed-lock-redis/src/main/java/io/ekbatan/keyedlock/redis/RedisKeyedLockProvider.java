@@ -32,8 +32,9 @@ import org.slf4j.LoggerFactory;
  * leaseTime overloads of {@code lock} and {@code tryLock}), which disables Redisson's
  * automatic watchdog renewal. The Redis key's TTL becomes the hard upper bound on the hold,
  * matching the {@link KeyedLockProvider#acquire} contract exactly. A local virtual-thread
- * watchdog also fires at {@code maxHold} to flip {@link Lease#isHeld()} to false locally so
- * callers see consistent state if the Redis key TTL elapsed first.
+ * watchdog also fires at {@code maxHold} to flip {@link Lease#isHeld()} to false locally,
+ * but it does not send an unlock to Redis; the TTL is the backend release mechanism for
+ * timed-out Redis leases.
  *
  * <h2>Multi-master caveat</h2>
  *
@@ -68,8 +69,9 @@ public final class RedisKeyedLockProvider implements KeyedLockProvider {
             return reentered.get();
         }
         var rlock = redisson.getLock(redisKey(key));
+        var acquirerThreadId = Thread.currentThread().threadId();
         rlock.lockInterruptibly(maxHold.toMillis(), TimeUnit.MILLISECONDS);
-        return holder.register(key, new RedisPayload(key, rlock), maxHold, this::backendRelease);
+        return holder.register(key, new RedisPayload(key, rlock, acquirerThreadId), maxHold, this::backendRelease);
     }
 
     @Override
@@ -85,20 +87,28 @@ public final class RedisKeyedLockProvider implements KeyedLockProvider {
             return reentered;
         }
         var rlock = redisson.getLock(redisKey(key));
+        var acquirerThreadId = Thread.currentThread().threadId();
         var acquired = rlock.tryLock(maxWait.toMillis(), maxHold.toMillis(), TimeUnit.MILLISECONDS);
         if (!acquired) {
             return Optional.empty();
         }
-        return Optional.of(holder.register(key, new RedisPayload(key, rlock), maxHold, this::backendRelease));
+        return Optional.of(
+                holder.register(key, new RedisPayload(key, rlock, acquirerThreadId), maxHold, this::backendRelease));
     }
 
-    private void backendRelease(RedisPayload payload) {
+    private void backendRelease(RedisPayload payload, KeyedReentrantHolder.ReleaseReason reason) {
+        if (reason == KeyedReentrantHolder.ReleaseReason.WATCHDOG) {
+            return;
+        }
         try {
-            // Use forceUnlock to bypass Redisson's threadId check — by the time the watchdog
-            // fires we may be on a different (virtual) thread than the original acquirer.
-            // forceUnlock deletes the Redis key unconditionally; safe here because our own
-            // counter already arbitrated which path performs the release.
-            payload.rlock.forceUnlock();
+            // Release using the original acquirer's threadId. A no-arg unlock from a
+            // different thread fails Redisson's owner check, while forceUnlock deletes
+            // the Redis key unconditionally and can release a new owner after TTL expiry.
+            // Redisson's threadId variant checks the stored owner before deleting.
+            payload.rlock
+                    .unlockAsync(payload.acquirerThreadId)
+                    .toCompletableFuture()
+                    .join();
         } catch (RuntimeException e) {
             LOG.debug("Tried to unlock Redis lock for {} but it was no longer held", payload.userKey, e);
         }
@@ -108,7 +118,7 @@ public final class RedisKeyedLockProvider implements KeyedLockProvider {
         return keyPrefix + userKey;
     }
 
-    private record RedisPayload(String userKey, RLock rlock) {}
+    private record RedisPayload(String userKey, RLock rlock, long acquirerThreadId) {}
 
     /** Fluent builder for {@link RedisKeyedLockProvider}. Obtain via {@link #redisKeyedLockProvider()}. */
     public static final class Builder {

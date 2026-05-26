@@ -109,9 +109,12 @@ That's it for Phase 0. Done once, reused for every release forever.
 
 ---
 
-## Optional: client-side tag-validation hook
+## Optional: client-side git hooks
 
-The release workflow already verifies that the pushed tag matches `gradle.properties` (see the "Verify gradle.properties version matches tag" step in `release.yml`). The repo also ships a **pre-push hook** at `.githooks/pre-push` that runs the same check **before the tag leaves your machine** — catches the mistake one CI run earlier.
+The release workflow already verifies that the pushed tag matches `gradle.properties` (see the "Verify gradle.properties version matches tag" step in `release.yml`). The repo also ships version-controlled hooks in `.githooks/`:
+
+- `.githooks/pre-commit` runs `./gradlew spotlessCheck` and blocks commits with formatting drift.
+- `.githooks/pre-push` checks release tags like `v<X.Y.Z>` against `gradle.properties` before the tag leaves your machine.
 
 To enable, run once per clone:
 
@@ -119,15 +122,16 @@ To enable, run once per clone:
 git config core.hooksPath .githooks
 ```
 
-That points git at the version-controlled hooks directory (instead of the default `.git/hooks/`, which isn't tracked). From then on, any `git push` that includes a tag matching `v<X.Y.Z>` is checked against `gradle.properties` at the tagged commit — mismatches abort the push.
+That points git at the version-controlled hooks directory (instead of the default `.git/hooks/`, which isn't tracked). From then on, `git commit` fails when Spotless would fail, and any `git push` that includes a tag matching `v<X.Y.Z>` is checked against `gradle.properties` at the tagged commit — mismatches abort the push.
 
-To bypass (rarely needed, e.g. pushing a non-release tag):
+To bypass (rarely needed):
 
 ```bash
+git commit --no-verify
 git push --no-verify
 ```
 
-The hook is purely a local convenience — even if you skip enabling it, the workflow's guard step still catches the same mistake. Skipping it just means you find out from a failing CI run instead of from your terminal.
+The hooks are local guardrails. The pre-commit Spotless hook is the local formatting gate; the release workflow separately catches tag/version mismatches even when the pre-push hook is not enabled.
 
 ---
 

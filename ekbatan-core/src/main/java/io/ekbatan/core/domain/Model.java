@@ -4,7 +4,6 @@ import static java.time.temporal.ChronoUnit.MICROS;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import org.apache.commons.lang3.Validate;
 
@@ -80,7 +79,7 @@ public abstract class Model<MODEL extends Model<MODEL, ID, STATE>, ID extends Co
      */
     protected <B extends Builder<ID, B, MODEL, STATE>> Model(Builder<ID, B, MODEL, STATE> builder) {
         this.id = Validate.notNull(builder.id, "id cannot be null");
-        this.events = Collections.unmodifiableList(Validate.notNull(builder.events, "events cannot be null"));
+        this.events = List.copyOf(Validate.notNull(builder.events, "events cannot be null"));
         this.state = Validate.notNull(builder.state, "state cannot be null");
         this.createdDate = Validate.notNull(builder.createdDate, "createdDate cannot be null")
                 .truncatedTo(MICROS);

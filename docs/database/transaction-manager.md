@@ -80,19 +80,20 @@ Either both writes commit together, or neither does. Same atomicity guarantee an
 
 The lambda receives a `Transaction` value. From it you can pull the `DSLContext` (`transaction.dslContext()`) for raw JOOQ, or the underlying `Connection` (`transaction.connection()`) if you genuinely need JDBC.
 
-## Repositories join automatically
+## Repository writes join automatically
 
-Because the open transaction is bound into a `ScopedValue<Transaction>`, **any repository method you call from inside the block — whether the inherited CRUD or a custom query that uses `txDbElseDb(...)` — sees the open transaction and writes to the same connection.** No need to pass `transaction` or `db` around manually:
+Because the open transaction is bound into a `ScopedValue<Transaction>`, inherited repository writes and custom queries that use `txDbElseDb(...)` reuse the open transaction's connection. No need to pass `transaction` or `db` around manually for writes:
 
 ```java
 WalletRepository walletRepository = …;
 
 tm.inTransactionChecked(transaction -> {
-    // Inherited findById uses txDb() under the covers, so it reads
-    // through the open transaction's connection.
+    // Inherited reads use primary connections by design. If this read
+    // must see uncommitted writes from this block, use transaction.dslContext()
+    // or a custom repository query that uses txDbElseDb(...).
     Wallet wallet = walletRepository.getById(walletId);
 
-    // Custom query inside the repository uses txDbElseDb() — same connection.
+    // Custom write inside the repository uses txDbElseDb() — same connection.
     walletRepository.markAllSettled(List.of(walletId));
 
     // Direct JOOQ on the same DSLContext — same connection.
@@ -104,7 +105,7 @@ tm.inTransactionChecked(transaction -> {
 });
 ```
 
-This is what makes the "use repositories outside actions" path painless. You don't *have* to drop into raw JOOQ; you can mix repository helpers and direct JOOQ freely, and they all participate in the same transaction.
+This is what makes the "use repositories outside actions" path painless. You don't *have* to drop into raw JOOQ for writes; inherited write methods and custom `txDbElseDb(...)` writes participate in the same transaction. Reads are a choice: inherited reads use primary committed state, `readonlyDb(...)` is for explicit replica reads, and `txDbElseDb(...)` or `transaction.dslContext()` is for custom reads that must see the current transaction.
 
 ## When NOT to use it directly
 

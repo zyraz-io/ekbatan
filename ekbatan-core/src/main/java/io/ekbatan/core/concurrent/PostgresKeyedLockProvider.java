@@ -165,7 +165,7 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
         }
     }
 
-    private void lockRelease(PgPayload payload) {
+    private void lockRelease(PgPayload payload, KeyedReentrantHolder.ReleaseReason reason) {
         try {
             advisoryUnlock(payload.connection, payload.hashedKey);
         } catch (SQLException e) {

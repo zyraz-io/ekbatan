@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#
+# Blocks commits when Spotless would fail. This is intentionally a check-only
+# hook: run `./gradlew spotlessApply` yourself when you want files rewritten.
+#
+# Bypass: git commit --no-verify
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+
+echo "pre-commit: running ./gradlew spotlessCheck" >&2
+"$repo_root/gradlew" -p "$repo_root" spotlessCheck

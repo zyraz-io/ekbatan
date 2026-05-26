@@ -162,7 +162,7 @@ public final class MariaDBKeyedLockProvider implements KeyedLockProvider {
         }
     }
 
-    private void backendRelease(MariaDBPayload payload) {
+    private void backendRelease(MariaDBPayload payload, KeyedReentrantHolder.ReleaseReason reason) {
         Integer result = null;
         try (var stmt = payload.connection.prepareStatement("SELECT RELEASE_LOCK(?)")) {
             stmt.setString(1, payload.hashedKey);
