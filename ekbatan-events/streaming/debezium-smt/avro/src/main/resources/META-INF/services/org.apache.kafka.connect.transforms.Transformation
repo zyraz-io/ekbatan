@@ -1,1 +1,1 @@
-io.ekbatan.debezium.smt.avro.OutboxToAvroTransform
+io.ekbatan.events.streaming.debeziumsmt.avro.OutboxToAvroTransform

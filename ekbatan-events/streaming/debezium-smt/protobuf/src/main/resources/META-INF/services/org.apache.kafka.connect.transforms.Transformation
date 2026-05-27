@@ -1,1 +1,1 @@
-io.ekbatan.debezium.smt.protobuf.OutboxToProtobufTransform
+io.ekbatan.events.streaming.debeziumsmt.protobuf.OutboxToProtobufTransform

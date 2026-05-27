@@ -24,8 +24,10 @@ import io.ekbatan.test.event_pipeline.common.wallet.models.Wallet;
 import io.ekbatan.test.event_pipeline.common.wallet.repository.WalletRepository;
 import java.math.BigDecimal;
 import java.nio.file.Path;
+import java.sql.DriverManager;
 import java.time.Clock;
 import java.util.List;
+import java.util.UUID;
 import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.specific.SpecificDatumReader;
 import org.jooq.SQLDialect;
@@ -202,7 +204,44 @@ class EventStreamingAvroSmtIntegrationTest {
         assertThat(new BigDecimal(event.getAmount())).isEqualByComparingTo(new BigDecimal("123.45"));
     }
 
+    @Test
+    void sentinel_row_is_dropped_and_connector_continues() throws Exception {
+        var consumer = new AvroRetryingEventConsumer(
+                KAFKA.getBootstrapServers(), EVENT_TOPIC_CREATED, "test-sentinel-avro", _ -> {}, DLQ_TOPIC, 3);
+        consumer.start();
+        try {
+            insertSentinelRow("NoOpAvroAction");
+            var walletName = "After Sentinel Avro Wallet " + UUID.randomUUID();
+            executor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params(walletName));
+
+            var event = waitForCreatedEventNamed(consumer, walletName);
+            assertThat(event.getName()).isEqualTo(walletName);
+            assertThat(consumer.getDeadLettered()).isEmpty();
+        } finally {
+            consumer.close();
+        }
+    }
+
     // --- helpers ---
+
+    private static void insertSentinelRow(String actionName) throws Exception {
+        try (var conn = DriverManager.getConnection(PG.getJdbcUrl(), PG.getUsername(), PG.getPassword());
+                var stmt = conn.prepareStatement("""
+                        INSERT INTO eventlog.events (
+                            id, namespace, action_id, action_name, action_params,
+                            started_date, completion_date, model_id, model_type, event_type,
+                            payload, event_date, delivered
+                        )
+                        VALUES (?, ?, ?, ?, ?::jsonb, NOW(), NOW(), NULL, NULL, NULL, NULL, NOW(), FALSE)
+                        """)) {
+            stmt.setObject(1, UUID.randomUUID());
+            stmt.setString(2, NAMESPACE);
+            stmt.setObject(3, UUID.randomUUID());
+            stmt.setString(4, actionName);
+            stmt.setString(5, "{\"action\":\"noop\"}");
+            stmt.executeUpdate();
+        }
+    }
 
     private static <T> T decode(byte[] avroBytes, Class<T> avroClass) {
         try {
@@ -212,6 +251,23 @@ class EventStreamingAvroSmtIntegrationTest {
         } catch (Exception e) {
             throw new RuntimeException("Failed to decode Avro bytes for " + avroClass.getSimpleName(), e);
         }
+    }
+
+    private static WalletCreatedEvent waitForCreatedEventNamed(AvroRetryingEventConsumer consumer, String walletName)
+            throws Exception {
+        for (int i = 0; i < 150; i++) {
+            for (var actionEvent : consumer.getHandled()) {
+                if (!"WalletCreatedEvent".contentEquals(actionEvent.getEventType())) {
+                    continue;
+                }
+                var event = decode(actionEvent.getPayload().array(), WalletCreatedEvent.class);
+                if (walletName.contentEquals(event.getName())) {
+                    return event;
+                }
+            }
+            Thread.sleep(200);
+        }
+        throw new AssertionError("Timed out waiting for wallet-created event: " + walletName);
     }
 
     private static void waitForEvents(java.util.function.Supplier<List<?>> target, int expectedCount)

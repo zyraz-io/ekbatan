@@ -26,6 +26,8 @@ import org.apache.kafka.connect.transforms.Transformation;
  * encoded against the {@code ActionEvent} descriptor. The record value becomes raw {@code byte[]} -
  * the connector should use {@code ByteArrayConverter}.
  *
+ * <p>Records without an {@code event_type} (sentinel rows) are dropped.
+ *
  * <p>Config:
  * <ul>
  *   <li>{@code payloadDescriptors} - comma-separated {@code eventType:/path/to/desc.desc} pairs.
@@ -190,9 +192,11 @@ public class OutboxToProtobufTransform<R extends ConnectRecord<R>> implements Tr
         if (eventTypeFieldOnRow == null || payloadFieldOnRow == null) return record;
 
         var eventType = (String) row.get(eventTypeFieldOnRow);
-        if (eventType == null) return record;
+        if (eventType == null) return null;
         var payloadJson = (String) row.get(payloadFieldOnRow);
-        if (payloadJson == null) return record;
+        if (payloadJson == null) {
+            throw new DataException("Outbox payload is null for event type: " + eventType);
+        }
 
         var payloadBytes = encodePayload(eventType, payloadJson);
         var actionEventBytes = encodeActionEvent(row, payloadBytes);

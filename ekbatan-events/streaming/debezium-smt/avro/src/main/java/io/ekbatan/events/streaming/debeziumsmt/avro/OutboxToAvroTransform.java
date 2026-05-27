@@ -27,7 +27,7 @@ import org.apache.kafka.connect.transforms.Transformation;
  * {@code ActionEvent} schema. The record value becomes raw {@code byte[]} - the connector
  * should use {@code ByteArrayConverter}.
  *
- * <p>Records without an {@code event_type} (sentinel rows) pass through unchanged.
+ * <p>Records without an {@code event_type} (sentinel rows) are dropped.
  *
  * <p>Config:
  * <ul>
@@ -183,11 +183,11 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
         }
         var eventType = (String) row.get(eventTypeFieldOnRow);
         if (eventType == null) {
-            return record;
+            return null;
         }
         var payloadJson = (String) row.get(payloadFieldOnRow);
         if (payloadJson == null) {
-            return record;
+            throw new DataException("Outbox payload is null for event type: " + eventType);
         }
         var payloadBytes = encodePayload(eventType, payloadJson);
         var actionEventBytes = encodeActionEvent(row, payloadBytes);
