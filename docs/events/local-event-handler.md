@@ -66,6 +66,8 @@ public class WidgetCreatedEmailHandler implements EventHandler<WidgetCreatedEven
 
 Multiple handlers may subscribe to the same event type; each gets its own `event_notifications` row and its own retry/expiry lifecycle. `name()` is the cluster-stable identifier persisted on every notification row, so **treat handler names as part of your schema**: renaming a handler in code orphans the rows queued under the old name.
 
+The registry keys subscriptions by the event class's simple name, matching `eventlog.events.event_type`. It allows multiple handlers for the same event class, but rejects two different event classes with the same simple name because those would be indistinguishable in the outbox.
+
 The `@EkbatanEventHandler` annotation is for the Spring Boot / Quarkus / Micronaut integrations. Without DI, register handlers directly into an `EventHandlerRegistry` builder.
 
 ## Wiring (manual)

@@ -65,6 +65,18 @@ The SMT encodes each record value as Avro bytes using `ActionEvent.avsc` + per-e
 
 **End-to-end setup example:** [`EventStreamingAvroSmtIntegrationTest`](../ekbatan-integration-tests/event-pipeline/debezium-kafka-avro-smt/src/test/java/io/ekbatan/test/event_pipeline/avro_smt/EventStreamingAvroSmtIntegrationTest.java) — same Testcontainers shape, plus it mounts the SMT fat-jar and `.avsc` files into the Debezium container.
 
+**Production error handling:** the SMTs deliberately throw for malformed real events (for example `event_type` is set but `payload` is `NULL`, or no schema/descriptor is configured). In production Debezium connector configs, set Kafka Connect tolerance/logging such as:
+
+```properties
+errors.retry.timeout=600000
+errors.retry.delay.max.ms=30000
+errors.tolerance=all
+errors.log.enable=true
+errors.log.include.messages=false
+```
+
+Kafka Connect's built-in `errors.deadletterqueue.topic.name` is documented for sink connector records and their transforms/converters. For Debezium source SMT failures, only set DLQ properties if your Connect distribution explicitly supports source-side DLQs; otherwise rely on Connect logs/metrics plus the durable `eventlog.events` row, and put DLQ handling in the downstream router/consumer.
+
 ### Other shipping options (not wired up, but valid)
 
 - **Background poller** — a job that `SELECT ... FROM eventlog.events WHERE ... FOR UPDATE SKIP LOCKED`, publishes, deletes/marks-published. Works with any broker. No CDC needed.

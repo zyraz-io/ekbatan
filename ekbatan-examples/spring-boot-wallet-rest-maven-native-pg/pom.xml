@@ -72,20 +72,20 @@
 
     <dependencies>
         <!-- ── Ekbatan ───────────────────────────────────────────────────────────── -->
-        <!-- The Spring Boot starter pulls ekbatan-core, the annotation processor, the local-event-handler,
+        <!-- The Spring Boot starter pulls ekbatan-core, the local-event-handler,
              and distributed-jobs transitively. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-spring-boot-starter</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
-        <!-- The annotation processor jar must be on the compile classpath so the @AutoBuilder annotation
-             is visible to the compiler. The processor itself is wired up via maven-compiler-plugin's
-             <annotationProcessorPaths> below. -->
+        <!-- @AutoBuilder is compile-time only: provided lets javac see the annotation;
+             annotationProcessorPaths runs the processor below. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,

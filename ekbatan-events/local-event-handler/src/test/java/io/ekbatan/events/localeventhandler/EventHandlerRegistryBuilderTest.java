@@ -1,6 +1,7 @@
 package io.ekbatan.events.localeventhandler;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.ekbatan.core.domain.ModelEvent;
 import java.util.List;
@@ -27,6 +28,20 @@ class EventHandlerRegistryBuilderTest {
         assertThat(registry.subscribersFor("BarEvent")).containsExactly("gamma");
         assertThat(registry.subscribersFor("UnknownEvent")).isEmpty();
         assertThat(registry.handledEventTypes()).containsExactlyInAnyOrder("FooEvent", "BarEvent");
+    }
+
+    @Test
+    void withHandler_rejects_different_event_classes_with_same_simple_name() {
+        var first = new TestHandler("first", FirstNamespace.CollidingEvent.class);
+        var second = new TestHandler("second", SecondNamespace.CollidingEvent.class);
+
+        assertThatThrownBy(() -> EventHandlerRegistry.eventHandlerRegistry()
+                        .withHandler(first)
+                        .withHandler(second))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Event type simple name collision: CollidingEvent")
+                .hasMessageContaining(FirstNamespace.CollidingEvent.class.getName())
+                .hasMessageContaining(SecondNamespace.CollidingEvent.class.getName());
     }
 
     static final class TestHandler implements EventHandler<TestModelEvent> {
@@ -68,6 +83,22 @@ class EventHandlerRegistryBuilderTest {
     static final class BarEvent extends TestModelEvent {
         BarEvent() {
             super("bar-id");
+        }
+    }
+
+    static final class FirstNamespace {
+        static final class CollidingEvent extends TestModelEvent {
+            CollidingEvent() {
+                super("first-id");
+            }
+        }
+    }
+
+    static final class SecondNamespace {
+        static final class CollidingEvent extends TestModelEvent {
+            CollidingEvent() {
+                super("second-id");
+            }
         }
     }
 

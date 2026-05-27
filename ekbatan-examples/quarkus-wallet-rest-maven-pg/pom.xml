@@ -75,17 +75,18 @@
 
     <dependencies>
         <!-- ── Ekbatan ───────────────────────────────────────────────────────────── -->
-        <!-- The Quarkus extension pulls ekbatan-core + handlers + jobs + AP jar transitively. -->
+        <!-- The Quarkus extension pulls ekbatan-core + handlers + jobs transitively. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-quarkus</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
-        <!-- @AutoBuilder dual-path, part 1. -->
+        <!-- @AutoBuilder is compile-time only. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>

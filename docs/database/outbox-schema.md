@@ -30,6 +30,8 @@ CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
 
 One row per emitted event. Each row carries everything a downstream consumer needs — the action that caused it, when it ran, the params it received, the model that changed, and the event payload itself. Because every row already includes its action context, downstream consumers don't need to join back to anything: they tail the table and ship rows.
 
+`event_type` stores the event class's simple name, not its fully-qualified package name. The default `SingleTableJsonEventPersister` rejects two different event classes with the same simple name in one process, so a service cannot silently write ambiguous event rows.
+
 > **`delivered` has no SQL `DEFAULT`, by recommendation.** `SingleTableJsonEventPersister` writes it as `FALSE` on every insert, so the column doesn't need a DDL default — and Ekbatan generally prefers having the framework code be the single source of truth for "what gets written when nothing else is supplied," instead of letting a dialect-specific DDL clause silently fill in. This is a recommendation rather than a hard rule (the project uses `DEFAULT` where it adds clarity, e.g. `attempts INT NOT NULL DEFAULT 0` in `event_notifications`). Hand-written admin SQL or test fixtures touching `eventlog.events` must include the column.
 
 ## Sentinel rows

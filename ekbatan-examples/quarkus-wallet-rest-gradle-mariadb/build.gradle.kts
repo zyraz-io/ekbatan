@@ -61,13 +61,12 @@ dependencies {
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:$quarkusVersion"))
 
     // ── Ekbatan ─────────────────────────────────────────────────────────────
-    // The Quarkus extension pulls ekbatan-core, the annotation processor, the
-    // local-event-handler, and distributed-jobs transitively.
+    // The Quarkus extension pulls ekbatan-core, the local-event-handler,
+    // and distributed-jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-quarkus:$ekbatanVersion")
-    // The annotation processor jar needs to be on BOTH paths: `annotationProcessor` so javac
-    // runs the @AutoBuilder processor, and `implementation` so the @AutoBuilder annotation
-    // itself is visible to the compiler when the source code is parsed.
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    // @AutoBuilder is compile-time only: compileOnly exposes the annotation to javac,
+    // annotationProcessor runs the processor that emits *Builder classes.
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
     // Used by the domain classes for Validate.notNull / Validate.isTrue style guards.

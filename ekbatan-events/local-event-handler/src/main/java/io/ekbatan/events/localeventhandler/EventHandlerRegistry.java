@@ -83,6 +83,7 @@ public final class EventHandlerRegistry {
     public static final class Builder {
 
         private final Map<String, EventHandler<?>> handlersByName = new HashMap<>();
+        private final Map<String, Class<?>> eventTypesBySimpleName = new HashMap<>();
         private final Map<String, List<String>> namesByEventType = new LinkedHashMap<>();
 
         private Builder() {}
@@ -97,14 +98,28 @@ public final class EventHandlerRegistry {
             Validate.notNull(handler, "handler cannot be null");
             final var name = Validate.notBlank(handler.name(), "handler.name() cannot be blank");
             final var eventType = Validate.notNull(handler.eventType(), "handler.eventType() cannot be null");
+            final var eventTypeSimpleName =
+                    Validate.notBlank(eventType.getSimpleName(), "handler.eventType().getSimpleName() cannot be blank");
 
             if (handlersByName.containsKey(name)) {
                 throw new IllegalArgumentException(
                         "Handler name already registered: " + name + " (handlers must have unique names)");
             }
+
+            final var previousEventType = eventTypesBySimpleName.get(eventTypeSimpleName);
+            if (previousEventType != null && !previousEventType.equals(eventType)) {
+                throw new IllegalArgumentException("Event type simple name collision: "
+                        + eventTypeSimpleName
+                        + " maps to both "
+                        + previousEventType.getName()
+                        + " and "
+                        + eventType.getName());
+            }
+
+            eventTypesBySimpleName.put(eventTypeSimpleName, eventType);
             handlersByName.put(name, handler);
             namesByEventType
-                    .computeIfAbsent(eventType.getSimpleName(), _ -> new ArrayList<>())
+                    .computeIfAbsent(eventTypeSimpleName, _ -> new ArrayList<>())
                     .add(name);
             return this;
         }

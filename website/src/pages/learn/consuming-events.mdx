@@ -183,7 +183,7 @@ ORDER BY created_date DESC;
 
 ## Path B — Debezium CDC → Kafka
 
-When you need fan-out beyond your own application (other services, a data lake, an analytics warehouse), tail the outbox with Debezium. The framework ships two Kafka Connect SMTs that turn outbox rows into Avro or Protobuf messages on per-event-type topics.
+When you need fan-out beyond your own application (other services, a data lake, an analytics warehouse), tail the outbox with Debezium. The framework ships two Kafka Connect SMTs that can turn real outbox event rows into Avro or Protobuf bytes before they reach Kafka. A downstream router can then fan the raw topic out to per-model or per-event topics.
 
 ### B.1 Set up Debezium
 
@@ -204,19 +204,29 @@ Point a Debezium Postgres source connector at the database. Capture only the out
     "table.include.list": "eventlog.events",
     "plugin.name": "pgoutput",
 
-    "transforms": "outbox",
-    "transforms.outbox.type": "io.ekbatan.events.streaming.debeziumsmt.avro.OutboxToAvroSmt",
-    "transforms.outbox.schema.registry.url": "http://schema-registry:8081"
+    "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+
+    "transforms": "encodeAvro",
+    "transforms.encodeAvro.type": "io.ekbatan.events.streaming.debeziumsmt.avro.OutboxToAvroTransform",
+    "transforms.encodeAvro.actionEventSchema": "/schemas/ActionEvent.avsc",
+    "transforms.encodeAvro.payloadSchemas": "WalletMoneyDepositedEvent:/schemas/WalletMoneyDepositedEvent.avsc",
+
+    "errors.retry.timeout": "600000",
+    "errors.retry.delay.max.ms": "30000",
+    "errors.tolerance": "all",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "false"
   }
 }
 ```
 
-The `OutboxToAvroSmt`:
+The `OutboxToAvroTransform`:
 - **Drops UPDATE rows** (i.e., the `delivered=true` flip from Path A). Only INSERTs reach Kafka.
-- **Routes by `event_type`** — `WalletMoneyDepositedEvent` lands on the `wallet.money-deposited` topic, `WalletCreatedEvent` on `wallet.created`, etc.
-- **Encodes the payload as Avro** with a schema registered in Confluent Schema Registry.
+- **Skips sentinel rows** where `event_type` is `NULL`.
+- **Throws for malformed real events** so Kafka Connect can retry, log, or skip according to your connector error settings.
+- **Encodes the row as Avro bytes** using `ActionEvent.avsc` plus the per-`event_type` payload schemas you mounted into the Connect container. No Schema Registry is required by the bundled SMT.
 
-For Protobuf, swap `OutboxToAvroSmt` → `OutboxToProtobufSmt`. See [Streaming (Debezium)](/reference/events/streaming/) for the full SMT options.
+For Protobuf, swap `OutboxToAvroTransform` → `OutboxToProtobufTransform` and use descriptor-set paths instead of Avro schema paths. See [Streaming (Debezium)](/reference/events/streaming/) for the full SMT options and the DLQ caveat for source connector failures.
 
 ### B.2 Consume from Kafka
 
@@ -227,21 +237,21 @@ var props = new Properties();
 props.put("bootstrap.servers", "kafka:9092");
 props.put("group.id", "warehouse");
 props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-props.put("value.deserializer", "io.confluent.kafka.serializers.KafkaAvroDeserializer");
-props.put("schema.registry.url", "http://schema-registry:8081");
-props.put("specific.avro.reader", "true");
+props.put("value.deserializer", "org.apache.kafka.common.serialization.ByteArrayDeserializer");
 
-try (var consumer = new KafkaConsumer<String, WalletMoneyDepositedEvent>(props)) {
-    consumer.subscribe(List.of("wallet.money-deposited"));
+try (var consumer = new KafkaConsumer<String, byte[]>(props)) {
+    consumer.subscribe(List.of("ekbatan.com.example.finance"));
     while (true) {
         for (var record : consumer.poll(Duration.ofSeconds(1))) {
-            System.out.printf("Got deposit: %s%n", record.value());
+            var bytes = record.value();
+            // Decode bytes as ActionEvent, then decode ActionEvent.payload
+            // with the schema matching ActionEvent.eventType.
         }
     }
 }
 ```
 
-The Avro schema is auto-registered by the SMT on first publish — your consumer just deserializes it.
+The Avro and Protobuf integration tests include small consumers and routers that show the full decode path. They are test scaffolding, not a production consumer framework.
 
 ## What just happened
 

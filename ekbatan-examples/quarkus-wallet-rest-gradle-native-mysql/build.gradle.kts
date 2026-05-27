@@ -57,7 +57,7 @@ dependencies {
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:$quarkusVersion"))
 
     implementation("io.github.zyraz-io:ekbatan-quarkus:$ekbatanVersion")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
     // Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,

@@ -57,7 +57,7 @@ dependencies {
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:$quarkusVersion"))
 
     implementation("io.github.zyraz-io:ekbatan-quarkus:$ekbatanVersion")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
     implementation("org.apache.commons:commons-lang3:3.20.0")

@@ -238,6 +238,25 @@ public abstract class BaseSingleTableJsonEventPersisterTest {
     }
 
     @Test
+    void should_reject_different_event_classes_with_same_simple_name() {
+        var persister = createPersister(new ObjectMapper());
+
+        assertThatThrownBy(() -> persister.persistActionEvents(
+                        "com.example.finance",
+                        "CollisionAction",
+                        Instant.now(),
+                        Instant.now(),
+                        new TestActionParams("collision", 1),
+                        List.of(new FirstNamespace.CollidingEvent(), new SecondNamespace.CollidingEvent()),
+                        ShardIdentifier.DEFAULT,
+                        UUID.randomUUID()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Event type simple name collision: CollidingEvent")
+                .hasMessageContaining(FirstNamespace.CollidingEvent.class.getName())
+                .hasMessageContaining(SecondNamespace.CollidingEvent.class.getName());
+    }
+
+    @Test
     void should_persist_namespace_on_every_row() {
         // GIVEN
         var objectMapper = new ObjectMapper();
@@ -347,5 +366,21 @@ public abstract class BaseSingleTableJsonEventPersisterTest {
                         UUID.randomUUID()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("actionParams must serialize to a JSON object");
+    }
+
+    static final class FirstNamespace {
+        static final class CollidingEvent extends ModelEvent<Object> {
+            CollidingEvent() {
+                super("first-id", Object.class);
+            }
+        }
+    }
+
+    static final class SecondNamespace {
+        static final class CollidingEvent extends ModelEvent<Object> {
+            CollidingEvent() {
+                super("second-id", Object.class);
+            }
+        }
     }
 }

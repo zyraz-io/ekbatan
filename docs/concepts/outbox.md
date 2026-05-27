@@ -41,6 +41,8 @@ var executor = ActionExecutor.Builder.actionExecutor()
         .build();
 ```
 
+`event_type` is the event class's simple name, e.g. `WalletMoneyDepositedEvent`, not the fully-qualified package name. This keeps package moves from changing the wire/database contract. The default persister guards that contract at runtime: if one service emits two different event classes with the same simple name, it throws instead of writing ambiguous rows.
+
 The on-disk shape of the outbox — the SQL DDL, the dialect-specific column types, the `delivered` column written on every insert, the `event_notifications` table the local-event-handler path adds for in-process dispatch, the indexes — lives in **[Outbox schema](../database/outbox-schema.md)**.
 
 ## Two consumer paths

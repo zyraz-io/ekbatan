@@ -76,6 +76,7 @@
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,

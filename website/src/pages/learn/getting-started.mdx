@@ -124,7 +124,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("org.springframework.boot:spring-boot-starter-flyway")
@@ -137,7 +137,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("org.springframework.boot:spring-boot-starter-flyway")
@@ -150,7 +150,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("org.springframework.boot:spring-boot-starter-flyway")
@@ -171,6 +171,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>org.springframework.boot</groupId>
@@ -194,6 +195,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>org.springframework.boot</groupId>
@@ -217,6 +219,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>org.springframework.boot</groupId>
@@ -232,7 +235,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("io.quarkus:quarkus-jdbc-postgresql")
@@ -244,7 +247,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("io.quarkus:quarkus-jdbc-mariadb")
@@ -256,7 +259,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("io.quarkus:quarkus-jdbc-mysql")
@@ -276,6 +279,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>io.quarkus</groupId>
@@ -299,6 +303,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>io.quarkus</groupId>
@@ -322,6 +327,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>io.quarkus</groupId>
@@ -337,7 +343,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-micronaut:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.3")  // CRITICAL — see "(5) Micronaut needs the AP line"
 
@@ -351,7 +357,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-micronaut:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.3")  // CRITICAL — see "(5) Micronaut needs the AP line"
 
@@ -365,7 +371,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-micronaut:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.3")  // CRITICAL — see "(5) Micronaut needs the AP line"
 
@@ -387,6 +393,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>io.micronaut.flyway</groupId>
@@ -415,6 +422,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>io.micronaut.flyway</groupId>
@@ -443,6 +451,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>io.micronaut.flyway</groupId>
@@ -463,7 +472,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-core:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("org.flywaydb:flyway-core:11.0.0")
@@ -475,7 +484,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-core:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("org.flywaydb:flyway-core:11.0.0")
@@ -487,7 +496,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-core:0.0.3")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("org.flywaydb:flyway-core:11.0.0")
@@ -507,6 +516,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>org.flywaydb</groupId>
@@ -532,6 +542,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>org.flywaydb</groupId>
@@ -557,6 +568,7 @@ Add the framework, your JDBC driver, and the framework-native Flyway extension.
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.0.3</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>org.flywaydb</groupId>
@@ -735,7 +747,7 @@ CREATE TABLE eventlog.events (
 CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
 
 CREATE INDEX events_undelivered
-    ON eventlog.events (event_date)
+    ON eventlog.events (event_type, event_date)
     WHERE delivered = FALSE;
 
 CREATE TABLE eventlog.event_notifications (
@@ -787,7 +799,7 @@ CREATE INDEX event_notifications_due
 CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
 -- MariaDB doesn't support partial indexes; the polling query filters
 -- delivered = FALSE at the predicate level instead.
-CREATE INDEX events_pending_fanout ON eventlog.events (event_date);
+CREATE INDEX events_pending_fanout ON eventlog.events (delivered, event_type, event_date);
 
 CREATE TABLE eventlog.event_notifications (
     id              UUID         PRIMARY KEY,
@@ -837,7 +849,7 @@ CREATE INDEX event_notifications_due ON eventlog.event_notifications (next_retry
 CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
 -- MySQL doesn't support partial indexes; the polling query filters
 -- delivered = FALSE at the predicate level instead.
-CREATE INDEX events_pending_fanout ON eventlog.events (event_date);
+CREATE INDEX events_pending_fanout ON eventlog.events (delivered, event_type, event_date);
 
 CREATE TABLE eventlog.event_notifications (
     id              CHAR(36)     CHARACTER SET ascii NOT NULL,

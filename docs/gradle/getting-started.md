@@ -27,13 +27,13 @@ repositories {
 }
 
 dependencies {
-    // (2) The starter — pulls ekbatan-core, the annotation processor jar, the local
-    // event handler, and distributed jobs transitively.
+    // (2) The starter — pulls ekbatan-core, the local event handler,
+    // and distributed jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.3")
 
-    // (3) @AutoBuilder dual-path: implementation so javac sees the annotation symbol,
-    // annotationProcessor so the processor actually runs and emits *Builder.java.
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    // (3) @AutoBuilder is compile-time only: compileOnly exposes the annotation to javac,
+    // annotationProcessor runs the processor that emits *Builder.java.
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("org.springframework.boot:spring-boot-starter-web")
@@ -73,11 +73,11 @@ dependencies {
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:3.34.6"))
 
     // (2) The Quarkus extension — pulls ekbatan-core + the local-event-handler +
-    // distributed-jobs + the annotation processor jar transitively.
+    // distributed-jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.3")
 
-    // (3) @AutoBuilder dual-path — same pattern as Spring Boot.
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    // (3) @AutoBuilder is compile-time only: compileOnly + annotationProcessor.
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("io.quarkus:quarkus-rest")
@@ -131,8 +131,8 @@ dependencies {
     // annotated classes and Micronaut treats them as plain non-beans at runtime.
     annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.3")
 
-    // (3) @AutoBuilder dual-path.
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    // (3) @AutoBuilder is compile-time only: compileOnly + annotationProcessor.
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     implementation("io.micronaut:micronaut-jackson-databind")
@@ -167,7 +167,7 @@ dependencies {
 
     // @AutoBuilder code generation — generates *Builder classes for Models/Entities.
     // Skip if you'd rather write the builders by hand.
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     // In-process event handlers (fan-out + handling jobs over the eventlog).
@@ -203,20 +203,20 @@ Quarkus' BOM doesn't pin jOOQ, but the codegen plugin's default version may not 
 
 | Stack | Coordinate | Pulls transitively |
 |---|---|---|
-| Spring Boot | `io.github.zyraz-io:ekbatan-spring-boot-starter` | `ekbatan-core`, `ekbatan-annotation-processor`, `ekbatan-local-event-handler`, `ekbatan-distributed-jobs` |
+| Spring Boot | `io.github.zyraz-io:ekbatan-spring-boot-starter` | `ekbatan-core`, `ekbatan-local-event-handler`, `ekbatan-distributed-jobs` |
 | Quarkus | `io.github.zyraz-io:ekbatan-quarkus` | same set |
 | Micronaut | `io.github.zyraz-io:ekbatan-micronaut` | same set |
 | Plain Java | `io.github.zyraz-io:ekbatan-core` (+ each optional module explicitly) | nothing transitively — see below |
 
-The four `@Ekbatan*` annotations (`@EkbatanAction`, `@EkbatanRepository`, `@EkbatanEventHandler`, `@EkbatanDistributedJob`) live in `ekbatan-annotation-processor` and come with the integration jars. You don't add them explicitly.
+The four `@Ekbatan*` annotations (`@EkbatanAction`, `@EkbatanRepository`, `@EkbatanEventHandler`, `@EkbatanDistributedJob`) live in `ekbatan-di-annotations` and come with the integration jars. You don't add them explicitly.
 
 ## (3) The annotation processor dual-path
 
-`@AutoBuilder` (used on every `Model` / `Entity`) is declared in `ekbatan-annotation-processor`. The class file has to be on **both** Gradle configurations:
+`@AutoBuilder` (used on every `Model` / `Entity`) is declared in `ekbatan-annotation-processor`. Keep it compile-time only by putting it on **both** of these Gradle configurations:
 
 ```kotlin
-// regular classpath — so javac sees the @AutoBuilder symbol when parsing your source
-implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+// compile classpath only — so javac sees @AutoBuilder without adding the jar at runtime
+compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
 // annotation processor classpath — so the processor actually runs and emits *Builder.java
 annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
@@ -224,7 +224,7 @@ annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
 This isn't redundant — `annotationProcessor` is isolated from the main compile classpath. Dropping one or the other breaks differently:
 
-- Without `implementation` → compile fails with `cannot find symbol: class AutoBuilder`.
+- Without `compileOnly` → compile fails with `cannot find symbol: class AutoBuilder`.
 - Without `annotationProcessor` → compile succeeds, processor never runs, you find out at the first reference to `WalletBuilder.wallet()` (`cannot find symbol: class WalletBuilder`).
 
 ## (4) `-parameters` is mandatory
@@ -255,7 +255,7 @@ Spring Boot and Quarkus don't need a separate annotation-processor line for thei
 
 ## (6) Optional add-ons
 
-The four integration jars (Spring Boot / Quarkus / Micronaut / Plain Java's `ekbatan-core`) pull the common modules — annotation processor, local event handler, distributed jobs — transitively. The following are deliberately *not* pulled; add them only when you need them:
+The DI integration dependencies pull the common runtime modules such as the local event handler and distributed jobs. `ekbatan-annotation-processor` stays explicit and compile-time only. The following are deliberately *not* pulled; add them only when you need them:
 
 ```kotlin
 // Redis-backed distributed KeyedLockProvider (Redisson under the hood).

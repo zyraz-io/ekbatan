@@ -36,10 +36,10 @@ val ekbatanVersion: String by project
 
 dependencies {
     // ── Ekbatan ─────────────────────────────────────────────────────────────
-    // The Spring Boot starter pulls ekbatan-core, the annotation processor,
-    // the local-event-handler, and distributed-jobs transitively.
+    // The Spring Boot starter pulls ekbatan-core, the local-event-handler,
+    // and distributed-jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:$ekbatanVersion")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
     // Used by the domain classes for Validate.notNull / Validate.isTrue style guards.

@@ -13,6 +13,8 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.apache.commons.lang3.Validate;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -35,6 +37,7 @@ public class SingleTableJsonEventPersister implements EventPersister {
 
     private final EventEntityRepository eventRepository;
     private final ObjectMapper objectMapper;
+    private final ConcurrentMap<String, Class<?>> eventTypesBySimpleName = new ConcurrentHashMap<>();
 
     /**
      * Constructs the persister.
@@ -94,7 +97,7 @@ public class SingleTableJsonEventPersister implements EventPersister {
                                         completionDate,
                                         event.modelId,
                                         event.modelName,
-                                        event.getClass().getSimpleName(),
+                                        eventTypeName(event),
                                         (ObjectNode) objectMapper.valueToTree(event),
                                         completionDate)
                                 .build())
@@ -118,5 +121,23 @@ public class SingleTableJsonEventPersister implements EventPersister {
                 serializedParams,
                 "actionParams must serialize to a JSON object; use a record/class params object, not null/scalar/list");
         return (ObjectNode) serializedParams;
+    }
+
+    private String eventTypeName(ModelEvent<?> event) {
+        final var eventClass = event.getClass();
+        final var eventTypeSimpleName =
+                Validate.notBlank(eventClass.getSimpleName(), "event class simple name cannot be blank");
+
+        final var previousEventClass = eventTypesBySimpleName.putIfAbsent(eventTypeSimpleName, eventClass);
+        if (previousEventClass != null && !previousEventClass.equals(eventClass)) {
+            throw new IllegalArgumentException("Event type simple name collision: "
+                    + eventTypeSimpleName
+                    + " maps to both "
+                    + previousEventClass.getName()
+                    + " and "
+                    + eventClass.getName());
+        }
+
+        return eventTypeSimpleName;
     }
 }

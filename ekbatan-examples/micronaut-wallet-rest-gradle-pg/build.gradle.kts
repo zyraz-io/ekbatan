@@ -47,7 +47,7 @@ application {
 
 dependencies {
     // ── Ekbatan ─────────────────────────────────────────────────────────────
-    // ekbatan-micronaut pulls ekbatan-core, the annotation processor, the local-event-handler,
+    // ekbatan-micronaut pulls ekbatan-core, the local-event-handler,
     // and distributed-jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-micronaut:$ekbatanVersion")
     // Required on the AP path: EkbatanStereotypeVisitor needs to be visible to micronaut-inject-java
@@ -56,7 +56,7 @@ dependencies {
     // classes as plain non-beans.
     annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:$ekbatanVersion")
     // The @AutoBuilder processor — same dual-path pattern as the Spring/Quarkus examples.
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     // micronaut-serde-processor generates compile-time `Serializer`/`Deserializer`
     // beans for any class annotated with `@Serdeable`. Required by `micronaut-serde-jackson`.

@@ -70,7 +70,7 @@ The framework's PG migrations use partial indexes to keep "due / pending" sweep 
 
 ```sql
 CREATE INDEX events_pending_fanout
-    ON eventlog.events (event_date)
+    ON eventlog.events (event_type, event_date)
     WHERE delivered = FALSE;
 
 CREATE INDEX event_notifications_due
@@ -78,7 +78,7 @@ CREATE INDEX event_notifications_due
     WHERE state IN ('PENDING', 'FAILED');
 ```
 
-For the MariaDB/MySQL equivalents, **drop the `WHERE` clause** and accept a full index. The selectivity loss is small in practice (the polling query already filters on `next_retry_at <= now()` plus state, and the index covers the leading column).
+For the MariaDB/MySQL equivalents, **drop the `WHERE` clause** and keep the predicate columns in the full index: `(delivered, event_type, event_date)` for fan-out and `(state, next_retry_at)` for due notifications.
 
 ## Repository field-definition pattern (cross-dialect repos)
 

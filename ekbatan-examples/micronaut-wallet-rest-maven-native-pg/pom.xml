@@ -74,6 +74,7 @@
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
+            <scope>provided</scope>
         </dependency>
         <!-- Force jOOQ 3.20 runtime; the Micronaut parent POM transitively pulls jOOQ 3.19 via
              its BOM, but the jooq-codegen-maven plugin generates classes against 3.20 APIs (e.g.

@@ -88,7 +88,7 @@ The two paths are not mutually exclusive — you can run JSON on a side topic fo
 The framework writes only **JSON** to `eventlog.events.payload`. Binary encoding is performed by the SMT in Kafka Connect, never by the application. This separation is deliberate:
 
 - **Database transactions stay small and fast** — serialization cost is kept out of the write path, and stale schemas don't make `executor.execute(...)` fail at commit time.
-- **Schema mismatches surface in Kafka Connect**, not in the app's hot path. Connect retries, sends to a DLQ, alerts — your app stays up.
+- **Schema mismatches surface in Kafka Connect**, not in the app's hot path. Connect can retry, log, alert, and in supported deployments route failures to a DLQ — your app stays up.
 - **Schema evolution is centralized** in the SMT configuration rather than smeared across every service that produces or consumes.
 - **Operators can read the outbox directly** with plain SQL — JSONB is grep-able, Avro bytes aren't.
 
@@ -119,6 +119,8 @@ ekbatan.com.example.finance
 ekbatan.com.example.finance.model.Wallet
 ekbatan.com.example.finance.event.WalletCreatedEvent
 ```
+
+`{EventType}` is the event class's simple name. The default outbox persister rejects simple-name collisions within one service, so topic routing stays package-move friendly without silently merging two different event classes.
 
 Three levels support three consumption patterns: *"give me everything from this service"* (raw), *"give me all events for this model"* (model), *"give me this specific event type"* (event).
 
@@ -155,9 +157,40 @@ Both:
 
 - **Drop ops other than `c` (create) and `r` (read/snapshot).** The `UPDATE delivered = TRUE` writes from the local-event-handler fan-out path are filtered out, so the in-process and Kafka paths can coexist on the same `eventlog.events` table without double-publishing.
 - **Skip sentinel rows** where `event_type IS NULL`.
+- **Throw `DataException` for corrupt event rows** such as `event_type IS NOT NULL` with `payload IS NULL`, missing Avro schema / protobuf descriptor mappings, or payloads that cannot be encoded. Sentinel rows are skipped; malformed real events should be visible to operators.
 - **Load schemas/descriptors from file paths** passed as transform properties at Kafka Connect startup. The schemas are exposed as Gradle named configurations on the consumer-side `action-event:avro` / `action-event:protobuf` modules so containerised setups can mount them in.
 
 The integration tests under [`ekbatan-integration-tests/event-pipeline`](../../ekbatan-integration-tests/event-pipeline) (the `debezium-kafka-avro-smt` and `debezium-kafka-protobuf-smt` subprojects) wire up Debezium + Kafka + the SMT in TestContainers as a working reference.
+
+### SMT error handling
+
+In CI and staging, fail fast is useful: a missing schema mapping should break the connector so you notice the pipeline is misconfigured. In production, a single corrupt outbox row should not wedge the connector forever. Add Kafka Connect error tolerance and logging to the Debezium connector config:
+
+```properties
+# Retry transient transform/converter failures for up to 10 minutes.
+errors.retry.timeout=600000
+errors.retry.delay.max.ms=30000
+
+# Skip records that still fail after retries instead of killing the connector task.
+errors.tolerance=all
+
+# Log the failed record context. Keep messages disabled unless your logs are allowed
+# to contain event payloads/action params.
+errors.log.enable=true
+errors.log.include.messages=false
+```
+
+With this mode, a bad real event is skipped after retry/logging and the connector advances. The source row remains in `eventlog.events`, so operations can inspect it by `event_type`, `event_date`, `action_id`, or the source offset reported in the Connect logs.
+
+Kafka Connect's built-in `errors.deadletterqueue.topic.name` support is documented for sink connector records and their transforms/converters. Do not assume it works for Debezium source SMT failures unless your Kafka Connect distribution explicitly documents source-side DLQ support. If it does, add the DLQ properties alongside the tolerance settings:
+
+```properties
+errors.deadletterqueue.topic.name=dbserver1.eventlog.events.errors
+errors.deadletterqueue.context.headers.enable=true
+errors.deadletterqueue.topic.replication.factor=3
+```
+
+For vanilla Apache Kafka Connect source connectors, treat Connect logs/metrics plus the durable outbox table as the recovery path, and put DLQ/retry handling in the downstream router or consumers where messages already exist in Kafka.
 
 ## Output topics partitioned by `model_id`
 

@@ -59,7 +59,7 @@ dependencies {
 
     // @AutoBuilder code generation — generates *Builder classes for Models/Entities
     // (skip if you'd rather write the builders by hand)
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.3")
 
     // In-process event handlers (fanout + handling jobs over the eventlog)

@@ -62,20 +62,20 @@
 
     <dependencies>
         <!-- ── Ekbatan ───────────────────────────────────────────────────────────── -->
-        <!-- The Micronaut integration jar pulls ekbatan-core, the annotation processor,
-             the local-event-handler, and distributed-jobs transitively. -->
+        <!-- The Micronaut integration jar pulls ekbatan-core, the local-event-handler,
+             and distributed-jobs transitively. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-micronaut</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
-        <!-- @AutoBuilder dual-path, part 1: regular classpath so javac sees the @AutoBuilder
-             annotation symbol when parsing source. Part 2 is the annotationProcessorPaths
-             entry on maven-compiler-plugin below. -->
+        <!-- @AutoBuilder is compile-time only: provided lets javac see the annotation;
+             annotationProcessorPaths runs the processor below. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
+            <scope>provided</scope>
         </dependency>
         <!-- Force jOOQ 3.20 runtime; the Micronaut parent POM transitively pulls jOOQ 3.19 via
              its BOM, but the jooq-codegen-maven plugin generates classes against 3.20 APIs (e.g.

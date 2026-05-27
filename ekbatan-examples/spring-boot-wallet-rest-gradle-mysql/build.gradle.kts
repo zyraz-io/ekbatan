@@ -61,7 +61,7 @@ jooq {
 dependencies {
     // ── Ekbatan ─────────────────────────────────────────────────────────────
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:$ekbatanVersion")
-    implementation("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
     // Used by the domain classes for Validate.notNull / Validate.isTrue style guards.
