@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.apache.commons.lang3.Validate;
 
 /**
@@ -17,13 +18,14 @@ import org.apache.commons.lang3.Validate;
  *
  * <p>Two readers consume this from the framework's side:
  * <ul>
- *   <li>{@code EventFanoutJob} calls {@link #subscribersFor(String)} to learn which
- *       handler names need notification rows for a given event type.</li>
+ *   <li>{@code EventFanoutJob} calls {@link #handledEventTypes()} and
+ *       {@link #subscribersFor(String)} to learn which source events are actionable and
+ *       which handler names need notification rows for each event type.</li>
  *   <li>{@code EventHandlingJob} calls {@link #handlerFor(String)} to route a claimed
  *       delivery to the matching handler instance.</li>
  * </ul>
  *
- * <p>Both methods are public for cross-package access from the framework's job classes;
+ * <p>These methods are public for cross-package access from the framework's job classes;
  * application code should not need to call them directly - they are framework hooks, not
  * part of the user-facing API.
  */
@@ -53,6 +55,16 @@ public final class EventHandlerRegistry {
      */
     public List<String> subscribersFor(String eventTypeSimpleName) {
         return namesByEventType.getOrDefault(eventTypeSimpleName, List.of());
+    }
+
+    /**
+     * Framework hook used by {@code EventFanoutJob}: the event type simple names that have
+     * at least one currently registered handler.
+     *
+     * @return handled event type simple names.
+     */
+    public Set<String> handledEventTypes() {
+        return namesByEventType.keySet();
     }
 
     /**

@@ -60,7 +60,7 @@ The `delivered` flag is part of the base schema above — every Ekbatan deployme
 
 ```sql
 CREATE INDEX events_undelivered
-    ON eventlog.events (event_date)
+    ON eventlog.events (event_type, event_date)
     WHERE delivered = FALSE;            -- partial index, PG only
 
 CREATE TABLE eventlog.event_notifications (
@@ -94,9 +94,9 @@ CREATE INDEX event_notifications_due
     WHERE state IN ('PENDING', 'FAILED');
 ```
 
-`EventFanoutJob` flips `delivered = TRUE` after materializing one `event_notifications` row per `(event × subscribed handler)`. `EventHandlingJob` then drains the notifications, invokes handlers, and transitions `state` to `SUCCEEDED` / `FAILED` / `EXPIRED`.
+`EventFanoutJob` only scans event types that currently have registered handlers, then flips `delivered = TRUE` after materializing one `event_notifications` row per `(event × subscribed handler)`. Events whose type has no subscriber remain `delivered = FALSE` and can be fanned out if a matching handler is deployed later. `EventHandlingJob` then drains the notifications, invokes handlers, and transitions `state` to `SUCCEEDED` / `FAILED` / `EXPIRED`.
 
-For MySQL/MariaDB, drop the `WHERE` clauses on the partial indexes (those dialects don't support them) and accept a full index. Selectivity loss is small in practice — the polling query already filters on `next_retry_at <= now()` plus state, and the index covers the leading column.
+For MySQL/MariaDB, drop the `WHERE` clauses on the partial indexes (those dialects don't support them) and use full composite indexes such as `(delivered, event_type, event_date)` for fan-out and `(state, next_retry_at)` for due notifications.
 
 A complete worked migration set for each dialect lives in [`ekbatan-integration-tests/local-event-handler/{pg,mysql,mariadb}/src/test/resources/db/migration/`](../../ekbatan-integration-tests/local-event-handler/).
 

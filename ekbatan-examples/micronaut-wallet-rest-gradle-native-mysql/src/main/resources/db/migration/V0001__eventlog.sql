@@ -20,7 +20,7 @@ CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
 -- No `WHERE delivered = FALSE` partial index — MySQL doesn't support partial indexes.
 -- The polling query filters on `delivered = FALSE` at the predicate level; the small
 -- selectivity loss on the index is acceptable in practice.
-CREATE INDEX events_pending_fanout ON eventlog.events (event_date);
+CREATE INDEX events_pending_fanout ON eventlog.events (delivered, event_type, event_date);
 
 CREATE TABLE eventlog.event_notifications (
     id              CHAR(36)     CHARACTER SET ascii NOT NULL,

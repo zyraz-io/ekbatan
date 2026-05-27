@@ -83,9 +83,8 @@ CREATE TABLE eventlog.events (
 CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
 
 -- No `WHERE delivered = FALSE` partial index — MariaDB doesn't support partial indexes.
--- The polling query filters on `delivered = FALSE` at the predicate level; the small
--- selectivity loss on the index is acceptable in practice.
-CREATE INDEX events_pending_fanout ON eventlog.events (event_date);
+-- Keep the fan-out predicate columns in the full index instead.
+CREATE INDEX events_pending_fanout ON eventlog.events (delivered, event_type, event_date);
 ```
 
 ### `eventlog.event_notifications` (only with `ekbatan-events-local-event-handler`)
@@ -240,7 +239,7 @@ dependencies {
 
 - **Native UUID (10.7+) — no converter for IDs.** MariaDB has a real `UUID` type; jOOQ maps it directly to `java.util.UUID`. No `withForcedTypes` entry for UUID. On a 10.6-or-earlier server you'd need `CHAR(36)` + `UuidStringConverter` like MySQL.
 - **`JSON`, not `JSONB`** — MariaDB has no JSONB. Use `JSONObjectNodeConverter` / `JSONArrayNodeConverter` (without the `B`). MariaDB stores `JSON` as `LONGTEXT` with a CHECK constraint internally; the JDBC driver reports it accordingly, which is why the forced-type regex `(?i:JSON)` works (and `(?i:JSON|LONGTEXT)` is necessary if you also have legitimate `LONGTEXT` columns). See [multi-database.md → Why MariaDB JSON columns still need a converter](multi-database.md#why-mariadb-json-columns-still-need-a-converter).
-- **No partial indexes.** Drop the `WHERE delivered = FALSE` and `WHERE state IN (…)` clauses from the Postgres migrations when porting. The polling queries still filter at predicate time — the index just becomes slightly less selective.
+- **No partial indexes.** Drop the `WHERE delivered = FALSE` and `WHERE state IN (…)` clauses from the Postgres migrations when porting, and put the predicate columns in the full indexes instead, e.g. `(delivered, event_type, event_date)` for fan-out.
 - **`DATETIME(6)`, not `TIMESTAMP`.** App-written columns use `DATETIME(6)` (6-digit fractional seconds, no implicit `ON UPDATE` semantics). `TIMESTAMP` has a different value range and quirks around `NULL` / `DEFAULT CURRENT_TIMESTAMP` — reserve it for db-scheduler's table.
 - **eventlog as a separate database.** Two consequences: a `V0000__create_eventlog_database.sql` migration, and an init script that grants the connecting user cross-database rights. Don't try to put `GRANT` statements in Flyway migrations — Flyway connects as the named user, which can't grant itself anything.
 - **Set the container timezone to UTC.** `withEnv("TZ", "UTC")` on the container, or `serverTimezone=UTC` on the JDBC URL. Without this, `DATETIME` columns silently shift values between read and write.

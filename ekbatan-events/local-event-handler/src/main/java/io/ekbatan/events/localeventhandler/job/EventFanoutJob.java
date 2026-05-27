@@ -24,8 +24,9 @@ import org.apache.commons.lang3.Validate;
 
 /**
  * {@link DistributedJob} that scans every shard's {@code eventlog.events} for newly-committed
- * undelivered events, materializes one {@code event_notifications} row per (event, subscribed
- * handler), and flips {@code delivered = TRUE} on the source events.
+ * undelivered events whose event type has at least one registered handler, materializes one
+ * {@code event_notifications} row per (event, subscribed handler), and flips
+ * {@code delivered = TRUE} on the source events.
  *
  * <p>One job instance handles all shards via {@link DatabaseRegistry#allTransactionManagers()}.
  * Each {@code execute()} runs a continuous round-by-round loop: each round drains <em>one
@@ -133,10 +134,12 @@ public final class EventFanoutJob extends DistributedJob {
     }
 
     private int drainBatch(TransactionManager tm) {
-        // One transaction per batch: select undelivered -> insert notifications -> mark delivered.
-        // Atomic across both tables on the same shard.
+        final var handledEventTypes = eventHandlerRegistry.handledEventTypes();
+        if (handledEventTypes.isEmpty()) return 0;
+
+        // One batch on one shard: select actionable source events, insert notifications, mark delivered.
         return tm.inTransaction(_ -> {
-            final var events = eventEntityRepository.findUndelivered(tm.shardIdentifier, batchSize);
+            final var events = eventEntityRepository.findUndelivered(tm.shardIdentifier, handledEventTypes, batchSize);
             if (events.isEmpty()) return 0;
 
             final var now = clock.instant();

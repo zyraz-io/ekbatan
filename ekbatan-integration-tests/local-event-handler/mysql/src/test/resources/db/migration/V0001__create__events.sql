@@ -17,4 +17,4 @@ CREATE TABLE eventlog.events (
 
 CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
 
-CREATE INDEX events_pending_fanout ON eventlog.events (event_date);
+CREATE INDEX events_pending_fanout ON eventlog.events (delivered, event_type, event_date);

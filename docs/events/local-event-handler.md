@@ -112,10 +112,10 @@ The opt-in for `EventHandlingJob` exists because some deployments want the fan-o
 
 ## Schema additions
 
-The `delivered` column on `eventlog.events` is part of the base outbox schema (see [outbox-schema.md](../database/outbox-schema.md)) — every Ekbatan deployment already has it, defaulted to `FALSE` on insert. The local-event-handler path adds an `events_undelivered` partial index for the fan-out scan and a new `eventlog.event_notifications` table. PostgreSQL:
+The `delivered` column on `eventlog.events` is part of the base outbox schema (see [outbox-schema.md](../database/outbox-schema.md)) — every Ekbatan deployment already has it, written as `FALSE` on insert. The local-event-handler path adds an `events_undelivered` partial index for the fan-out scan and a new `eventlog.event_notifications` table. PostgreSQL:
 
 ```sql
-CREATE INDEX events_undelivered ON eventlog.events (event_date) WHERE delivered = FALSE;
+CREATE INDEX events_undelivered ON eventlog.events (event_type, event_date) WHERE delivered = FALSE;
 
 CREATE TABLE eventlog.event_notifications (
     id              UUID         PRIMARY KEY,
@@ -156,7 +156,7 @@ The denormalization is deliberate: dispatch reads everything it needs from one n
 
 `EventFanoutJob` polls every shard in parallel on virtual threads. Each round:
 
-1. Drain a batch of undelivered events (`delivered = FALSE AND event_type IS NOT NULL`, limited, ordered by `event_date`).
+1. Drain a batch of undelivered events whose `event_type` currently has at least one registered handler (`delivered = FALSE AND event_type IN (...)`, limited, ordered by `event_date`).
 2. For each event, look up subscribed handler names from `EventHandlerRegistry` and insert one `event_notifications` row per `(event × handler)` with the full denormalized context. State `PENDING`, `attempts = 0`, `next_retry_at = now`.
 3. Mark the source events `delivered = TRUE` so they don't get re-fanned-out next round.
 4. If anything was drained, loop immediately; otherwise sleep `fanoutPollDelay`.
@@ -165,11 +165,13 @@ Idempotency: the insert uses `onConflictDoNothing()`, so a fan-out re-run after 
 
 Sentinel rows from `eventlog.events` (where `event_type IS NULL`) are skipped — they're metadata about actions that emitted no events and have no handler to invoke.
 
+Events whose `event_type` has no current subscriber are also left with `delivered = FALSE`. If a matching handler is deployed later, the next fan-out round can materialize notifications for those historical rows. That makes backfill explicit through handler deployment rather than silently acknowledging events no handler could receive.
+
 ## Dispatch
 
 `EventHandlingJob` polls every shard in parallel. Each round:
 
-1. Drain a batch of due notifications (`state IN ('PENDING', 'FAILED') AND next_retry_at <= now()`, limited, ordered by `next_retry_at`).
+1. Drain a batch of due notifications from the primary database (`state IN ('PENDING', 'FAILED') AND next_retry_at <= now()`, limited, ordered by `next_retry_at`). Dispatch reads from primary to avoid invoking handlers from stale replica rows that were already marked complete.
 2. **Pre-flight expiry check** — if `now > event_date + retentionWindow` (default 7 days), transition straight to `EXPIRED` without invoking the handler. Stale events don't burn CPU.
 3. For each non-expired notification, invoke the handler in parallel on a virtual thread:
    - **Success** → `state=SUCCEEDED`, `attempts++`.

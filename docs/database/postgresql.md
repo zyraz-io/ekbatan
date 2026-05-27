@@ -62,7 +62,7 @@ The in-process fan-out reads `eventlog.events`, materializes one notification ro
 
 ```sql
 CREATE INDEX events_undelivered
-    ON eventlog.events (event_date)
+    ON eventlog.events (event_type, event_date)
     WHERE delivered = FALSE;
 
 CREATE TABLE eventlog.event_notifications (

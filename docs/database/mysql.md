@@ -84,9 +84,8 @@ CREATE TABLE eventlog.events (
 CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
 
 -- No `WHERE delivered = FALSE` partial index — MySQL doesn't support partial indexes.
--- The polling query filters on `delivered = FALSE` at the predicate level; the small
--- selectivity loss on the index is acceptable in practice.
-CREATE INDEX events_pending_fanout ON eventlog.events (event_date);
+-- Keep the fan-out predicate columns in the full index instead.
+CREATE INDEX events_pending_fanout ON eventlog.events (delivered, event_type, event_date);
 ```
 
 ### `eventlog.event_notifications` (only with `ekbatan-events-local-event-handler`)
@@ -246,7 +245,7 @@ dependencies {
 
 - **No native UUID — pick the column shape.** MySQL has no UUID type. The framework uses `CHAR(36) CHARACTER SET ascii` because it's grep-able in logs and JDBC dumps. `BINARY(16)` (with `UuidBinaryConverter`) is more compact but harder to debug — switch only if you have a concrete reason. Both converters live under `io.ekbatan.core.persistence.jooq.converter.mysql`.
 - **`CHARACTER SET ascii` on UUID columns** keeps each char at one byte and tightens index locality. Don't drop it.
-- **No partial indexes.** Drop the `WHERE delivered = FALSE` and `WHERE state IN (…)` clauses from the Postgres migrations when porting. The polling queries still filter at predicate time — the index just becomes slightly less selective.
+- **No partial indexes.** Drop the `WHERE delivered = FALSE` and `WHERE state IN (…)` clauses from the Postgres migrations when porting, and put the predicate columns in the full indexes instead, e.g. `(delivered, event_type, event_date)` for fan-out.
 - **`JSON`, not `JSONB`.** Use `JSONObjectNodeConverter` / `JSONArrayNodeConverter` (without the `B`).
 - **`DATETIME(6)`, not `TIMESTAMP`.** App-written columns use `DATETIME(6)`. `TIMESTAMP` has a smaller value range, implicit `ON UPDATE CURRENT_TIMESTAMP` quirks, and gets weird with `NULL` — reserve it for db-scheduler's table.
 - **eventlog as a separate database.** Two consequences: a `V0000__create_eventlog_database.sql` migration, and an init script granting the connecting user cross-database rights. Don't try to put `GRANT` statements in Flyway migrations.

@@ -29,7 +29,7 @@ The framework abstracts the dialect — every Java file is byte-identical to the
 3. **`CHAR(36) CHARACTER SET ascii` for UUIDs.** MySQL has no native UUID type. The `wallet`/`notification`/`event` tables use `CHAR(36)` with the ascii charset to keep each char at one byte. The jOOQ codegen block applies a forced type that maps `CHAR(36)` columns back to `java.util.UUID` via `UuidStringConverter`, so application code stays dialect-agnostic.
 4. **`DATETIME(6)`, not `TIMESTAMP`.** Application columns use `DATETIME(6)` to match Postgres's `TIMESTAMP` precision. (db-scheduler's `scheduled_tasks` table is an exception — it ships with `TIMESTAMP(6)` and we keep it verbatim.)
 5. **`JSON`, not `JSONB`.** MySQL has no JSONB. The forced-type entry uses `JSONObjectNodeConverter` (no `B`).
-6. **No partial indexes.** Postgres uses `WHERE delivered = FALSE` for the events index to keep polling cheap; MySQL doesn't support partial indexes, so we drop the `WHERE` clause and accept a slightly less selective index. The polling query still filters at the predicate level.
+6. **No partial indexes.** Postgres uses `WHERE delivered = FALSE` for the events index to keep polling cheap; MySQL doesn't support partial indexes, so the full index includes the predicate columns: `(delivered, event_type, event_date)`.
 
 For the per-dialect deep-dive, see [`docs/database/mysql.md`](../../docs/database/mysql.md).
 

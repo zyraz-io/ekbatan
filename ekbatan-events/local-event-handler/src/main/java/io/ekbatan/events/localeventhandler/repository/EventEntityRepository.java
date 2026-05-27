@@ -26,10 +26,10 @@ import tools.jackson.databind.node.ObjectNode;
  * {@code eventlog.events}. Returns {@link EventEntity} (defined in {@code ekbatan-core});
  * writes go through {@code SingleTableJsonEventPersister} in core, not through this class.
  *
- * <p>The two queries here ({@link #findUndelivered} and {@link #markDelivered}) are specific
- * to the fan-out job and have no place in core. Same field-constant convention as core's
- * repository: dialect-specific {@code UUID} and JSON column definitions chosen at
- * construction time, dialect-neutral fields shared as constants.
+ * <p>The two queries here ({@link #findUndelivered(ShardIdentifier, Collection, int)}
+ * and {@link #markDelivered}) are specific to the fan-out job and have no place in core.
+ * Same field-constant convention as core's repository: dialect-specific {@code UUID} and
+ * JSON column definitions resolved per shard, dialect-neutral fields shared as constants.
  */
 public final class EventEntityRepository {
 
@@ -91,38 +91,15 @@ public final class EventEntityRepository {
 
     private final DatabaseRegistry databaseRegistry;
 
-    private final Field<UUID> idField;
-    private final Field<UUID> actionIdField;
-    private final Field<ObjectNode> actionParamsField;
-    private final Field<ObjectNode> payloadField;
-
     /**
      * Constructs the repository against a database registry. Dialect-specific jOOQ field
-     * descriptors are chosen at construction time based on the default transaction manager's
-     * dialect, so per-row reads/writes pay no dialect-detection cost.
+     * descriptors are resolved per target shard, so mixed-dialect registries do not reuse
+     * the default shard's UUID/JSON column definitions.
      *
      * @param databaseRegistry the registry of per-shard connection pools / transaction managers.
      */
     public EventEntityRepository(DatabaseRegistry databaseRegistry) {
         this.databaseRegistry = Validate.notNull(databaseRegistry, "databaseRegistry cannot be null");
-        final var defaultTm = databaseRegistry.defaultTransactionManager();
-
-        if (defaultTm.dialect.family() == SQLDialect.MYSQL) {
-            this.idField = MYSQL_ID;
-            this.actionIdField = MYSQL_ACTION_ID;
-            this.actionParamsField = MYSQL_ACTION_PARAMS;
-            this.payloadField = MYSQL_PAYLOAD;
-        } else if (defaultTm.dialect.family() == SQLDialect.MARIADB) {
-            this.idField = MARIADB_ID;
-            this.actionIdField = MARIADB_ACTION_ID;
-            this.actionParamsField = MARIADB_ACTION_PARAMS;
-            this.payloadField = MARIADB_PAYLOAD;
-        } else {
-            this.idField = PG_ID;
-            this.actionIdField = PG_ACTION_ID;
-            this.actionParamsField = PG_ACTION_PARAMS;
-            this.payloadField = PG_PAYLOAD;
-        }
     }
 
     // --- db() variants - primary connection ---
@@ -174,48 +151,53 @@ public final class EventEntityRepository {
     }
 
     /**
-     * Read up to {@code limit} undelivered, non-sentinel events ordered by {@code event_date}
-     * ascending. Sentinel rows (zero-event actions, where {@code event_type} is NULL) are
-     * filtered out - they have no handlers to fan out to.
+     * Read up to {@code limit} undelivered events whose {@code event_type} has at least one
+     * currently registered handler, ordered by {@code event_date} ascending. Sentinel rows
+     * (zero-event actions, where {@code event_type} is NULL) are filtered out because NULL is
+     * never in {@code handledEventTypes}.
      *
-     * @param shard the shard to read from.
-     * @param limit max rows to return.
-     * @return the undelivered events on that shard, in chronological order.
+     * @param shard             the shard to read from.
+     * @param handledEventTypes event type simple names that currently have subscribers.
+     * @param limit             max rows to return.
+     * @return the actionable undelivered events on that shard, in chronological order.
      */
-    public List<EventEntity> findUndelivered(ShardIdentifier shard, int limit) {
+    public List<EventEntity> findUndelivered(ShardIdentifier shard, Collection<String> handledEventTypes, int limit) {
+        Validate.notNull(handledEventTypes, "handledEventTypes cannot be null");
+        if (handledEventTypes.isEmpty()) return List.of();
+        final var fields = fieldsFor(shard);
         return readonlyDb(shard)
                 .select(
-                        idField,
+                        fields.id(),
                         NAMESPACE,
-                        actionIdField,
+                        fields.actionId(),
                         ACTION_NAME,
-                        actionParamsField,
+                        fields.actionParams(),
                         STARTED_DATE,
                         COMPLETION_DATE,
                         MODEL_ID,
                         MODEL_TYPE,
                         EVENT_TYPE,
-                        payloadField,
+                        fields.payload(),
                         EVENT_DATE,
                         DELIVERED)
                 .from(EVENTS)
                 .where(DELIVERED.eq(false))
-                .and(EVENT_TYPE.isNotNull())
+                .and(EVENT_TYPE.in(handledEventTypes))
                 .orderBy(EVENT_DATE)
                 .limit(limit)
                 .fetch()
                 .map(r -> EventEntity.createEventEntity(
-                                r.get(idField),
+                                r.get(fields.id()),
                                 r.get(NAMESPACE),
-                                r.get(actionIdField),
+                                r.get(fields.actionId()),
                                 r.get(ACTION_NAME),
-                                r.get(actionParamsField),
+                                r.get(fields.actionParams()),
                                 r.get(STARTED_DATE),
                                 r.get(COMPLETION_DATE),
                                 r.get(MODEL_ID),
                                 r.get(MODEL_TYPE),
                                 r.get(EVENT_TYPE),
-                                r.get(payloadField),
+                                r.get(fields.payload()),
                                 r.get(EVENT_DATE))
                         .delivered(r.get(DELIVERED))
                         .build());
@@ -224,15 +206,30 @@ public final class EventEntityRepository {
     /**
      * Flip {@code delivered = TRUE} for the given event ids. Empty input is a no-op.
      *
-     * @param ids the event row ids to mark.
+     * @param ids   the event row ids to mark.
      * @param shard the shard the rows live on.
      */
     public void markDelivered(Collection<UUID> ids, ShardIdentifier shard) {
         if (ids.isEmpty()) return;
+        final var fields = fieldsFor(shard);
         txDbElseDb(shard)
                 .update(EVENTS)
                 .set(DELIVERED, true)
-                .where(idField.in(ids))
+                .where(fields.id().in(ids))
                 .execute();
     }
+
+    private DialectEventFields fieldsFor(ShardIdentifier shard) {
+        final var dialect = databaseRegistry.transactionManager(shard).dialect.family();
+        if (dialect == SQLDialect.MYSQL) {
+            return new DialectEventFields(MYSQL_ID, MYSQL_ACTION_ID, MYSQL_ACTION_PARAMS, MYSQL_PAYLOAD);
+        }
+        if (dialect == SQLDialect.MARIADB) {
+            return new DialectEventFields(MARIADB_ID, MARIADB_ACTION_ID, MARIADB_ACTION_PARAMS, MARIADB_PAYLOAD);
+        }
+        return new DialectEventFields(PG_ID, PG_ACTION_ID, PG_ACTION_PARAMS, PG_PAYLOAD);
+    }
+
+    private record DialectEventFields(
+            Field<UUID> id, Field<UUID> actionId, Field<ObjectNode> actionParams, Field<ObjectNode> payload) {}
 }

@@ -199,7 +199,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
     }
 
     @Test
-    void zero_subscribers_for_event_type_writes_no_notifications() throws Exception {
+    void zero_subscribers_for_event_type_leaves_events_available_for_later_fanout() throws Exception {
         // GIVEN
         var registry = eventHandlerRegistry().build();
 
@@ -218,9 +218,25 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
         }
         fanoutJob.drainOneRound();
 
-        // THEN - each shard's events are visited (delivered=true), no notifications anywhere
-        assertThat(countEventsDelivered(true)).isEqualTo(shards.size());
+        // THEN - events with no current subscribers remain undelivered
+        assertThat(countEventsDelivered(false)).isEqualTo(shards.size());
+        assertThat(countEventsDelivered(true)).isZero();
         assertThat(countNotifications("PENDING")).isZero();
+
+        // WHEN - a handler for that event type is registered later
+        var emailHandler = new WidgetCreatedEmailHandler();
+        var laterRegistry = eventHandlerRegistry().withHandler(emailHandler).build();
+        var laterFanoutJob = eventFanoutJob()
+                .databaseRegistry(databaseRegistry)
+                .eventHandlerRegistry(laterRegistry)
+                .clock(Clock.systemUTC())
+                .build();
+        laterFanoutJob.drainOneRound();
+
+        // THEN - the previously unhandled events are fanned out to the new handler
+        assertThat(countEventsDelivered(false)).isZero();
+        assertThat(countEventsDelivered(true)).isEqualTo(shards.size());
+        assertThat(countNotifications("PENDING")).isEqualTo(shards.size());
     }
 
     @Test

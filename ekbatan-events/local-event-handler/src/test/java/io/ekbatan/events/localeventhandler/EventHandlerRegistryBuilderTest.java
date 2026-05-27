@@ -26,6 +26,7 @@ class EventHandlerRegistryBuilderTest {
         assertThat(registry.subscribersFor("FooEvent")).containsExactlyInAnyOrder("alpha", "beta");
         assertThat(registry.subscribersFor("BarEvent")).containsExactly("gamma");
         assertThat(registry.subscribersFor("UnknownEvent")).isEmpty();
+        assertThat(registry.handledEventTypes()).containsExactlyInAnyOrder("FooEvent", "BarEvent");
     }
 
     static final class TestHandler implements EventHandler<TestModelEvent> {
