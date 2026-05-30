@@ -194,31 +194,31 @@ ekbatan.namespace=com.example.wallets
 ekbatan.local-event-handler.handling.enabled=true
 
 # Sharding — single shard pointing at PG.
-ekbatan.sharding.defaultShard.group=0
-ekbatan.sharding.defaultShard.member=0
+ekbatan.sharding.default-shard.group=0
+ekbatan.sharding.default-shard.member=0
 ekbatan.sharding.groups[0].group=0
 ekbatan.sharding.groups[0].name=default
 ekbatan.sharding.groups[0].members[0].member=0
-ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl=jdbc:postgresql://primary:5432/wallets
-ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username=wallets_app
-ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password=${APP_DB_PASSWORD}
-ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize=20
-ekbatan.sharding.groups[0].members[0].configs.primaryConfig.driverClassName=org.postgresql.Driver
+ekbatan.sharding.groups[0].members[0].configs.primary-config.jdbc-url=jdbc:postgresql://primary:5432/wallets
+ekbatan.sharding.groups[0].members[0].configs.primary-config.username=wallets_app
+ekbatan.sharding.groups[0].members[0].configs.primary-config.password=${APP_DB_PASSWORD}
+ekbatan.sharding.groups[0].members[0].configs.primary-config.maximum-pool-size=20
+ekbatan.sharding.groups[0].members[0].configs.primary-config.driver-class-name=org.postgresql.Driver
 
-ekbatan.sharding.groups[0].members[0].configs.secondaryConfig.jdbcUrl=jdbc:postgresql://replica:5432/wallets
-ekbatan.sharding.groups[0].members[0].configs.secondaryConfig.username=wallets_app_ro
-ekbatan.sharding.groups[0].members[0].configs.secondaryConfig.password=${APP_DB_PASSWORD}
-ekbatan.sharding.groups[0].members[0].configs.secondaryConfig.maximumPoolSize=20
-ekbatan.sharding.groups[0].members[0].configs.secondaryConfig.driverClassName=org.postgresql.Driver
+ekbatan.sharding.groups[0].members[0].configs.secondary-config.jdbc-url=jdbc:postgresql://replica:5432/wallets
+ekbatan.sharding.groups[0].members[0].configs.secondary-config.username=wallets_app_ro
+ekbatan.sharding.groups[0].members[0].configs.secondary-config.password=${APP_DB_PASSWORD}
+ekbatan.sharding.groups[0].members[0].configs.secondary-config.maximum-pool-size=20
+ekbatan.sharding.groups[0].members[0].configs.secondary-config.driver-class-name=org.postgresql.Driver
 
-ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl=jdbc:postgresql://primary:5432/wallets
-ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username=wallets_app
-ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password=${APP_DB_PASSWORD}
-ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize=5
-ekbatan.sharding.groups[0].members[0].configs.jobsConfig.driverClassName=org.postgresql.Driver
+ekbatan.sharding.groups[0].members[0].configs.jobs-config.jdbc-url=jdbc:postgresql://primary:5432/wallets
+ekbatan.sharding.groups[0].members[0].configs.jobs-config.username=wallets_app
+ekbatan.sharding.groups[0].members[0].configs.jobs-config.password=${APP_DB_PASSWORD}
+ekbatan.sharding.groups[0].members[0].configs.jobs-config.maximum-pool-size=5
+ekbatan.sharding.groups[0].members[0].configs.jobs-config.driver-class-name=org.postgresql.Driver
 ```
 
-> **`driverClassName` is explicitly required for Quarkus.** SmallRye Config + the Quarkus runtime classloader don't always discover the JDBC `Driver` SPI during the Arc producer phase the way a vanilla JVM's `DriverManager` does. Setting `driverClassName` makes Hikari `Class.forName(...)` the driver explicitly. (Spring Boot and Micronaut don't usually need this.)
+> **`driver-class-name` is explicitly required for Quarkus.** SmallRye Config + the Quarkus runtime classloader don't always discover the JDBC `Driver` SPI during the Arc producer phase the way a vanilla JVM's `DriverManager` does. Setting `driver-class-name` makes Hikari `Class.forName(...)` the driver explicitly. (Spring Boot and Micronaut don't usually need this.)
 
 The `ekbatan.sharding.*` subtree mirrors the structure described in [docs/database/sharding.md](../database/sharding.md).
 
@@ -404,7 +404,7 @@ For broader native-image considerations, see [docs/runtime/native-image.md](../r
 
 ### Optional knobs
 
-Same `ekbatan.namespace` / `ekbatan.local-event-handler.*` / `ekbatan.jobs.*` properties as Spring (with kebab-case in `application.properties`):
+Same `ekbatan.namespace` / `ekbatan.local-event-handler.*` / `ekbatan.jobs.*` properties as Spring. Both kebab-case and camelCase keys are accepted; the extension normalizes keys before binding them to Ekbatan's typed config classes. This includes root names (`local-event-handler` / `localEventHandler`), leaf names (`fanout-poll-delay` / `fanoutPollDelay`, `polling-interval` / `pollingInterval`), and shard datasource slots (`jobs-config` / `jobsConfig`, `lock-config` / `lockConfig`). Java lookups through `configFor(...)` must use camelCase: `configFor("jobsConfig")`, `configFor("lockConfig")`.
 
 ```properties
 ekbatan.local-event-handler.fanout-poll-delay=200ms

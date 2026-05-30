@@ -72,9 +72,9 @@ public class EkbatanCoreConfiguration {
      * the sharding config classes via {@code @JsonDeserialize} / {@code @JsonPOJOBuilder} /
      * {@code @JsonIgnore}, so the mapper below picks it up without any extra module registration.
      *
-     * <p>Ekbatan's sharding YAML must use camelCase ({@code jdbcUrl}, {@code primaryConfig}) to
-     * match the Jackson Builder method names -- Spring stores keys verbatim, no kebab->camel
-     * normalisation.
+     * <p>Ekbatan accepts both camelCase ({@code jdbcUrl}, {@code primaryConfig}) and kebab-case
+     * ({@code jdbc-url}, {@code primary-config}) property names here; {@link #readSubtree}
+     * canonicalises keys before handing them to Jackson.
      *
      * @param environment Spring's environment, source of the {@code ekbatan.sharding.*} keys.
      * @return the parsed {@link ShardingConfig} for the running application.

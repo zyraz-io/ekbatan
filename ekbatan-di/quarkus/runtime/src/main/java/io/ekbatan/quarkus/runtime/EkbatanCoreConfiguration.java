@@ -49,9 +49,9 @@ public class EkbatanCoreConfiguration {
      * {@code [idx]} array notation (e.g. {@code groups[0].primaryConfig.jdbcUrl}) - the exact
      * shape JavaPropsMapper parses natively, so no custom tree reconstruction is needed.
      *
-     * <p>Ekbatan's sharding YAML must use camelCase ({@code jdbcUrl}, {@code primaryConfig}) to
-     * match the Jackson Builder method names - SmallRye stores keys verbatim, no kebab->camel
-     * normalisation.
+     * <p>Ekbatan accepts both camelCase ({@code jdbcUrl}, {@code primaryConfig}) and kebab-case
+     * ({@code jdbc-url}, {@code primary-config}) property names here; keys are canonicalised before
+     * they are handed to Jackson.
      *
      * <p>{@code @ConfigMapping} can't construct {@code DataSourceConfig} entries directly - they
      * have private constructors + Builders, and the {@code configs} map uses user-defined keys.

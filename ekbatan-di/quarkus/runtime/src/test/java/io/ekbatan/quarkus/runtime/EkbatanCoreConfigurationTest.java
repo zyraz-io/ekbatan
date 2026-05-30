@@ -71,7 +71,7 @@ class EkbatanCoreConfigurationTest {
         return new EkbatanCoreConfiguration().ekbatanShardingConfig();
     }
 
-    /** Minimal single-shard properties in camelCase - the only canonical form for sharding keys. */
+    /** Minimal single-shard properties in camelCase - the canonical form handed to Jackson after normalization. */
     private static Map<String, String> minimalCamelCase() {
         var p = new LinkedHashMap<String, String>();
         p.put("ekbatan.sharding.defaultShard.group", "0");

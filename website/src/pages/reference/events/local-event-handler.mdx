@@ -115,6 +115,8 @@ ekbatan:
 
 The opt-in for `EventHandlingJob` exists because some deployments want the fan-out path on (so events leave the outbox into `event_notifications`) without running handlers locally — e.g. a separate worker process picks them up. Default is **off**.
 
+The DI integrations accept both root spellings: `ekbatan.local-event-handler.*` and `ekbatan.localEventHandler.*`. Leaf properties can also be kebab-case or camelCase, for example `fanout-poll-delay` / `fanoutPollDelay`, `handling-poll-delay` / `handlingPollDelay`, `fanout-batch-size` / `fanoutBatchSize`, `handling-batch-size` / `handlingBatchSize`, `handling-max-backoff-cap` / `handlingMaxBackoffCap`, and `handling-retention-window` / `handlingRetentionWindow`.
+
 ## Schema additions
 
 The `delivered` column on `eventlog.events` is part of the base outbox schema (see [outbox-schema.md](/reference/outbox-schema/)) — every Ekbatan deployment already has it, written as `FALSE` on insert. The local-event-handler path adds an `events_undelivered` partial index for the fan-out scan and a new `eventlog.event_notifications` table. PostgreSQL:

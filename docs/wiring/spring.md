@@ -199,7 +199,7 @@ ekbatan:
       enabled: true
 
   sharding:
-    defaultShard:
+    default-shard:
       group: 0
       member: 0
 
@@ -209,24 +209,25 @@ ekbatan:
         members:
           - member: 0
             configs:
-              primaryConfig:
-                jdbcUrl: jdbc:postgresql://primary:5432/wallets
+              primary-config:
+                jdbc-url: jdbc:postgresql://primary:5432/wallets
                 username: wallets_app
                 password: ${APP_DB_PASSWORD}
-                maximumPoolSize: 20
-              secondaryConfig:
-                jdbcUrl: jdbc:postgresql://replica:5432/wallets
+                maximum-pool-size: 20
+              secondary-config:
+                jdbc-url: jdbc:postgresql://replica:5432/wallets
                 username: wallets_app_ro
                 password: ${APP_DB_PASSWORD}
-                maximumPoolSize: 20
-              jobsConfig:
-                jdbcUrl: jdbc:postgresql://primary:5432/wallets
+                maximum-pool-size: 20
+              jobs-config:
+                jdbc-url: jdbc:postgresql://primary:5432/wallets
                 username: wallets_app
                 password: ${APP_DB_PASSWORD}
-                maximumPoolSize: 5
+                maximum-pool-size: 5
 ```
 
 The `ekbatan.sharding.*` subtree mirrors the structure described in [docs/database/sharding.md](../database/sharding.md). For a single-database deployment, the shape above is all you need.
+Both kebab-case and camelCase config keys are accepted; the starter normalizes keys before binding them to Ekbatan's typed config classes. That includes `jobs-config` / `jobsConfig`, `lock-config` / `lockConfig`, and datasource leaves like `jdbc-url` / `jdbcUrl`. If application code reads an extra datasource from `ShardMemberConfig.configFor(...)`, pass the camelCase key (`configFor("jobsConfig")`, `configFor("lockConfig")`), not the kebab-case spelling.
 
 ### 5. Use it
 
@@ -266,9 +267,9 @@ If you only want the tutorial above, stop here. The rest is the reference for wh
 
 Listed in `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`:
 
-- **`EkbatanCoreConfiguration`** — produces `EkbatanConfigJacksonModule`, `ShardingConfig`, `DatabaseRegistry`, `Clock`, `RepositoryRegistry`, `ActionRegistry`, `ActionExecutor`. The executor is built with `ObjectProvider<EventPersister>`: if your application registers its own `EventPersister` bean (e.g. one that encrypts payloads or writes to a separate sink), that bean replaces the executor's default `SingleTableJsonEventPersister`. Otherwise the default is used — and that default already writes `delivered=false`, so the local-event-handler fan-out picks events up automatically.
+- **`EkbatanCoreConfiguration`** — produces `ShardingConfig`, `JobsConfig`, `LocalEventHandlerConfig`, `DatabaseRegistry`, `Clock`, `RepositoryRegistry`, `ActionRegistry`, `ActionExecutor`. The executor is built with `ObjectProvider<EventPersister>`: if your application registers its own `EventPersister` bean (e.g. one that encrypts payloads or writes to a separate sink), that bean replaces the executor's default `SingleTableJsonEventPersister`. Otherwise the default is used — and that default already writes `delivered=false`, so the local-event-handler fan-out picks events up automatically.
 - **`EkbatanLocalEventHandlerConfiguration`** — `@ConditionalOnClass(EventHandlerRegistry.class)` + `@ConditionalOnBean(EventHandler.class)`. Produces `EventHandlerRegistry`, `EventFanoutJob`, and conditionally `EventHandlingJob` (gated on `ekbatan.local-event-handler.handling.enabled=true`).
-- **`EkbatanDistributedJobsConfiguration`** — `@ConditionalOnClass(JobRegistry.class)` + `@ConditionalOnBean(DistributedJob.class)`. Produces `ConnectionProvider` (from `jobsConfig`) and `JobRegistry`. Started with `initMethod="start"` / `destroyMethod="stop"` so Spring manages the lifecycle.
+- **`EkbatanDistributedJobsConfiguration`** — `@ConditionalOnClass(JobRegistry.class)` + `@ConditionalOnBean(DistributedJob.class)`. Produces `ConnectionProvider` (from the `jobs-config` / `jobsConfig` slot) and `JobRegistry`. Started with `initMethod="start"` / `destroyMethod="stop"` so Spring manages the lifecycle.
 
 Each auto-config is `@ConditionalOnMissingBean`-gated, so you can override any bean by declaring your own.
 
@@ -443,6 +444,8 @@ See [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](../../ekbatan-example
 | `ekbatan.local-event-handler.handling.enabled` | `false` | Run `EventHandlingJob` in this process. Off by default so deployments with external consumers (Kafka) keep their `@EkbatanEventHandler` beans without an in-process consumer. |
 | `ekbatan.local-event-handler.fanout-poll-delay` / `handling-poll-delay` / `fanout-batch-size` / `handling-batch-size` / `handling-max-backoff-cap` / `handling-retention-window` | sensible defaults | Tunables for the fan-out and dispatch jobs — see [docs/events/local-event-handler.md](../events/local-event-handler.md) |
 | `ekbatan.jobs.polling-interval` / `heartbeat-interval` / `shutdown-max-wait` | sensible defaults | Tunables for `JobRegistry` — see [docs/jobs/distributed-jobs.md](../jobs/distributed-jobs.md) |
+
+All rows above also accept camelCase aliases: `ekbatan.localEventHandler.*`, `fanoutPollDelay`, `handlingPollDelay`, `handlingMaxBackoffCap`, `handlingRetentionWindow`, `ekbatan.jobs.pollingInterval`, `heartbeatInterval`, and `shutdownMaxWait`.
 
 ## What's deliberately *not* bridged
 

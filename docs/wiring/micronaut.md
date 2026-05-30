@@ -198,7 +198,7 @@ ekbatan:
       enabled: true
 
   sharding:
-    defaultShard:
+    default-shard:
       group: 0
       member: 0
 
@@ -208,27 +208,27 @@ ekbatan:
         members:
           - member: 0
             configs:
-              primaryConfig:
-                jdbcUrl: jdbc:postgresql://primary:5432/wallets
+              primary-config:
+                jdbc-url: jdbc:postgresql://primary:5432/wallets
                 username: wallets_app
                 password: ${APP_DB_PASSWORD}
-                maximumPoolSize: 20
-                driverClassName: org.postgresql.Driver
-              secondaryConfig:
-                jdbcUrl: jdbc:postgresql://replica:5432/wallets
+                maximum-pool-size: 20
+                driver-class-name: org.postgresql.Driver
+              secondary-config:
+                jdbc-url: jdbc:postgresql://replica:5432/wallets
                 username: wallets_app_ro
                 password: ${APP_DB_PASSWORD}
-                maximumPoolSize: 20
-                driverClassName: org.postgresql.Driver
-              jobsConfig:
-                jdbcUrl: jdbc:postgresql://primary:5432/wallets
+                maximum-pool-size: 20
+                driver-class-name: org.postgresql.Driver
+              jobs-config:
+                jdbc-url: jdbc:postgresql://primary:5432/wallets
                 username: wallets_app
                 password: ${APP_DB_PASSWORD}
-                maximumPoolSize: 5
-                driverClassName: org.postgresql.Driver
+                maximum-pool-size: 5
+                driver-class-name: org.postgresql.Driver
 ```
 
-> **`driverClassName` is recommended for Micronaut.** Not every Micronaut/Hikari combination discovers the JDBC `Driver` SPI when the JVM is started by the Gradle test worker or some launcher modes. Setting `driverClassName` makes Hikari `Class.forName(...)` it explicitly.
+> **`driver-class-name` is recommended for Micronaut.** Not every Micronaut/Hikari combination discovers the JDBC `Driver` SPI when the JVM is started by the Gradle test worker or some launcher modes. Setting `driver-class-name` makes Hikari `Class.forName(...)` it explicitly.
 
 Make sure `snakeyaml` is on the runtime classpath — Micronaut's `inspectRuntimeClasspath` verifies any `*.yml` has a YAML parser available.
 
@@ -284,9 +284,9 @@ Two fixes:
 
 In `io.ekbatan.micronaut`:
 
-- **`EkbatanCoreConfiguration`** — produces `EkbatanConfigJacksonModule`, `ShardingConfig`, `DatabaseRegistry`, `Clock`, `JsonMapper`, `RepositoryRegistry`, `ActionRegistry`, `ActionExecutor`. The executor's factory takes `Optional<EventPersister>`: if the application declares its own `EventPersister` `@Bean`, it replaces the executor's default `SingleTableJsonEventPersister`. Otherwise the default is used — and that default already writes `delivered=false`, so the local-event-handler fan-out picks events up automatically.
+- **`EkbatanCoreConfiguration`** — produces `ShardingConfig`, `JobsConfig`, `LocalEventHandlerConfig`, `DatabaseRegistry`, `Clock`, `JsonMapper`, `RepositoryRegistry`, `ActionRegistry`, `ActionExecutor`. The executor's factory takes `Optional<EventPersister>`: if the application declares its own `EventPersister` `@Bean`, it replaces the executor's default `SingleTableJsonEventPersister`. Otherwise the default is used — and that default already writes `delivered=false`, so the local-event-handler fan-out picks events up automatically.
 - **`EkbatanLocalEventHandlerConfiguration`** — `@Requires(classes = EventHandlerRegistry.class)`. Produces `EventHandlerRegistry`, `EventFanoutJob`, and conditionally `EventHandlingJob` (gated on `@Requires(property = "ekbatan.local-event-handler.handling.enabled", value = "true")`).
-- **`EkbatanDistributedJobsConfiguration`** — `@Requires(classes = JobRegistry.class)`. Produces `ConnectionProvider` (from `jobsConfig`) and `JobRegistry`. A nested `Lifecycle` class implements `ApplicationEventListener<StartupEvent>` for start, and a separate `@EventListener void onShutdown(ShutdownEvent)` handles graceful stop.
+- **`EkbatanDistributedJobsConfiguration`** — `@Requires(classes = JobRegistry.class)`. Produces `ConnectionProvider` (from the `jobs-config` / `jobsConfig` slot) and `JobRegistry`. A nested `Lifecycle` class implements `ApplicationEventListener<StartupEvent>` for start, and a separate `@EventListener void onShutdown(ShutdownEvent)` handles graceful stop.
 
 ### The four `@Ekbatan*` annotations
 
@@ -448,7 +448,7 @@ For broader native-image considerations, see [docs/runtime/native-image.md](../r
 
 ### Optional knobs
 
-Same `ekbatan.namespace` / `ekbatan.local-event-handler.*` / `ekbatan.jobs.*` properties as Spring/Quarkus (kebab-case in YAML or camelCase — Micronaut accepts both).
+Same `ekbatan.namespace` / `ekbatan.local-event-handler.*` / `ekbatan.jobs.*` properties as Spring/Quarkus. Both kebab-case and camelCase keys are accepted before binding. This includes root names (`local-event-handler` / `localEventHandler`), leaf names (`fanout-poll-delay` / `fanoutPollDelay`, `polling-interval` / `pollingInterval`), and shard datasource slots (`jobs-config` / `jobsConfig`, `lock-config` / `lockConfig`). Java lookups through `configFor(...)` must use camelCase: `configFor("jobsConfig")`, `configFor("lockConfig")`.
 
 ## What's deliberately *not* bridged
 

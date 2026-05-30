@@ -227,7 +227,7 @@ Rather than wiring `TransactionManager`s by hand, describe the shard topology as
 
 ```yaml
 sharding:
-  defaultShard:
+  default-shard:
     group: 0
     member: 0
 
@@ -238,29 +238,29 @@ sharding:
         - member: 0
           name: global-eu-1
           configs:
-            primaryConfig:                # required
-              jdbcUrl: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
+            primary-config:                # required
+              jdbc-url: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
               username: wallets_app
               password: ${EU_1_PASSWORD}
-              maximumPoolSize: 20
-              leakDetectionThreshold: 30000
-            secondaryConfig:              # optional, but encouraged
-              jdbcUrl: jdbc:postgresql://global-eu-1-ro.example.com:5432/wallets
+              maximum-pool-size: 20
+              leak-detection-threshold: 30000
+            secondary-config:              # optional, but encouraged
+              jdbc-url: jdbc:postgresql://global-eu-1-ro.example.com:5432/wallets
               username: wallets_app_ro
               password: ${EU_1_RO_PASSWORD}
-              maximumPoolSize: 20
-            lockConfig:                   # user-defined; consumed by your own code
-              jdbcUrl: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
+              maximum-pool-size: 20
+            lock-config:                   # user-defined; consumed by your own code
+              jdbc-url: jdbc:postgresql://global-eu-1-rw.example.com:5432/wallets
               username: wallets_lock
               password: ${EU_1_LOCK_PASSWORD}
-              maximumPoolSize: 50
-              leakDetectionThreshold: 0   # locks may sit idle while held; disable
+              maximum-pool-size: 50
+              leak-detection-threshold: 0   # locks may sit idle while held; disable
 
         - member: 1
           name: global-eu-2
           configs:
-            primaryConfig: { … }
-            secondaryConfig: { … }
+            primary-config: { … }
+            secondary-config: { … }
 
     - group: 1
       name: mexico
@@ -268,15 +268,16 @@ sharding:
         - member: 0
           name: mexico-cdmx-1
           configs:
-            primaryConfig: { … }
-            secondaryConfig: { … }
+            primary-config: { … }
+            secondary-config: { … }
 ```
 
 About the `configs:` map of each member:
 
-- **`primaryConfig` is required.** Every member must have one; missing it fails the build at startup.
-- **`secondaryConfig` is optional but encouraged.** If absent, non-transactional reads transparently fall back to `primaryConfig`. If present, they go to the replica, offloading primary.
-- **Any other named entry is user-defined.** `lockConfig`, `analyticsConfig`, `auditConfig`, etc. The framework doesn't consume them; your code reaches for them via `member.configFor("lockConfig")`. Use this to colocate, for example, a dedicated `KeyedLockProvider` connection pool with the data shard it serves (see [Pessimistic locking](keyed-locks.md)).
+- The examples use **kebab-case**, the canonical convention for Spring, Quarkus, and Micronaut. All three integrations also accept **camelCase** (`default-shard` / `defaultShard`, `primary-config` / `primaryConfig`, `jdbc-url` / `jdbcUrl`) and you can mix the two within one file; keys are normalised before binding.
+- **`primary-config` / `primaryConfig` is required.** Every member must have one; missing it fails the build at startup.
+- **`secondary-config` / `secondaryConfig` is optional but encouraged.** If absent, non-transactional reads transparently fall back to the primary pool. If present, they go to the replica, offloading primary.
+- **Any other named entry is user-defined.** `jobs-config` / `jobsConfig`, `lock-config` / `lockConfig`, `analytics-config` / `analyticsConfig`, etc. are equivalent in external config. After binding, the internal Java map key is always camelCase, so code must use `member.configFor("jobsConfig")`, `member.configFor("lockConfig")`, etc. Do not pass kebab-case to `configFor(...)`.
 
 ```java
 ShardMemberConfig member = …;

@@ -535,6 +535,8 @@ ekbatan:
 
 The structure is documented in [docs/database/sharding.md](../database/sharding.md) and the [Wiring with Spring Boot](../wiring/spring.md#4-the-configuration) page.
 
+The examples in this Maven page use camelCase, but the DI integrations also accept kebab-case: `default-shard` / `defaultShard`, `primary-config` / `primaryConfig`, `jobs-config` / `jobsConfig`, `lock-config` / `lockConfig`, and datasource leaves like `jdbc-url` / `jdbcUrl`. If Java code later reads a user-defined datasource via `member.configFor(...)`, use the camelCase key (`jobsConfig`, `lockConfig`), not the kebab-case spelling.
+
 ## Maven-property namespace pitfalls
 
 A few `<properties>` keys conflict with plugin behavior. None of them is Ekbatan-specific, but they bite hard if you don't know.

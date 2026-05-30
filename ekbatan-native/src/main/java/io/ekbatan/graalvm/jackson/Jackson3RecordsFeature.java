@@ -105,8 +105,8 @@ public final class Jackson3RecordsFeature implements Feature {
                 .enableClassInfo()
                 .enableMethodInfo()
                 .enableAnnotationInfo()
-                // Mixin classes (e.g. ShardIdentifierMixin in EkbatanConfigJacksonModule)
-                // are package-private inner classes - without this, ClassGraph skips them.
+                // Jackson helper classes can be package-private inner classes; without this,
+                // ClassGraph skips them.
                 .ignoreClassVisibility()
                 // Several @JsonCreator-annotated constructors in the project are private
                 // (e.g. WidgetCreatedEvent's deserialization ctor) - without this,

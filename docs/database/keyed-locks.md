@@ -161,11 +161,11 @@ var lockProvider = redisKeyedLockProvider()
 
 The same builder shape works for `MariaDBKeyedLockProvider`, `MySQLKeyedLockProvider`, and `InProcessKeyedLockProvider`.
 
-## Dedicated pool via the `lockConfig` slot
+## Dedicated pool via the `lock-config` / `lockConfig` slot
 
 Each held lease (and each thread blocked waiting for one) pins a JDBC connection for its entire lifetime. For lock-heavy workloads, **point the provider at a dedicated pool** so locks don't starve normal queries.
 
-Add a user-defined `lockConfig:` entry to the relevant member in your `ShardingConfig`:
+Add a user-defined `lock-config:` entry to the relevant member in your `ShardingConfig`. External config may use `lock-config` or `lockConfig`; datasource leaves may also use kebab-case or camelCase (`jdbc-url` / `jdbcUrl`, `maximum-pool-size` / `maximumPoolSize`, `leak-detection-threshold` / `leakDetectionThreshold`). After binding the Java key is always `lockConfig`, so `configFor(...)` must use camelCase.
 
 ```yaml
 sharding:
@@ -174,27 +174,27 @@ sharding:
       members:
         - member: 0
           configs:
-            primaryConfig:
-              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db
+            primary-config:
+              jdbc-url: jdbc:postgresql://primary-eu-1:5432/db
               username: app
               password: ${APP_PASSWORD}
-              maximumPoolSize: 20
+              maximum-pool-size: 20
 
-            secondaryConfig:
-              jdbcUrl: jdbc:postgresql://replica-eu-1:5432/db
+            secondary-config:
+              jdbc-url: jdbc:postgresql://replica-eu-1:5432/db
               username: app
               password: ${APP_PASSWORD}
-              maximumPoolSize: 10
+              maximum-pool-size: 10
 
             # Dedicated pool for KeyedLockProvider — keeps lock acquisitions
             # from competing for connections with normal queries.
-            lockConfig:
-              jdbcUrl: jdbc:postgresql://primary-eu-1:5432/db   # same DB; locks must coordinate on the same instance
+            lock-config:
+              jdbc-url: jdbc:postgresql://primary-eu-1:5432/db   # same DB; locks must coordinate on the same instance
               username: app
               password: ${APP_PASSWORD}
-              maximumPoolSize: 40                # per-instance — sized for the concurrent leases this instance holds
-              minimumIdle: 5
-              leakDetectionThreshold: 120000     # set comfortably above your largest expected maxHold
+              maximum-pool-size: 40              # per-instance — sized for the concurrent leases this instance holds
+              minimum-idle: 5
+              leak-detection-threshold: 120000   # set comfortably above your largest expected maxHold
 ```
 
 Pull it out and wire the provider:
@@ -231,5 +231,5 @@ If you're approaching that regime, consider:
 ## See also
 
 - [Models and Entities](../concepts/models-and-entities.md#optimistic-locking-always) — the optimistic locking baseline
-- [Sharding](sharding.md) — where the `lockConfig` slot lives
+- [Sharding](sharding.md) — where the `lock-config` / `lockConfig` slot lives
 - [Distributed background jobs](../jobs/distributed-jobs.md) — uses `KeyedLockProvider`-style cluster exclusivity through db-scheduler instead

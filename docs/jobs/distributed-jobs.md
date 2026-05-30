@@ -124,24 +124,26 @@ ekbatan:
     groups:
       - members:
           - configs:
-              primaryConfig: { … }
-              jobsConfig:                 # dedicated pool for the scheduler — see next section
-                jdbcUrl: jdbc:postgresql://primary:5432/app
+              primary-config: { … }
+              jobs-config:                 # dedicated pool for the scheduler — see next section
+                jdbc-url: jdbc:postgresql://primary:5432/app
                 username: app
                 password: ${APP_PASSWORD}
-                maximumPoolSize: 5
+                maximum-pool-size: 5
 ```
 
 `JobRegistry.start()` is wired to your DI container's lifecycle (Spring `initMethod`/`destroyMethod`, Quarkus `@Observes StartupEvent`/`ShutdownEvent`, Micronaut `ApplicationEventListener<StartupEvent>`).
+
+The `ekbatan.jobs.*` properties also accept camelCase aliases: `polling-interval` / `pollingInterval`, `heartbeat-interval` / `heartbeatInterval`, and `shutdown-max-wait` / `shutdownMaxWait`.
 
 ## Use a dedicated connection pool
 
 Use a dedicated `ConnectionProvider` for `JobRegistry` — separate from your primary application pool. db-scheduler polls continuously, so you don't want it competing with normal queries for connections. A small pool is enough (polling + heartbeats are low-volume).
 
-The DI integrations expect this pool under the user-defined `jobsConfig` slot of the default shard's first member, as shown above. Manual wiring uses `member.configFor("jobsConfig")` the same way.
+The DI integrations expect this pool under the user-defined `jobs-config` / `jobsConfig` slot of the default shard's first member, as shown above. Both spellings are accepted in external config. Manual wiring must use the canonical Java key: `member.configFor("jobsConfig")`, not `member.configFor("jobs-config")`.
 
 ## See also
 
 - [Wiring with Spring Boot](../wiring/spring.md) / [Quarkus](../wiring/quarkus.md) / [Micronaut](../wiring/micronaut.md) — `@EkbatanDistributedJob` discovery
-- [Sharding](../database/sharding.md) — where the `jobsConfig` slot lives
+- [Sharding](../database/sharding.md) — where the `jobs-config` / `jobsConfig` slot lives
 - [Listen-to-yourself: in-process event handlers](../events/local-event-handler.md) — both `EventFanoutJob` and `EventHandlingJob` are themselves `DistributedJob` instances registered with the same `JobRegistry`
