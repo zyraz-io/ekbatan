@@ -74,7 +74,7 @@ class LocalEventHandlerConfigJacksonBindingTest {
 
     @Test
     void jacksonBindsKebabCaseKeysToCamelCaseMethods() {
-        // What each DI's producer feeds to Jackson after stripping the prefix — kebab keys at
+        // What each DI's producer feeds to Jackson after stripping the prefix -- kebab keys at
         // every level (including the nested handling sub-tree).
         var tree = new LinkedHashMap<String, Object>();
         tree.put("fanout-poll-delay", "PT0.2S");

@@ -30,10 +30,9 @@ import org.junit.jupiter.api.Test;
  * releases it - SmallRye throws if a config is already registered for the same classloader, and
  * we don't want to leak between tests.
  *
- * <p>Casing note: SmallRye stores property names verbatim (no kebab → camel normalisation on
- * {@code getPropertyNames()}). The Micronaut binding tests pin both casing variants; here we only
- * cover camelCase, the documented canonical form for {@code ekbatan.sharding.*} - kebab-case keys
- * would land in the wrong map slot or fail the {@code FAIL_ON_UNKNOWN_PROPERTIES} check.
+ * <p>Casing note: SmallRye stores property names verbatim; EkbatanCoreConfiguration folds kebab
+ * segments to camelCase via {@code PropertyKeyNormalizer} before handing to Jackson. So users
+ * may write either spelling (or mix them) and both bind. The tests below pin both branches.
  */
 class EkbatanCoreConfigurationTest {
 
@@ -101,21 +100,48 @@ class EkbatanCoreConfigurationTest {
         }
 
         @Test
-        void kebabCaseLeafKeysAreRejected() {
-            // SmallRye doesn't normalise kebab → camel for raw getPropertyNames() iteration, so the
-            // verbatim "jdbc-url" reaches JavaPropsMapper and the strict mapper fails because the
-            // DataSourceConfig builder has no method matching the kebab spelling. This is the
-            // documented contract on EkbatanCoreConfiguration#ekbatanShardingConfig; pin it so a
-            // future refactor that adds normalisation won't silently change the property surface.
-            var p = minimalCamelCase();
-            var prefix = "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.";
-            p.remove(prefix + "jdbcUrl");
-            p.put(prefix + "jdbc-url", "jdbc:postgresql://h/db");
+        void bindsAllKebabCaseKeys() {
+            // EkbatanCoreConfiguration runs PropertyKeyNormalizer.kebabToCamel on each key segment
+            // before handing it to Jackson - kebab-spelled leaves and kebab-spelled map keys both
+            // resolve to the same canonical camelCase form, so the strict mapper sees the same
+            // input as the all-camelCase fixture above.
+            var p = new LinkedHashMap<String, String>();
+            p.put("ekbatan.sharding.default-shard.group", "0");
+            p.put("ekbatan.sharding.default-shard.member", "0");
+            p.put("ekbatan.sharding.groups[0].group", "0");
+            p.put("ekbatan.sharding.groups[0].name", "default");
+            p.put("ekbatan.sharding.groups[0].members[0].member", "0");
+            p.put("ekbatan.sharding.groups[0].members[0].configs.primary-config.jdbc-url", "jdbc:postgresql://h/db");
+            p.put("ekbatan.sharding.groups[0].members[0].configs.primary-config.username", "u");
+            p.put("ekbatan.sharding.groups[0].members[0].configs.primary-config.password", "p");
             registerConfig(p);
 
-            assertThatThrownBy(EkbatanCoreConfigurationTest::bind)
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("Failed to bind 'ekbatan.sharding'");
+            var cfg = bind();
+            assertThat(cfg.groups.get(0).members.get(0).configs)
+                    .containsKey("primaryConfig")
+                    .doesNotContainKey("primary-config");
+            assertThat(cfg.groups.get(0).members.get(0).configs.get("primaryConfig").jdbcUrl)
+                    .isEqualTo("jdbc:postgresql://h/db");
+        }
+
+        @Test
+        void bindsMixedCamelAndKebabCaseInSameTree() {
+            // Mixing styles inside one YAML/properties file is the whole point of the normaliser -
+            // both spellings collapse to the same canonical camelCase property.
+            var p = new LinkedHashMap<String, String>();
+            p.put("ekbatan.sharding.defaultShard.group", "0");
+            p.put("ekbatan.sharding.defaultShard.member", "0");
+            p.put("ekbatan.sharding.groups[0].group", "0");
+            p.put("ekbatan.sharding.groups[0].name", "default");
+            p.put("ekbatan.sharding.groups[0].members[0].member", "0");
+            // Mixed: camelCase configs-map key, kebab-case leaf properties.
+            p.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbc-url", "jdbc:postgresql://h/db");
+            p.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username", "u");
+            p.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password", "p");
+            registerConfig(p);
+
+            assertThat(bind().groups.get(0).members.get(0).configs.get("primaryConfig").jdbcUrl)
+                    .isEqualTo("jdbc:postgresql://h/db");
         }
     }
 
@@ -308,6 +334,34 @@ class EkbatanCoreConfigurationTest {
         }
 
         @Test
+        void bindsCamelCaseKeys() {
+            registerConfig(Map.of(
+                    "ekbatan.jobs.pollingInterval", "PT5S",
+                    "ekbatan.jobs.heartbeatInterval", "PT3S",
+                    "ekbatan.jobs.shutdownMaxWait", "PT30S"));
+
+            var cfg = new EkbatanCoreConfiguration().ekbatanJobsConfig();
+            assertThat(cfg.pollingInterval).contains(java.time.Duration.ofSeconds(5));
+            assertThat(cfg.heartbeatInterval).contains(java.time.Duration.ofSeconds(3));
+            assertThat(cfg.shutdownMaxWait).contains(java.time.Duration.ofSeconds(30));
+        }
+
+        @Test
+        void bindsMixedKebabAndCamelCaseKeys() {
+            // PropertyKeyNormalizer collapses both spellings to the same canonical form,
+            // so a user can mix them in the same config file with no surprises.
+            registerConfig(Map.of(
+                    "ekbatan.jobs.polling-interval", "PT5S", // kebab
+                    "ekbatan.jobs.heartbeatInterval", "PT3S", // camel
+                    "ekbatan.jobs.shutdown-max-wait", "PT30S")); // kebab
+
+            var cfg = new EkbatanCoreConfiguration().ekbatanJobsConfig();
+            assertThat(cfg.pollingInterval).contains(java.time.Duration.ofSeconds(5));
+            assertThat(cfg.heartbeatInterval).contains(java.time.Duration.ofSeconds(3));
+            assertThat(cfg.shutdownMaxWait).contains(java.time.Duration.ofSeconds(30));
+        }
+
+        @Test
         void failsOnUnknownProperty() {
             registerConfig(Map.of("ekbatan.jobs.not-a-real-field", "x"));
             assertThatThrownBy(() -> new EkbatanCoreConfiguration().ekbatanJobsConfig())
@@ -334,6 +388,55 @@ class EkbatanCoreConfigurationTest {
                     "ekbatan.local-event-handler.fanout-batch-size", "100",
                     "ekbatan.local-event-handler.handling-poll-delay", "PT0.15S",
                     "ekbatan.local-event-handler.handling.enabled", "true"));
+
+            var cfg = new EkbatanCoreConfiguration().ekbatanLocalEventHandlerConfig();
+            assertThat(cfg.fanoutPollDelay).contains(java.time.Duration.ofMillis(200));
+            assertThat(cfg.fanoutBatchSize).contains(100);
+            assertThat(cfg.handlingPollDelay).contains(java.time.Duration.ofMillis(150));
+            assertThat(cfg.handling.enabled).isTrue();
+        }
+
+        @Test
+        void bindsCamelCaseKeys() {
+            registerConfig(Map.of(
+                    "ekbatan.local-event-handler.fanoutPollDelay", "PT0.2S",
+                    "ekbatan.local-event-handler.fanoutBatchSize", "100",
+                    "ekbatan.local-event-handler.handlingPollDelay", "PT0.15S",
+                    "ekbatan.local-event-handler.handling.enabled", "true"));
+
+            var cfg = new EkbatanCoreConfiguration().ekbatanLocalEventHandlerConfig();
+            assertThat(cfg.fanoutPollDelay).contains(java.time.Duration.ofMillis(200));
+            assertThat(cfg.fanoutBatchSize).contains(100);
+            assertThat(cfg.handlingPollDelay).contains(java.time.Duration.ofMillis(150));
+            assertThat(cfg.handling.enabled).isTrue();
+        }
+
+        @Test
+        void bindsCamelCasedParentSegment() {
+            // The PARENT (`localEventHandler` vs `local-event-handler`) must also normalise so
+            // users can write the entire path in either style.
+            registerConfig(Map.of(
+                    "ekbatan.localEventHandler.fanoutPollDelay", "PT0.2S",
+                    "ekbatan.localEventHandler.fanoutBatchSize", "100",
+                    "ekbatan.localEventHandler.handlingPollDelay", "PT0.15S",
+                    "ekbatan.localEventHandler.handling.enabled", "true"));
+
+            var cfg = new EkbatanCoreConfiguration().ekbatanLocalEventHandlerConfig();
+            assertThat(cfg.fanoutPollDelay).contains(java.time.Duration.ofMillis(200));
+            assertThat(cfg.fanoutBatchSize).contains(100);
+            assertThat(cfg.handlingPollDelay).contains(java.time.Duration.ofMillis(150));
+            assertThat(cfg.handling.enabled).isTrue();
+        }
+
+        @Test
+        void bindsCamelCasedParentSegmentWithKebabLeaves() {
+            // Cross-form: camelCase parent + kebab leaves. Both halves get normalised
+            // independently so the configuration still binds.
+            registerConfig(Map.of(
+                    "ekbatan.localEventHandler.fanout-poll-delay", "PT0.2S",
+                    "ekbatan.localEventHandler.fanout-batch-size", "100",
+                    "ekbatan.localEventHandler.handling-poll-delay", "PT0.15S",
+                    "ekbatan.localEventHandler.handling.enabled", "true"));
 
             var cfg = new EkbatanCoreConfiguration().ekbatanLocalEventHandlerConfig();
             assertThat(cfg.fanoutPollDelay).contains(java.time.Duration.ofMillis(200));

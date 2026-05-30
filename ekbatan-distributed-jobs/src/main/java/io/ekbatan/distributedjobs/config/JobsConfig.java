@@ -8,10 +8,10 @@ import tools.jackson.databind.annotation.JsonPOJOBuilder;
 /**
  * Tuning configuration for the distributed job scheduler (db-scheduler under the hood). Bound
  * directly from {@code ekbatan.jobs.*} keys in {@code application.yml}/{@code application.properties}
- * via the Jackson hybrid path — each DI's {@code EkbatanCoreConfiguration} feeds the flat property
+ * via the Jackson hybrid path -- each DI's {@code EkbatanCoreConfiguration} feeds the flat property
  * map to {@code JavaPropsMapper} which materializes this builder.
  *
- * <p>Every knob is {@link Optional} — an absent value falls through to db-scheduler's framework
+ * <p>Every knob is {@link Optional} -- an absent value falls through to db-scheduler's framework
  * default at {@code JobRegistry.Builder}-apply time, so callers can set only the subset they care
  * about and leave the rest to the framework.
  */
@@ -33,7 +33,7 @@ public final class JobsConfig {
         this.shutdownMaxWait = builder.shutdownMaxWait;
     }
 
-    /** {@return a {@link JobsConfig} with no overrides — every knob falls through to framework defaults} */
+    /** {@return a {@link JobsConfig} with no overrides -- every knob falls through to framework defaults} */
     public static JobsConfig defaults() {
         return jobsConfig().build();
     }

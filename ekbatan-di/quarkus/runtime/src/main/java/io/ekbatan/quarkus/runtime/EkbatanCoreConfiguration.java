@@ -4,6 +4,7 @@ import io.ekbatan.core.action.Action;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.action.ActionRegistry;
 import io.ekbatan.core.action.persister.event.EventPersister;
+import io.ekbatan.core.config.PropertyKeyNormalizer;
 import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.repository.RepositoryRegistry;
@@ -22,7 +23,6 @@ import java.util.Properties;
 import org.eclipse.microprofile.config.ConfigProvider;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
-import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.dataformat.javaprop.JavaPropsMapper;
 
@@ -50,7 +50,7 @@ public class EkbatanCoreConfiguration {
      * shape JavaPropsMapper parses natively, so no custom tree reconstruction is needed.
      *
      * <p>Ekbatan's sharding YAML must use camelCase ({@code jdbcUrl}, {@code primaryConfig}) to
-     * match the Jackson Builder method names - SmallRye stores keys verbatim, no kebab→camel
+     * match the Jackson Builder method names - SmallRye stores keys verbatim, no kebab->camel
      * normalisation.
      *
      * <p>{@code @ConfigMapping} can't construct {@code DataSourceConfig} entries directly - they
@@ -65,11 +65,15 @@ public class EkbatanCoreConfiguration {
     @Singleton
     public ShardingConfig ekbatanShardingConfig() {
         var config = ConfigProvider.getConfig();
-        var prefix = "ekbatan.sharding.";
+        // The prefix has no hyphens so it's already canonical; for consistency with the optional
+        // subtrees we still match against the normalised key so any future kebab parent (or a
+        // weird `ekbatan.sharding.Default-Shard` from a user) bind identically.
+        var canonicalPrefix = PropertyKeyNormalizer.kebabToCamel("ekbatan.sharding.");
         var props = new Properties();
         for (var name : config.getPropertyNames()) {
-            if (!name.startsWith(prefix)) continue;
-            var sub = name.substring(prefix.length());
+            var canonical = PropertyKeyNormalizer.kebabToCamel(name);
+            if (!canonical.startsWith(canonicalPrefix)) continue;
+            var sub = canonical.substring(canonicalPrefix.length());
             if (sub.isEmpty()) continue;
             config.getOptionalValue(name, String.class).ifPresent(v -> props.setProperty(sub, v));
         }
@@ -110,7 +114,7 @@ public class EkbatanCoreConfiguration {
 
     /**
      * Binds the {@code ekbatan.local-event-handler} subtree from SmallRye Config into
-     * {@link LocalEventHandlerConfig} via the same Jackson hybrid path. Optional — falls through
+     * {@link LocalEventHandlerConfig} via the same Jackson hybrid path. Optional -- falls through
      * to {@link LocalEventHandlerConfig#defaults()} when no keys are present.
      *
      * @return the parsed {@link LocalEventHandlerConfig} for the running application.
@@ -123,26 +127,26 @@ public class EkbatanCoreConfiguration {
     }
 
     /**
-     * Shared helper for the optional Jackson-hybrid subtrees (jobs / local-event-handler). Reads
-     * SmallRye Config keys under {@code prefix} verbatim, applies a kebab-case naming strategy on
-     * the Jackson mapper so the framework's idiomatic {@code ekbatan.jobs.polling-interval} style
-     * keys reach the camelCase builder methods, and falls back to {@code ifEmpty} when no keys
-     * are present. (Sharding uses camelCase keys natively because the inner builder-method names
-     * include user-defined map entries; the kebab strategy stays scoped to this helper.)
+     * Shared helper for the optional Jackson-hybrid subtrees (jobs / local-event-handler). Folds
+     * kebab-case segments to camelCase via {@link PropertyKeyNormalizer} BEFORE prefix matching,
+     * so both the parent segment ({@code local-event-handler} vs {@code localEventHandler}) and
+     * every leaf ({@code polling-interval} vs {@code pollingInterval}) bind against the same
+     * canonical form. Falls back to {@code ifEmpty} when no keys are present.
      */
     private static <T> T bindSubtree(String prefix, Class<T> target, java.util.function.Supplier<T> ifEmpty) {
         var config = ConfigProvider.getConfig();
+        var canonicalPrefix = PropertyKeyNormalizer.kebabToCamel(prefix);
         var props = new Properties();
         for (var name : config.getPropertyNames()) {
-            if (!name.startsWith(prefix)) continue;
-            var sub = name.substring(prefix.length());
+            var canonical = PropertyKeyNormalizer.kebabToCamel(name);
+            if (!canonical.startsWith(canonicalPrefix)) continue;
+            var sub = canonical.substring(canonicalPrefix.length());
             if (sub.isEmpty()) continue;
             config.getOptionalValue(name, String.class).ifPresent(v -> props.setProperty(sub, v));
         }
         if (props.isEmpty()) return ifEmpty.get();
         var mapper = JavaPropsMapper.builder()
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                .propertyNamingStrategy(PropertyNamingStrategies.KEBAB_CASE)
                 .build();
         try {
             return mapper.readPropertiesAs(props, target);

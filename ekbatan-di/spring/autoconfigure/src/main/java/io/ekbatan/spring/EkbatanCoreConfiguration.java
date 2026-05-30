@@ -4,6 +4,7 @@ import io.ekbatan.core.action.Action;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.action.ActionRegistry;
 import io.ekbatan.core.action.persister.event.EventPersister;
+import io.ekbatan.core.config.PropertyKeyNormalizer;
 import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.repository.RepositoryRegistry;
@@ -38,7 +39,6 @@ import org.springframework.util.ClassUtils;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.dataformat.javaprop.JavaPropsMapper;
 
 /**
@@ -67,13 +67,13 @@ public class EkbatanCoreConfiguration {
      * Binds the {@code ekbatan.sharding} subtree from Spring's {@link Environment} into
      * {@link ShardingConfig} via Jackson's {@link JavaPropsMapper}. Spring exposes hierarchical
      * YAML/properties as flat keys with {@code [idx]} array notation (e.g.
-     * {@code groups[0].primaryConfig.jdbcUrl}) — the exact shape JavaPropsMapper parses natively,
+     * {@code groups[0].primaryConfig.jdbcUrl}) -- the exact shape JavaPropsMapper parses natively,
      * so no custom tree reconstruction is needed. The Jackson binding metadata lives inline on
      * the sharding config classes via {@code @JsonDeserialize} / {@code @JsonPOJOBuilder} /
      * {@code @JsonIgnore}, so the mapper below picks it up without any extra module registration.
      *
      * <p>Ekbatan's sharding YAML must use camelCase ({@code jdbcUrl}, {@code primaryConfig}) to
-     * match the Jackson Builder method names — Spring stores keys verbatim, no kebab→camel
+     * match the Jackson Builder method names -- Spring stores keys verbatim, no kebab->camel
      * normalisation.
      *
      * @param environment Spring's environment, source of the {@code ekbatan.sharding.*} keys.
@@ -102,7 +102,7 @@ public class EkbatanCoreConfiguration {
 
     /**
      * Binds the {@code ekbatan.jobs} subtree from Spring's {@link Environment} into
-     * {@link JobsConfig} via the same Jackson hybrid path. Optional — falls through to
+     * {@link JobsConfig} via the same Jackson hybrid path. Optional -- falls through to
      * {@link JobsConfig#defaults()} when no keys are present so every knob ends up at
      * db-scheduler's framework default at builder-apply time.
      *
@@ -117,7 +117,7 @@ public class EkbatanCoreConfiguration {
 
     /**
      * Binds the {@code ekbatan.local-event-handler} subtree from Spring's {@link Environment} into
-     * {@link LocalEventHandlerConfig} via the same Jackson hybrid path. Optional — falls through
+     * {@link LocalEventHandlerConfig} via the same Jackson hybrid path. Optional -- falls through
      * to {@link LocalEventHandlerConfig#defaults()} when no keys are present.
      *
      * @param environment Spring's environment, source of the {@code ekbatan.local-event-handler.*} keys.
@@ -135,19 +135,17 @@ public class EkbatanCoreConfiguration {
 
     /**
      * Shared helper for the optional Jackson-hybrid subtrees (jobs / local-event-handler). Reads
-     * Spring config keys under {@code prefix} verbatim via {@link #readSubtree}, applies a
-     * kebab-case naming strategy on the Jackson mapper so the framework's idiomatic
-     * {@code ekbatan.jobs.polling-interval} style keys reach the camelCase builder methods, and
-     * falls back to {@code ifEmpty} when no keys are present. (Sharding uses camelCase keys
-     * natively because the inner builder-method names include user-defined map entries; the
-     * kebab strategy stays scoped to this helper.)
+     * Spring config keys under {@code prefix} via {@link #readSubtree} (which folds kebab segments
+     * to camelCase via {@link PropertyKeyNormalizer}) and falls back to {@code ifEmpty} when no
+     * keys are present. Both spellings -- {@code polling-interval} and {@code pollingInterval} --
+     * bind against the same builder methods because the keys arrive at Jackson already
+     * canonicalised.
      */
     private static <T> T bindSubtree(Environment environment, String prefix, Class<T> target, Supplier<T> ifEmpty) {
         var props = readSubtree(environment, prefix);
         if (props.isEmpty()) return ifEmpty.get();
         var mapper = JavaPropsMapper.builder()
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                .propertyNamingStrategy(PropertyNamingStrategies.KEBAB_CASE)
                 .build();
         try {
             return mapper.readPropertiesAs(props, target);
@@ -163,7 +161,7 @@ public class EkbatanCoreConfiguration {
      * Iterates every {@link EnumerablePropertySource} on the Spring environment and copies the
      * subset of properties starting with {@code prefix} into a flat {@link Properties} (prefix
      * stripped). This matches the property-iteration model Quarkus and Micronaut use for the same
-     * Jackson hybrid path, and replaces the older {@code Binder.bind} + tree-rebuild path —
+     * Jackson hybrid path, and replaces the older {@code Binder.bind} + tree-rebuild path --
      * Spring's flat key form ({@code groups[0].name=...}) is exactly what JavaPropsMapper expects.
      *
      * <p>Non-enumerable {@code PropertySource}s are skipped; Spring Boot's built-in YAML /
@@ -174,11 +172,16 @@ public class EkbatanCoreConfiguration {
     private static Properties readSubtree(Environment environment, String prefix) {
         var props = new Properties();
         if (!(environment instanceof ConfigurableEnvironment ce)) return props;
+        // Normalise both the prefix and each candidate key before comparing so the parent segment
+        // is also case-tolerant: ekbatan.local-event-handler.* and ekbatan.localEventHandler.*
+        // both match the same prefix. Leaves are canonicalised by the same call.
+        var canonicalPrefix = PropertyKeyNormalizer.kebabToCamel(prefix);
         for (var src : ce.getPropertySources()) {
             if (!(src instanceof EnumerablePropertySource<?> eps)) continue;
             for (var name : eps.getPropertyNames()) {
-                if (!name.startsWith(prefix)) continue;
-                var sub = name.substring(prefix.length());
+                var canonical = PropertyKeyNormalizer.kebabToCamel(name);
+                if (!canonical.startsWith(canonicalPrefix)) continue;
+                var sub = canonical.substring(canonicalPrefix.length());
                 if (sub.isEmpty()) continue;
                 if (props.containsKey(sub)) continue; // higher-priority source already wrote this key
                 var value = environment.getProperty(name);

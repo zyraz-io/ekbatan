@@ -7,7 +7,7 @@ import io.smallrye.config.WithDefault;
  * Flat runtime configuration for Ekbatan. Only {@code ekbatan.namespace} maps here; the
  * {@code ekbatan.sharding}, {@code ekbatan.jobs}, and {@code ekbatan.local-event-handler}
  * subtrees are bound separately by {@link EkbatanCoreConfiguration} via the Jackson hybrid path
- * — those config trees use builder-based POJOs (with private constructors + validation) that
+ * -- those config trees use builder-based POJOs (with private constructors + validation) that
  * SmallRye {@code @ConfigMapping} cannot drive directly.
  */
 @ConfigMapping(prefix = "ekbatan")

@@ -79,6 +79,65 @@ class EkbatanCoreConfigurationTest {
     }
 
     @Test
+    void shouldAcceptAllKebabCaseShardingKeys() {
+        // Same shape as shouldBuildShardingConfigBeanFromProperties but every segment is kebab,
+        // including the configs-map key. PropertyKeyNormalizer collapses each segment so the
+        // bound config is bit-identical to the all-camelCase fixture.
+        contextRunner
+                .withPropertyValues(
+                        "ekbatan.sharding.default-shard.group=0",
+                        "ekbatan.sharding.default-shard.member=0",
+                        "ekbatan.sharding.groups[0].group=0",
+                        "ekbatan.sharding.groups[0].name=global",
+                        "ekbatan.sharding.groups[0].members[0].member=0",
+                        "ekbatan.sharding.groups[0].members[0].name=global-eu-1",
+                        "ekbatan.sharding.groups[0].members[0].configs.primary-config.jdbc-url=jdbc:postgresql://primary:5432/db",
+                        "ekbatan.sharding.groups[0].members[0].configs.primary-config.username=app",
+                        "ekbatan.sharding.groups[0].members[0].configs.primary-config.password=secret",
+                        "ekbatan.sharding.groups[0].members[0].configs.primary-config.maximum-pool-size=20")
+                .run(ctx -> {
+                    assertThat(ctx).hasNotFailed();
+                    var cfg = ctx.getBean(ShardingConfig.class);
+                    assertThat(cfg.groups.get(0).members.get(0).configs)
+                            .containsKey("primaryConfig")
+                            .doesNotContainKey("primary-config");
+                    var primary = cfg.groups.get(0).members.get(0).primaryConfig();
+                    assertThat(primary.jdbcUrl).isEqualTo("jdbc:postgresql://primary:5432/db");
+                    assertThat(primary.maximumPoolSize).isEqualTo(20);
+                });
+    }
+
+    @Test
+    void shouldAcceptMixedKebabAndCamelCaseShardingKeys() {
+        // PropertyKeyNormalizer folds kebab segments to camelCase before Jackson sees them; user
+        // can write either spelling - including for the configs-map key (primary-config vs
+        // primaryConfig) - and the same bean falls out either way.
+        contextRunner
+                .withPropertyValues(
+                        "ekbatan.sharding.default-shard.group=0", // kebab top-level
+                        "ekbatan.sharding.default-shard.member=0",
+                        "ekbatan.sharding.groups[0].group=0",
+                        "ekbatan.sharding.groups[0].name=global",
+                        "ekbatan.sharding.groups[0].members[0].member=0",
+                        // Mixed: kebab map-key + camel leaf + kebab leaf.
+                        "ekbatan.sharding.groups[0].members[0].configs.primary-config.jdbcUrl=jdbc:postgresql://primary:5432/db",
+                        "ekbatan.sharding.groups[0].members[0].configs.primary-config.username=app",
+                        "ekbatan.sharding.groups[0].members[0].configs.primary-config.password=secret",
+                        "ekbatan.sharding.groups[0].members[0].configs.primary-config.maximum-pool-size=20")
+                .run(ctx -> {
+                    assertThat(ctx).hasNotFailed();
+                    var cfg = ctx.getBean(ShardingConfig.class);
+                    // The kebab map key landed under the canonical camelCase form.
+                    assertThat(cfg.groups.get(0).members.get(0).configs)
+                            .containsKey("primaryConfig")
+                            .doesNotContainKey("primary-config");
+                    var primary = cfg.groups.get(0).members.get(0).primaryConfig();
+                    assertThat(primary.jdbcUrl).isEqualTo("jdbc:postgresql://primary:5432/db");
+                    assertThat(primary.maximumPoolSize).isEqualTo(20);
+                });
+    }
+
+    @Test
     void actionsShouldNotBeSpringBeansAndShouldBeRegisteredAsSingletons() {
         // Actions are framework-internal: discovered via classpath scan, instantiated once at
         // startup via AutowireCapableBeanFactory.createBean(...) (which wires constructor
@@ -147,7 +206,7 @@ class EkbatanCoreConfigurationTest {
     }
 
     /**
-     * Direct-invocation tests for the {@code ekbatanJobsConfig} producer — no Spring context
+     * Direct-invocation tests for the {@code ekbatanJobsConfig} producer -- no Spring context
      * boot, just a {@link StandardEnvironment} with a {@link MapPropertySource} feeding the
      * producer method. End-to-end wiring through the auto-config is exercised by the
      * Testcontainers integration test in {@code ekbatan-integration-tests-di-spring-boot-starter}.
@@ -184,6 +243,31 @@ class EkbatanCoreConfigurationTest {
         }
 
         @Test
+        void bindsCamelCaseKeys() {
+            var cfg = bindJobs(Map.of(
+                    "ekbatan.jobs.pollingInterval", "PT5S",
+                    "ekbatan.jobs.heartbeatInterval", "PT3S",
+                    "ekbatan.jobs.shutdownMaxWait", "PT30S"));
+
+            assertThat(cfg.pollingInterval).contains(Duration.ofSeconds(5));
+            assertThat(cfg.heartbeatInterval).contains(Duration.ofSeconds(3));
+            assertThat(cfg.shutdownMaxWait).contains(Duration.ofSeconds(30));
+        }
+
+        @Test
+        void bindsMixedKebabAndCamelCaseKeys() {
+            // PropertyKeyNormalizer collapses both spellings to the same canonical form.
+            var cfg = bindJobs(Map.of(
+                    "ekbatan.jobs.polling-interval", "PT5S", // kebab
+                    "ekbatan.jobs.heartbeatInterval", "PT3S", // camel
+                    "ekbatan.jobs.shutdown-max-wait", "PT30S")); // kebab
+
+            assertThat(cfg.pollingInterval).contains(Duration.ofSeconds(5));
+            assertThat(cfg.heartbeatInterval).contains(Duration.ofSeconds(3));
+            assertThat(cfg.shutdownMaxWait).contains(Duration.ofSeconds(30));
+        }
+
+        @Test
         void failsOnUnknownProperty() {
             assertThatThrownBy(() -> bindJobs(Map.of("ekbatan.jobs.not-a-real-field", "x")))
                     .isInstanceOf(IllegalStateException.class)
@@ -192,7 +276,7 @@ class EkbatanCoreConfigurationTest {
     }
 
     /**
-     * Direct-invocation tests for the {@code ekbatanLocalEventHandlerConfig} producer — mirror of
+     * Direct-invocation tests for the {@code ekbatanLocalEventHandlerConfig} producer -- mirror of
      * {@link JobsConfigBinding}, covering both flat and nested ({@code handling.*}) knobs.
      */
     @Nested
@@ -220,6 +304,48 @@ class EkbatanCoreConfigurationTest {
                     "ekbatan.local-event-handler.fanout-batch-size", "100",
                     "ekbatan.local-event-handler.handling-poll-delay", "PT0.15S",
                     "ekbatan.local-event-handler.handling.enabled", "true"));
+
+            assertThat(cfg.fanoutPollDelay).contains(Duration.ofMillis(200));
+            assertThat(cfg.fanoutBatchSize).contains(100);
+            assertThat(cfg.handlingPollDelay).contains(Duration.ofMillis(150));
+            assertThat(cfg.handling.enabled).isTrue();
+        }
+
+        @Test
+        void bindsCamelCaseKeys() {
+            var cfg = bindLeh(Map.of(
+                    "ekbatan.local-event-handler.fanoutPollDelay", "PT0.2S",
+                    "ekbatan.local-event-handler.fanoutBatchSize", "100",
+                    "ekbatan.local-event-handler.handlingPollDelay", "PT0.15S",
+                    "ekbatan.local-event-handler.handling.enabled", "true"));
+
+            assertThat(cfg.fanoutPollDelay).contains(Duration.ofMillis(200));
+            assertThat(cfg.fanoutBatchSize).contains(100);
+            assertThat(cfg.handlingPollDelay).contains(Duration.ofMillis(150));
+            assertThat(cfg.handling.enabled).isTrue();
+        }
+
+        @Test
+        void bindsCamelCasedParentSegment() {
+            var cfg = bindLeh(Map.of(
+                    "ekbatan.localEventHandler.fanoutPollDelay", "PT0.2S",
+                    "ekbatan.localEventHandler.fanoutBatchSize", "100",
+                    "ekbatan.localEventHandler.handlingPollDelay", "PT0.15S",
+                    "ekbatan.localEventHandler.handling.enabled", "true"));
+
+            assertThat(cfg.fanoutPollDelay).contains(Duration.ofMillis(200));
+            assertThat(cfg.fanoutBatchSize).contains(100);
+            assertThat(cfg.handlingPollDelay).contains(Duration.ofMillis(150));
+            assertThat(cfg.handling.enabled).isTrue();
+        }
+
+        @Test
+        void bindsCamelCasedParentSegmentWithKebabLeaves() {
+            var cfg = bindLeh(Map.of(
+                    "ekbatan.localEventHandler.fanout-poll-delay", "PT0.2S",
+                    "ekbatan.localEventHandler.fanout-batch-size", "100",
+                    "ekbatan.localEventHandler.handling-poll-delay", "PT0.15S",
+                    "ekbatan.localEventHandler.handling.enabled", "true"));
 
             assertThat(cfg.fanoutPollDelay).contains(Duration.ofMillis(200));
             assertThat(cfg.fanoutBatchSize).contains(100);

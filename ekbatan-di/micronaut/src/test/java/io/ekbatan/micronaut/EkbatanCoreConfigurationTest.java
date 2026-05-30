@@ -351,6 +351,39 @@ class EkbatanCoreConfigurationTest {
         }
 
         @Test
+        void bindsCamelCaseKeys() {
+            withEnv(
+                    Map.of(
+                            "ekbatan.jobs.pollingInterval", "PT5S",
+                            "ekbatan.jobs.heartbeatInterval", "PT3S",
+                            "ekbatan.jobs.shutdownMaxWait", "PT30S"),
+                    env -> {
+                        var cfg = bindJobs(env);
+                        assertThat(cfg.pollingInterval).contains(java.time.Duration.ofSeconds(5));
+                        assertThat(cfg.heartbeatInterval).contains(java.time.Duration.ofSeconds(3));
+                        assertThat(cfg.shutdownMaxWait).contains(java.time.Duration.ofSeconds(30));
+                    });
+        }
+
+        @Test
+        void bindsMixedKebabAndCamelCaseKeys() {
+            // Both forms in the same env - Micronaut's StringConvention.CAMEL_CASE handles the
+            // normalisation before Jackson sees the keys, just like the kebabToCamel path the
+            // other DIs use.
+            withEnv(
+                    Map.of(
+                            "ekbatan.jobs.polling-interval", "PT5S", // kebab
+                            "ekbatan.jobs.heartbeatInterval", "PT3S", // camel
+                            "ekbatan.jobs.shutdown-max-wait", "PT30S"), // kebab
+                    env -> {
+                        var cfg = bindJobs(env);
+                        assertThat(cfg.pollingInterval).contains(java.time.Duration.ofSeconds(5));
+                        assertThat(cfg.heartbeatInterval).contains(java.time.Duration.ofSeconds(3));
+                        assertThat(cfg.shutdownMaxWait).contains(java.time.Duration.ofSeconds(30));
+                    });
+        }
+
+        @Test
         void failsOnUnknownProperty() {
             withEnv(Map.of("ekbatan.jobs.not-a-real-field", "x"), env -> assertThatThrownBy(() -> bindJobs(env))
                     .isInstanceOf(IllegalStateException.class)
@@ -382,6 +415,59 @@ class EkbatanCoreConfigurationTest {
                             "ekbatan.local-event-handler.fanout-batch-size", "100",
                             "ekbatan.local-event-handler.handling-poll-delay", "PT0.15S",
                             "ekbatan.local-event-handler.handling.enabled", "true"),
+                    env -> {
+                        var cfg = bindLeh(env);
+                        assertThat(cfg.fanoutPollDelay).contains(java.time.Duration.ofMillis(200));
+                        assertThat(cfg.fanoutBatchSize).contains(100);
+                        assertThat(cfg.handlingPollDelay).contains(java.time.Duration.ofMillis(150));
+                        assertThat(cfg.handling.enabled).isTrue();
+                    });
+        }
+
+        @Test
+        void bindsCamelCaseKeys() {
+            withEnv(
+                    Map.of(
+                            "ekbatan.local-event-handler.fanoutPollDelay", "PT0.2S",
+                            "ekbatan.local-event-handler.fanoutBatchSize", "100",
+                            "ekbatan.local-event-handler.handlingPollDelay", "PT0.15S",
+                            "ekbatan.local-event-handler.handling.enabled", "true"),
+                    env -> {
+                        var cfg = bindLeh(env);
+                        assertThat(cfg.fanoutPollDelay).contains(java.time.Duration.ofMillis(200));
+                        assertThat(cfg.fanoutBatchSize).contains(100);
+                        assertThat(cfg.handlingPollDelay).contains(java.time.Duration.ofMillis(150));
+                        assertThat(cfg.handling.enabled).isTrue();
+                    });
+        }
+
+        @Test
+        void bindsCamelCasedParentSegment() {
+            // Micronaut's StringConvention.CAMEL_CASE on the getProperties call normalises both
+            // the source keys and the prefix; this pins that behaviour for the parent segment.
+            withEnv(
+                    Map.of(
+                            "ekbatan.localEventHandler.fanoutPollDelay", "PT0.2S",
+                            "ekbatan.localEventHandler.fanoutBatchSize", "100",
+                            "ekbatan.localEventHandler.handlingPollDelay", "PT0.15S",
+                            "ekbatan.localEventHandler.handling.enabled", "true"),
+                    env -> {
+                        var cfg = bindLeh(env);
+                        assertThat(cfg.fanoutPollDelay).contains(java.time.Duration.ofMillis(200));
+                        assertThat(cfg.fanoutBatchSize).contains(100);
+                        assertThat(cfg.handlingPollDelay).contains(java.time.Duration.ofMillis(150));
+                        assertThat(cfg.handling.enabled).isTrue();
+                    });
+        }
+
+        @Test
+        void bindsCamelCasedParentSegmentWithKebabLeaves() {
+            withEnv(
+                    Map.of(
+                            "ekbatan.localEventHandler.fanout-poll-delay", "PT0.2S",
+                            "ekbatan.localEventHandler.fanout-batch-size", "100",
+                            "ekbatan.localEventHandler.handling-poll-delay", "PT0.15S",
+                            "ekbatan.localEventHandler.handling.enabled", "true"),
                     env -> {
                         var cfg = bindLeh(env);
                         assertThat(cfg.fanoutPollDelay).contains(java.time.Duration.ofMillis(200));

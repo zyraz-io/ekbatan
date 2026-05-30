@@ -8,7 +8,7 @@ import tools.jackson.databind.annotation.JsonPOJOBuilder;
 /**
  * Tuning configuration for the in-process event handler dispatch (fanout + handling jobs). Bound
  * directly from {@code ekbatan.local-event-handler.*} keys in {@code application.yml} /
- * {@code application.properties} via the Jackson hybrid path — each DI's
+ * {@code application.properties} via the Jackson hybrid path -- each DI's
  * {@code EkbatanCoreConfiguration} feeds the flat property map to {@code JavaPropsMapper} which
  * materializes this builder.
  *
@@ -50,7 +50,7 @@ public final class LocalEventHandlerConfig {
         this.handling = builder.handling;
     }
 
-    /** {@return a {@link LocalEventHandlerConfig} with no overrides — every knob falls through to framework defaults} */
+    /** {@return a {@link LocalEventHandlerConfig} with no overrides -- every knob falls through to framework defaults} */
     public static LocalEventHandlerConfig defaults() {
         return localEventHandlerConfig().build();
     }
@@ -158,7 +158,7 @@ public final class LocalEventHandlerConfig {
     }
 
     /**
-     * Build-time toggle for the in-process handling job. Default {@code false} — opt-in only,
+     * Build-time toggle for the in-process handling job. Default {@code false} -- opt-in only,
      * since deployments that drain notifications via an external pipeline (e.g. Kafka) keep their
      * {@code @EkbatanEventHandler} beans for serialization purposes without booting an in-process
      * consumer.

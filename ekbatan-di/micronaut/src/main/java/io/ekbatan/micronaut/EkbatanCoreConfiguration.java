@@ -94,7 +94,7 @@ public class EkbatanCoreConfiguration {
 
     /**
      * Binds the {@code ekbatan.jobs} subtree from Micronaut's {@link Environment} into
-     * {@link JobsConfig} via the same Jackson hybrid path. Optional — falls through to
+     * {@link JobsConfig} via the same Jackson hybrid path. Optional -- falls through to
      * {@link JobsConfig#defaults()} when no keys are present, so every knob lands at
      * db-scheduler's framework default at builder-apply time.
      *
@@ -109,7 +109,7 @@ public class EkbatanCoreConfiguration {
 
     /**
      * Binds the {@code ekbatan.local-event-handler} subtree from Micronaut's {@link Environment}
-     * into {@link LocalEventHandlerConfig} via the same Jackson hybrid path. Optional — falls
+     * into {@link LocalEventHandlerConfig} via the same Jackson hybrid path. Optional -- falls
      * through to {@link LocalEventHandlerConfig#defaults()} when no keys are present.
      *
      * @param environment Micronaut's environment, source of the {@code ekbatan.local-event-handler.*} keys.

@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
  * setter behaviour), and Micronaut {@link Environment} key resolution for the {@code ekbatan}
  * prefix.
  *
- * <p>{@code ekbatan.jobs.*} and {@code ekbatan.local-event-handler.*} are no longer bound here —
+ * <p>{@code ekbatan.jobs.*} and {@code ekbatan.local-event-handler.*} are no longer bound here --
  * they moved to the core {@code JobsConfig} / {@code LocalEventHandlerConfig} types and are
  * exercised by {@link EkbatanCoreConfigurationTest}'s Jackson-hybrid binding path plus the
  * dedicated tests in the {@code ekbatan-distributed-jobs} / {@code ekbatan-local-event-handler}

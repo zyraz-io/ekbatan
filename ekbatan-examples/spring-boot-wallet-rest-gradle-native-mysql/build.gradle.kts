@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "io.example"
-version = "0.0.4-SNAPSHOT"
+version = "0.0.5-SNAPSHOT"
 
 // Spring Boot 4.0.x's bom pins jOOQ to 3.19.x, but Ekbatan (and our codegen plugin) target
 // 3.20.x. Pin the family explicitly so the generated record classes and the runtime jOOQ
