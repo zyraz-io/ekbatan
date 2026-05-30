@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>spring-boot-wallet-rest-maven-pg</artifactId>
-    <version>0.0.3-SNAPSHOT</version>
+    <version>0.0.4-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>spring-boot-wallet-rest-maven-pg</name>
     <description>Spring Boot + Postgres wallet example demonstrating Ekbatan with Maven (PG dialect of the Maven sibling triple).</description>
@@ -27,7 +27,7 @@
              Override the parent's property so the generated record classes and the runtime jOOQ classpath agree. -->
         <jooq.version>3.20.10</jooq.version>
 
-        <ekbatan.version>0.0.3</ekbatan.version>
+        <ekbatan.version>0.0.4</ekbatan.version>
         <!-- Avoid the `flyway.*` namespace for Maven properties - Flyway's maven plugin scans
              system properties and rejects anything prefixed with `flyway.` that isn't a known
              Flyway configuration key. Same caution applies to `jooq.*` (the codegen plugin scans
@@ -43,7 +43,6 @@
 
         <!-- Single source of truth for the codegen-time database. Used by docker-maven-plugin (to start the
              container), flyway-maven-plugin (to migrate), and jooq-codegen-maven (to introspect). -->
-        <codegen.db.port>15432</codegen.db.port>
         <codegen.db.name>wallet_codegen</codegen.db.name>
         <codegen.db.user>codegen</codegen.db.user>
         <codegen.db.password>codegen</codegen.db.password>
@@ -279,7 +278,7 @@
                             <alias>postgres-codegen</alias>
                             <run>
                                 <ports>
-                                    <port>${codegen.db.port}:5432</port>
+                                    <port>codegen.db.port:5432</port>
                                 </ports>
                                 <env>
                                     <POSTGRES_DB>${codegen.db.name}</POSTGRES_DB>

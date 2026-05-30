@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>quarkus-wallet-rest-maven-pg</artifactId>
-    <version>0.0.3-SNAPSHOT</version>
+    <version>0.0.4-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>quarkus-wallet-rest-maven-pg</name>
     <description>Quarkus + Postgres wallet example demonstrating Ekbatan with Maven (PG dialect of the Maven Quarkus triple).</description>
@@ -21,7 +21,7 @@
              skip this is a NoSuchMethodError at runtime. -->
         <jooq.version>3.20.10</jooq.version>
 
-        <ekbatan.version>0.0.3</ekbatan.version>
+        <ekbatan.version>0.0.4</ekbatan.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.version>3.34.6</quarkus.platform.version>
@@ -37,8 +37,13 @@
 
         <testcontainers.version>2.0.5</testcontainers.version>
 
-        <!-- Single source of truth for the codegen-time database. -->
-        <codegen.db.port>15432</codegen.db.port>
+        <!-- Single source of truth for the codegen-time database. The host port is
+             allocated randomly by docker-maven-plugin at the `initialize` phase (see the
+             `<port>codegen.db.port:5432</port>` mapping below); the assigned value is written
+             back into the `codegen.db.port` property and lazily expanded into `codegen.db.url`
+             by the time Flyway / jOOQ run. Avoids host-port conflicts when multiple Maven
+             examples run in sequence (each holds its compose container until `prepare-package`)
+             or when a developer already has a Postgres on the conventional 15432. -->
         <codegen.db.name>wallet_codegen</codegen.db.name>
         <codegen.db.user>codegen</codegen.db.user>
         <codegen.db.password>codegen</codegen.db.password>
@@ -292,7 +297,11 @@
                             <alias>postgres-codegen</alias>
                             <run>
                                 <ports>
-                                    <port>${codegen.db.port}:5432</port>
+                                    <!-- Property-name (no ${...}) instructs docker-maven-plugin
+                                         to allocate a random host port and write it back to the
+                                         `codegen.db.port` property; `codegen.db.url` then resolves
+                                         lazily at Flyway / jOOQ plugin execution time. -->
+                                    <port>codegen.db.port:5432</port>
                                 </ports>
                                 <env>
                                     <POSTGRES_DB>${codegen.db.name}</POSTGRES_DB>

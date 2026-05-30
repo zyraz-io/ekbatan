@@ -3,6 +3,7 @@ package io.ekbatan.quarkus.runtime;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.events.localeventhandler.EventHandlerRegistry;
+import io.ekbatan.events.localeventhandler.config.LocalEventHandlerConfig;
 import io.ekbatan.events.localeventhandler.job.EventFanoutJob;
 import io.ekbatan.events.localeventhandler.job.EventHandlingJob;
 import io.quarkus.arc.All;
@@ -51,7 +52,7 @@ public class EkbatanLocalEventHandlerConfiguration {
      *
      * @param databaseRegistry the per-shard connection pools.
      * @param handlerRegistry the registry of event handlers.
-     * @param config the Ekbatan runtime configuration (reads {@code ekbatan.local-event-handler.*}).
+     * @param localEventHandlerConfig the parsed {@code ekbatan.local-event-handler.*} subtree.
      * @param clock the system clock used for fanout cursor timestamps.
      * @return the fanout job, scheduled by Quarkus once started.
      */
@@ -60,15 +61,14 @@ public class EkbatanLocalEventHandlerConfiguration {
     public EventFanoutJob ekbatanEventFanoutJob(
             DatabaseRegistry databaseRegistry,
             EventHandlerRegistry handlerRegistry,
-            EkbatanProperties config,
+            LocalEventHandlerConfig localEventHandlerConfig,
             Clock clock) {
         var builder = EventFanoutJob.eventFanoutJob()
                 .databaseRegistry(databaseRegistry)
                 .eventHandlerRegistry(handlerRegistry)
                 .clock(clock);
-        var leh = config.localEventHandler();
-        leh.fanoutPollDelay().ifPresent(builder::pollDelay);
-        leh.fanoutBatchSize().ifPresent(builder::batchSize);
+        localEventHandlerConfig.fanoutPollDelay.ifPresent(builder::pollDelay);
+        localEventHandlerConfig.fanoutBatchSize.ifPresent(builder::batchSize);
         return builder.build();
     }
 
@@ -85,7 +85,7 @@ public class EkbatanLocalEventHandlerConfiguration {
      * @param databaseRegistry the per-shard connection pools.
      * @param handlerRegistry the registry of event handlers.
      * @param jsonMapper the Jackson mapper used to deserialize event payloads before dispatch.
-     * @param config the Ekbatan runtime configuration (reads {@code ekbatan.local-event-handler.*}).
+     * @param localEventHandlerConfig the parsed {@code ekbatan.local-event-handler.*} subtree.
      * @param clock the system clock used for retention windows and backoff timestamps.
      * @return the handling job, scheduled by Quarkus once started.
      */
@@ -99,18 +99,17 @@ public class EkbatanLocalEventHandlerConfiguration {
             DatabaseRegistry databaseRegistry,
             EventHandlerRegistry handlerRegistry,
             JsonMapper jsonMapper,
-            EkbatanProperties config,
+            LocalEventHandlerConfig localEventHandlerConfig,
             Clock clock) {
         var builder = EventHandlingJob.eventHandlingJob()
                 .databaseRegistry(databaseRegistry)
                 .eventHandlerRegistry(handlerRegistry)
                 .objectMapper(jsonMapper)
                 .clock(clock);
-        var leh = config.localEventHandler();
-        leh.handlingPollDelay().ifPresent(builder::pollDelay);
-        leh.handlingBatchSize().ifPresent(builder::batchSize);
-        leh.handlingMaxBackoffCap().ifPresent(builder::maxBackoffCap);
-        leh.handlingRetentionWindow().ifPresent(builder::retentionWindow);
+        localEventHandlerConfig.handlingPollDelay.ifPresent(builder::pollDelay);
+        localEventHandlerConfig.handlingBatchSize.ifPresent(builder::batchSize);
+        localEventHandlerConfig.handlingMaxBackoffCap.ifPresent(builder::maxBackoffCap);
+        localEventHandlerConfig.handlingRetentionWindow.ifPresent(builder::retentionWindow);
         return builder.build();
     }
 }

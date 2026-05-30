@@ -1,8 +1,11 @@
-package io.ekbatan.core.shard.config;
+package io.ekbatan.core.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.commons.lang3.Validate;
+import tools.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.annotation.JsonPOJOBuilder;
 
 /**
  * Mid-level config describing one group within a {@link ShardingConfig} - a logical cluster
@@ -10,6 +13,7 @@ import org.apache.commons.lang3.Validate;
  * "free-tier tenants"). Each group has a numeric {@code group} key that pairs with a member
  * key to form a {@link io.ekbatan.core.shard.ShardIdentifier}.
  */
+@JsonDeserialize(builder = ShardGroupConfig.Builder.class)
 public final class ShardGroupConfig {
 
     /** Numeric key for this group; pairs with each member's key to form a {@link io.ekbatan.core.shard.ShardIdentifier}. */
@@ -29,6 +33,7 @@ public final class ShardGroupConfig {
     }
 
     /** Fluent builder for {@link ShardGroupConfig}. Obtain via {@link #shardGroupConfig()}. */
+    @JsonPOJOBuilder(withPrefix = "")
     public static final class Builder {
 
         private int group;
@@ -81,6 +86,7 @@ public final class ShardGroupConfig {
          * @param member the member to add.
          * @return this builder, for chaining.
          */
+        @JsonIgnore
         public Builder withMember(ShardMemberConfig member) {
             this.members.add(member);
             return this;

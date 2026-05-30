@@ -1,20 +1,24 @@
-package io.ekbatan.core.config.jackson;
+package io.ekbatan.core.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.ekbatan.core.shard.ShardIdentifier;
-import io.ekbatan.core.shard.config.ShardingConfig;
 import org.jooq.SQLDialect;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.exc.MismatchedInputException;
 import tools.jackson.dataformat.yaml.YAMLMapper;
 
-class EkbatanConfigJacksonModuleTest {
+/**
+ * End-to-end YAML deserialization of {@link ShardingConfig} via the inline Jackson annotations on
+ * the sharding config classes ({@code @JsonDeserialize(builder = ...)},
+ * {@code @JsonPOJOBuilder}, {@code @JsonIgnore}). No mix-in module; a plain {@link YAMLMapper}
+ * picks up the annotations directly from the target classes.
+ */
+class ShardingConfigJacksonBindingTest {
 
     private static final YAMLMapper MAPPER = YAMLMapper.builder()
-            .addModule(new EkbatanConfigJacksonModule())
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
             .build();
 

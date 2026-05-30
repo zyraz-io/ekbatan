@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>quarkus-wallet-rest-maven-native-mariadb</artifactId>
-    <version>0.0.3-SNAPSHOT</version>
+    <version>0.0.4-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>quarkus-wallet-rest-maven-native-mariadb</name>
     <description>Quarkus + MariaDB wallet example demonstrating Ekbatan with Maven (MariaDB dialect of the Maven Quarkus triple).</description>
@@ -18,7 +18,7 @@
 
         <jooq.version>3.20.10</jooq.version>
 
-        <ekbatan.version>0.0.3</ekbatan.version>
+        <ekbatan.version>0.0.4</ekbatan.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.version>3.34.6</quarkus.platform.version>
@@ -38,7 +38,6 @@
              CREATE DATABASE eventlog succeeds - the runtime / test containers use a less-
              privileged `wallet` user with a mariadb_init.sql GRANT, but the codegen container
              is throwaway and root is simpler. -->
-        <codegen.db.port>13306</codegen.db.port>
         <codegen.db.name>wallet</codegen.db.name>
         <codegen.db.user>root</codegen.db.user>
         <codegen.db.password>root</codegen.db.password>
@@ -311,7 +310,7 @@
                             <alias>mariadb-codegen</alias>
                             <run>
                                 <ports>
-                                    <port>${codegen.db.port}:3306</port>
+                                    <port>codegen.db.port:3306</port>
                                 </ports>
                                 <env>
                                     <MARIADB_ROOT_PASSWORD>${codegen.db.password}</MARIADB_ROOT_PASSWORD>

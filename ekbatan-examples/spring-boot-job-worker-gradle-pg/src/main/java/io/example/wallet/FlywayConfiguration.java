@@ -1,6 +1,6 @@
 package io.example.wallet;
 
-import io.ekbatan.core.shard.config.ShardingConfig;
+import io.ekbatan.core.config.ShardingConfig;
 import java.util.Arrays;
 import java.util.stream.Stream;
 import org.flywaydb.core.Flyway;

@@ -2,8 +2,8 @@ package io.example.wallet.startup;
 
 import io.ekbatan.core.concurrent.KeyedLockProvider;
 import io.ekbatan.core.concurrent.MariaDBKeyedLockProvider;
+import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
-import io.ekbatan.core.shard.config.ShardingConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Singleton;

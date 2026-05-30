@@ -44,10 +44,10 @@ import org.springframework.boot.test.web.server.LocalServerPort;
             "ekbatan.sharding.groups[0].members[0].configs.lockConfig.maximumPoolSize=15",
             "ekbatan.sharding.groups[0].members[0].configs.lockConfig.leakDetectionThreshold=0",
             // Tighten poll intervals so the listen-to-yourself path doesn't sit idle for default waits.
-            "ekbatan.local-event-handler.fanoutPollDelay=200ms",
-            "ekbatan.local-event-handler.handlingPollDelay=200ms",
-            "ekbatan.jobs.pollingInterval=1s",
-            "ekbatan.jobs.shutdownMaxWait=5s",
+            "ekbatan.local-event-handler.fanout-poll-delay=PT0.2S",
+            "ekbatan.local-event-handler.handling-poll-delay=PT0.2S",
+            "ekbatan.jobs.polling-interval=PT1S",
+            "ekbatan.jobs.shutdown-max-wait=PT5S",
             // @ConditionalOnProperty is evaluated before DynamicPropertyRegistrar runs, so the
             // local-event-handler opt-in lives here in @SpringBootTest(properties=).
             "ekbatan.local-event-handler.handling.enabled=true",

@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>quarkus-wallet-rest-maven-native-pg</artifactId>
-    <version>0.0.3-SNAPSHOT</version>
+    <version>0.0.4-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>quarkus-wallet-rest-maven-native-pg</name>
     <description>Quarkus + Postgres wallet example demonstrating Ekbatan with Maven (PG dialect of the Maven Quarkus triple).</description>
@@ -21,7 +21,7 @@
              skip this is a NoSuchMethodError at runtime. -->
         <jooq.version>3.20.10</jooq.version>
 
-        <ekbatan.version>0.0.3</ekbatan.version>
+        <ekbatan.version>0.0.4</ekbatan.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.version>3.34.6</quarkus.platform.version>
@@ -40,7 +40,6 @@
         <testcontainers.version>2.0.5</testcontainers.version>
 
         <!-- Single source of truth for the codegen-time database. -->
-        <codegen.db.port>15432</codegen.db.port>
         <codegen.db.name>wallet_codegen</codegen.db.name>
         <codegen.db.user>codegen</codegen.db.user>
         <codegen.db.password>codegen</codegen.db.password>
@@ -330,7 +329,7 @@
                             <alias>postgres-codegen</alias>
                             <run>
                                 <ports>
-                                    <port>${codegen.db.port}:5432</port>
+                                    <port>codegen.db.port:5432</port>
                                 </ports>
                                 <env>
                                     <POSTGRES_DB>${codegen.db.name}</POSTGRES_DB>

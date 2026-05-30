@@ -46,10 +46,10 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
             // Tighten poll intervals - both the framework's local-event-handler jobs and our
             // own @EkbatanDistributedJobs use them. Defaults are tuned for production (longer
             // intervals to keep DB load low); tests want everything to converge quickly.
-            "ekbatan.local-event-handler.fanoutPollDelay=200ms",
-            "ekbatan.local-event-handler.handlingPollDelay=200ms",
-            "ekbatan.jobs.pollingInterval=200ms",
-            "ekbatan.jobs.shutdownMaxWait=5s",
+            "ekbatan.local-event-handler.fanout-poll-delay=PT0.2S",
+            "ekbatan.local-event-handler.handling-poll-delay=PT0.2S",
+            "ekbatan.jobs.polling-interval=PT0.2S",
+            "ekbatan.jobs.shutdown-max-wait=PT5S",
             "ekbatan.local-event-handler.handling.enabled=true",
         })
 class WalletJobsIntegrationTest {

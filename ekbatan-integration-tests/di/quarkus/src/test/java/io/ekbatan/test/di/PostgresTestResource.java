@@ -68,10 +68,10 @@ public class PostgresTestResource implements QuarkusTestResourceLifecycleManager
         props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize", "4");
 
         // Tighten poll intervals so the test doesn't sit idle.
-        props.put("ekbatan.local-event-handler.fanout-poll-delay", "200ms");
-        props.put("ekbatan.local-event-handler.handling-poll-delay", "200ms");
-        props.put("ekbatan.jobs.polling-interval", "1s");
-        props.put("ekbatan.jobs.shutdown-max-wait", "5s");
+        props.put("ekbatan.local-event-handler.fanout-poll-delay", "PT0.2S");
+        props.put("ekbatan.local-event-handler.handling-poll-delay", "PT0.2S");
+        props.put("ekbatan.jobs.polling-interval", "PT1S");
+        props.put("ekbatan.jobs.shutdown-max-wait", "PT5S");
 
         return props;
     }

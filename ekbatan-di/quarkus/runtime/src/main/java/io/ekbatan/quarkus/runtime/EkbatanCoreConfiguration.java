@@ -4,21 +4,27 @@ import io.ekbatan.core.action.Action;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.action.ActionRegistry;
 import io.ekbatan.core.action.persister.event.EventPersister;
-import io.ekbatan.core.config.jackson.EkbatanConfigJacksonModule;
+import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.repository.RepositoryRegistry;
 import io.ekbatan.core.shard.DatabaseRegistry;
-import io.ekbatan.core.shard.config.ShardingConfig;
+import io.ekbatan.distributedjobs.config.JobsConfig;
+import io.ekbatan.events.localeventhandler.config.LocalEventHandlerConfig;
 import io.quarkus.arc.All;
 import jakarta.enterprise.inject.Disposes;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Singleton;
+import java.io.IOException;
 import java.time.Clock;
 import java.util.List;
+import java.util.Properties;
 import org.eclipse.microprofile.config.ConfigProvider;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.dataformat.javaprop.JavaPropsMapper;
 
 /**
  * Quarkus runtime CDI producer class for Ekbatan's core surface. Produces the
@@ -38,46 +44,114 @@ public class EkbatanCoreConfiguration {
     public EkbatanCoreConfiguration() {}
 
     /**
-     * Produces the Jackson module that knows how to deserialize Ekbatan's {@code DataSourceConfig}
-     * builder-based hierarchy into a {@link ShardingConfig}.
+     * Binds the {@code ekbatan.sharding} subtree from SmallRye Config into {@link ShardingConfig}
+     * via Jackson's {@link JavaPropsMapper}. SmallRye exposes hierarchical YAML as flat keys with
+     * {@code [idx]} array notation (e.g. {@code groups[0].primaryConfig.jdbcUrl}) - the exact
+     * shape JavaPropsMapper parses natively, so no custom tree reconstruction is needed.
      *
-     * @return the Ekbatan-specific Jackson module, registered with {@link #ekbatanShardingConfig}'s
-     *     private {@link JsonMapper}.
-     */
-    @Produces
-    @Singleton
-    public EkbatanConfigJacksonModule ekbatanConfigJacksonModule() {
-        return new EkbatanConfigJacksonModule();
-    }
-
-    /**
-     * Binds the {@code ekbatan.sharding} subtree from SmallRye Config via the Jackson hybrid path:
-     * {@link ConfigTreeBuilder} reconstructs the nested tree from flat keys, then a private
-     * {@link JsonMapper} (with the Ekbatan mix-in module) deserializes it into {@link ShardingConfig}.
+     * <p>Ekbatan's sharding YAML must use camelCase ({@code jdbcUrl}, {@code primaryConfig}) to
+     * match the Jackson Builder method names - SmallRye stores keys verbatim, no kebab→camel
+     * normalisation.
      *
      * <p>{@code @ConfigMapping} can't construct {@code DataSourceConfig} entries directly - they
      * have private constructors + Builders, and the {@code configs} map uses user-defined keys.
+     * The Jackson binding metadata lives inline on those classes via {@code @JsonDeserialize} /
+     * {@code @JsonPOJOBuilder} / {@code @JsonIgnore}, so the {@link JavaPropsMapper} below picks
+     * it up without any extra module registration.
      *
-     * @param module the Ekbatan Jackson module produced by {@link #ekbatanConfigJacksonModule}.
      * @return the parsed {@link ShardingConfig} for the running application.
      */
     @Produces
     @Singleton
-    public ShardingConfig ekbatanShardingConfig(EkbatanConfigJacksonModule module) {
+    public ShardingConfig ekbatanShardingConfig() {
         var config = ConfigProvider.getConfig();
-        var tree = ConfigTreeBuilder.readSubtree(config, "ekbatan.sharding");
-        if (tree.isEmpty()) {
+        var prefix = "ekbatan.sharding.";
+        var props = new Properties();
+        for (var name : config.getPropertyNames()) {
+            if (!name.startsWith(prefix)) continue;
+            var sub = name.substring(prefix.length());
+            if (sub.isEmpty()) continue;
+            config.getOptionalValue(name, String.class).ifPresent(v -> props.setProperty(sub, v));
+        }
+        if (props.isEmpty()) {
             throw new IllegalStateException(
                     "Ekbatan requires 'ekbatan.sharding' to be configured (groups[].members[].configs.primaryConfig.*). "
                             + "Either populate it in application.yaml/application.properties or define a ShardingConfig @Produces of your own.");
         }
         // Private mapper: FAIL_ON_UNKNOWN_PROPERTIES surfaces typos at startup without leaking
         // strictness into any application-level Jackson configuration.
-        var mapper = JsonMapper.builder()
-                .addModule(module)
+        var mapper = JavaPropsMapper.builder()
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .build();
-        return mapper.convertValue(tree, ShardingConfig.class);
+        try {
+            return mapper.readPropertiesAs(props, ShardingConfig.class);
+        } catch (IOException | JacksonException e) {
+            // Jackson 3 throws unchecked JacksonException for binding failures; the IOException
+            // path is declared on the method signature but only triggers on lower-level I/O
+            // problems we don't expect with an in-memory Properties source. Wrap both so any
+            // misconfiguration of `ekbatan.sharding.*` surfaces a single, contextual message.
+            throw new IllegalStateException("Failed to bind 'ekbatan.sharding' configuration to ShardingConfig", e);
+        }
+    }
+
+    /**
+     * Binds the {@code ekbatan.jobs} subtree from SmallRye Config into {@link JobsConfig} via the
+     * same Jackson hybrid path used for {@code ekbatan.sharding}. The subtree is optional - if no
+     * {@code ekbatan.jobs.*} keys are configured, returns {@link JobsConfig#defaults()} so every
+     * knob falls through to db-scheduler's framework defaults at builder-apply time.
+     *
+     * @return the parsed {@link JobsConfig} for the running application.
+     */
+    @Produces
+    @Singleton
+    public JobsConfig ekbatanJobsConfig() {
+        return bindSubtree("ekbatan.jobs.", JobsConfig.class, JobsConfig::defaults);
+    }
+
+    /**
+     * Binds the {@code ekbatan.local-event-handler} subtree from SmallRye Config into
+     * {@link LocalEventHandlerConfig} via the same Jackson hybrid path. Optional — falls through
+     * to {@link LocalEventHandlerConfig#defaults()} when no keys are present.
+     *
+     * @return the parsed {@link LocalEventHandlerConfig} for the running application.
+     */
+    @Produces
+    @Singleton
+    public LocalEventHandlerConfig ekbatanLocalEventHandlerConfig() {
+        return bindSubtree(
+                "ekbatan.local-event-handler.", LocalEventHandlerConfig.class, LocalEventHandlerConfig::defaults);
+    }
+
+    /**
+     * Shared helper for the optional Jackson-hybrid subtrees (jobs / local-event-handler). Reads
+     * SmallRye Config keys under {@code prefix} verbatim, applies a kebab-case naming strategy on
+     * the Jackson mapper so the framework's idiomatic {@code ekbatan.jobs.polling-interval} style
+     * keys reach the camelCase builder methods, and falls back to {@code ifEmpty} when no keys
+     * are present. (Sharding uses camelCase keys natively because the inner builder-method names
+     * include user-defined map entries; the kebab strategy stays scoped to this helper.)
+     */
+    private static <T> T bindSubtree(String prefix, Class<T> target, java.util.function.Supplier<T> ifEmpty) {
+        var config = ConfigProvider.getConfig();
+        var props = new Properties();
+        for (var name : config.getPropertyNames()) {
+            if (!name.startsWith(prefix)) continue;
+            var sub = name.substring(prefix.length());
+            if (sub.isEmpty()) continue;
+            config.getOptionalValue(name, String.class).ifPresent(v -> props.setProperty(sub, v));
+        }
+        if (props.isEmpty()) return ifEmpty.get();
+        var mapper = JavaPropsMapper.builder()
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .propertyNamingStrategy(PropertyNamingStrategies.KEBAB_CASE)
+                .build();
+        try {
+            return mapper.readPropertiesAs(props, target);
+        } catch (IOException | JacksonException e) {
+            throw new IllegalStateException(
+                    "Failed to bind '" + prefix.substring(0, prefix.length() - 1) + "' configuration to "
+                            + target.getSimpleName(),
+                    e);
+        }
     }
 
     /**

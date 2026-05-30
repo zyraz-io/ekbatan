@@ -4,18 +4,22 @@ import io.ekbatan.core.action.Action;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.action.ActionRegistry;
 import io.ekbatan.core.action.persister.event.EventPersister;
-import io.ekbatan.core.config.jackson.EkbatanConfigJacksonModule;
+import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.repository.RepositoryRegistry;
 import io.ekbatan.core.shard.DatabaseRegistry;
-import io.ekbatan.core.shard.config.ShardingConfig;
 import io.ekbatan.di.EkbatanAction;
+import io.ekbatan.distributedjobs.config.JobsConfig;
+import io.ekbatan.events.localeventhandler.config.LocalEventHandlerConfig;
 import io.ekbatan.spring.internal.EkbatanActionsHolder;
 import io.ekbatan.spring.internal.EkbatanStereotypeBeanRegistrar;
+import java.io.IOException;
 import java.time.Clock;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.AutowireCapableBeanFactory;
@@ -23,17 +27,19 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.context.properties.bind.Bindable;
-import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.util.ClassUtils;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.dataformat.javaprop.JavaPropsMapper;
 
 /**
  * Spring Boot auto-configuration for Ekbatan's core surface: binds {@code ekbatan.sharding.*}
@@ -57,42 +63,131 @@ public class EkbatanCoreConfiguration {
     /** Required by Spring; the container instantiates this auto-configuration class to invoke its {@code @Bean} methods. */
     public EkbatanCoreConfiguration() {}
 
-    /** {@return the Ekbatan-specific Jackson module that maps the framework's builder-based config types} */
-    @Bean
-    @ConditionalOnMissingBean
-    public EkbatanConfigJacksonModule ekbatanConfigJacksonModule() {
-        return new EkbatanConfigJacksonModule();
-    }
-
     /**
-     * Binds the {@code ekbatan.sharding} subtree from Spring's {@link Environment} via the
-     * Jackson hybrid path: Spring's {@link Binder} reconstructs the nested tree from flat
-     * keys, then a private {@link JsonMapper} (with the Ekbatan mix-in module) deserializes
-     * it into {@link ShardingConfig}.
+     * Binds the {@code ekbatan.sharding} subtree from Spring's {@link Environment} into
+     * {@link ShardingConfig} via Jackson's {@link JavaPropsMapper}. Spring exposes hierarchical
+     * YAML/properties as flat keys with {@code [idx]} array notation (e.g.
+     * {@code groups[0].primaryConfig.jdbcUrl}) — the exact shape JavaPropsMapper parses natively,
+     * so no custom tree reconstruction is needed. The Jackson binding metadata lives inline on
+     * the sharding config classes via {@code @JsonDeserialize} / {@code @JsonPOJOBuilder} /
+     * {@code @JsonIgnore}, so the mapper below picks it up without any extra module registration.
+     *
+     * <p>Ekbatan's sharding YAML must use camelCase ({@code jdbcUrl}, {@code primaryConfig}) to
+     * match the Jackson Builder method names — Spring stores keys verbatim, no kebab→camel
+     * normalisation.
      *
      * @param environment Spring's environment, source of the {@code ekbatan.sharding.*} keys.
-     * @param module the Ekbatan Jackson module produced by {@link #ekbatanConfigJacksonModule}.
      * @return the parsed {@link ShardingConfig} for the running application.
      */
     @Bean
     @ConditionalOnMissingBean
-    public ShardingConfig ekbatanShardingConfig(Environment environment, EkbatanConfigJacksonModule module) {
-        var raw = Binder.get(environment)
-                .bind("ekbatan.sharding", Bindable.mapOf(String.class, Object.class))
-                .orElseThrow(() -> new IllegalStateException(
-                        "Ekbatan requires 'ekbatan.sharding' to be configured (groups[].members[].configs.primaryConfig.*). "
-                                + "Either populate it in application.yml or define a ShardingConfig @Bean."));
-
-        // Spring's Binder represents YAML lists as integer-keyed maps; rebuild them as Lists so
-        // Jackson's BuilderBasedDeserializer sees JSON arrays where it expects them.
-        var normalized = ConfigTreeBuilder.normalize(raw);
-
-        // Private mapper: feature flags here don't leak into the application-level JsonMapper.
-        var mapper = JsonMapper.builder()
-                .addModule(module)
+    public ShardingConfig ekbatanShardingConfig(Environment environment) {
+        var props = readSubtree(environment, "ekbatan.sharding.");
+        if (props.isEmpty()) {
+            throw new IllegalStateException(
+                    "Ekbatan requires 'ekbatan.sharding' to be configured (groups[].members[].configs.primaryConfig.*). "
+                            + "Either populate it in application.yml or define a ShardingConfig @Bean.");
+        }
+        // Private mapper: FAIL_ON_UNKNOWN_PROPERTIES surfaces typos at startup without leaking
+        // strictness into any application-level Jackson configuration.
+        var mapper = JavaPropsMapper.builder()
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .build();
-        return mapper.convertValue(normalized, ShardingConfig.class);
+        try {
+            return mapper.readPropertiesAs(props, ShardingConfig.class);
+        } catch (IOException | JacksonException e) {
+            throw new IllegalStateException("Failed to bind 'ekbatan.sharding' configuration to ShardingConfig", e);
+        }
+    }
+
+    /**
+     * Binds the {@code ekbatan.jobs} subtree from Spring's {@link Environment} into
+     * {@link JobsConfig} via the same Jackson hybrid path. Optional — falls through to
+     * {@link JobsConfig#defaults()} when no keys are present so every knob ends up at
+     * db-scheduler's framework default at builder-apply time.
+     *
+     * @param environment Spring's environment, source of the {@code ekbatan.jobs.*} keys.
+     * @return the parsed {@link JobsConfig} for the running application.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public JobsConfig ekbatanJobsConfig(Environment environment) {
+        return bindSubtree(environment, "ekbatan.jobs.", JobsConfig.class, JobsConfig::defaults);
+    }
+
+    /**
+     * Binds the {@code ekbatan.local-event-handler} subtree from Spring's {@link Environment} into
+     * {@link LocalEventHandlerConfig} via the same Jackson hybrid path. Optional — falls through
+     * to {@link LocalEventHandlerConfig#defaults()} when no keys are present.
+     *
+     * @param environment Spring's environment, source of the {@code ekbatan.local-event-handler.*} keys.
+     * @return the parsed {@link LocalEventHandlerConfig} for the running application.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public LocalEventHandlerConfig ekbatanLocalEventHandlerConfig(Environment environment) {
+        return bindSubtree(
+                environment,
+                "ekbatan.local-event-handler.",
+                LocalEventHandlerConfig.class,
+                LocalEventHandlerConfig::defaults);
+    }
+
+    /**
+     * Shared helper for the optional Jackson-hybrid subtrees (jobs / local-event-handler). Reads
+     * Spring config keys under {@code prefix} verbatim via {@link #readSubtree}, applies a
+     * kebab-case naming strategy on the Jackson mapper so the framework's idiomatic
+     * {@code ekbatan.jobs.polling-interval} style keys reach the camelCase builder methods, and
+     * falls back to {@code ifEmpty} when no keys are present. (Sharding uses camelCase keys
+     * natively because the inner builder-method names include user-defined map entries; the
+     * kebab strategy stays scoped to this helper.)
+     */
+    private static <T> T bindSubtree(Environment environment, String prefix, Class<T> target, Supplier<T> ifEmpty) {
+        var props = readSubtree(environment, prefix);
+        if (props.isEmpty()) return ifEmpty.get();
+        var mapper = JavaPropsMapper.builder()
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .propertyNamingStrategy(PropertyNamingStrategies.KEBAB_CASE)
+                .build();
+        try {
+            return mapper.readPropertiesAs(props, target);
+        } catch (IOException | JacksonException e) {
+            throw new IllegalStateException(
+                    "Failed to bind '" + prefix.substring(0, prefix.length() - 1) + "' configuration to "
+                            + target.getSimpleName(),
+                    e);
+        }
+    }
+
+    /**
+     * Iterates every {@link EnumerablePropertySource} on the Spring environment and copies the
+     * subset of properties starting with {@code prefix} into a flat {@link Properties} (prefix
+     * stripped). This matches the property-iteration model Quarkus and Micronaut use for the same
+     * Jackson hybrid path, and replaces the older {@code Binder.bind} + tree-rebuild path —
+     * Spring's flat key form ({@code groups[0].name=...}) is exactly what JavaPropsMapper expects.
+     *
+     * <p>Non-enumerable {@code PropertySource}s are skipped; Spring Boot's built-in YAML /
+     * properties / env-var / system-prop / @TestPropertySource sources all implement
+     * {@link EnumerablePropertySource}, so any user override mechanism that works with the
+     * standard {@code Binder.bind(prefix, Map)} call also works here.
+     */
+    private static Properties readSubtree(Environment environment, String prefix) {
+        var props = new Properties();
+        if (!(environment instanceof ConfigurableEnvironment ce)) return props;
+        for (var src : ce.getPropertySources()) {
+            if (!(src instanceof EnumerablePropertySource<?> eps)) continue;
+            for (var name : eps.getPropertyNames()) {
+                if (!name.startsWith(prefix)) continue;
+                var sub = name.substring(prefix.length());
+                if (sub.isEmpty()) continue;
+                if (props.containsKey(sub)) continue; // higher-priority source already wrote this key
+                var value = environment.getProperty(name);
+                if (value != null) {
+                    props.setProperty(sub, value);
+                }
+            }
+        }
+        return props;
     }
 
     /**

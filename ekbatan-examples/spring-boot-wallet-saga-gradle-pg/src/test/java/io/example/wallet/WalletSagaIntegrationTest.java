@@ -43,10 +43,10 @@ import org.springframework.boot.test.web.server.LocalServerPort;
             "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize=5",
             "ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize=4",
             // Tighten poll intervals so the saga's event chain converges quickly under test.
-            "ekbatan.local-event-handler.fanoutPollDelay=200ms",
-            "ekbatan.local-event-handler.handlingPollDelay=200ms",
-            "ekbatan.jobs.pollingInterval=1s",
-            "ekbatan.jobs.shutdownMaxWait=5s",
+            "ekbatan.local-event-handler.fanout-poll-delay=PT0.2S",
+            "ekbatan.local-event-handler.handling-poll-delay=PT0.2S",
+            "ekbatan.jobs.polling-interval=PT1S",
+            "ekbatan.jobs.shutdown-max-wait=PT5S",
             "ekbatan.local-event-handler.handling.enabled=true",
         })
 class WalletSagaIntegrationTest {

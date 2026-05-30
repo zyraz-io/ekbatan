@@ -54,4 +54,27 @@ dependencies {
     api("io.quarkus:quarkus-arc:${project.property("quarkusVersion")}")
 
     implementation("tools.jackson.dataformat:jackson-dataformat-yaml:${project.property("jacksonDatabindVersion")}")
+    // Binds ekbatan.sharding.* from SmallRye's flat (dotted-key + [idx]) property output directly
+    // into ShardingConfig — JavaPropsMapper's default schema (dot separator, [idx] array notation)
+    // is an exact match for what SmallRye emits.
+    implementation("tools.jackson.dataformat:jackson-dataformat-properties:${project.property("jacksonDatabindVersion")}")
+
+    testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
+    // The Quarkus BOM aligns the SmallRye Config version with the one quarkus-core uses at
+    // runtime so the binding tests exercise the exact same SmallRye behavior production sees.
+    testImplementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:${project.property("quarkusVersion")}"))
+    // Builds a real SmallRyeConfig from in-memory PropertiesConfigSource so the binding tests
+    // exercise the same path production code takes — ConfigProvider.getConfig() → JavaPropsMapper
+    // → ShardingConfig, and SmallRye's @ConfigMapping proxy for EkbatanProperties.
+    testImplementation("io.smallrye.config:smallrye-config")
+    // SmallRye's @ConfigMapping materialiser uses ASM to generate the proxy class at runtime; the
+    // Quarkus BOM excludes asm from smallrye-config-core's transitive graph (Arc supplies it via
+    // its own deployment-time bytecode-generation channel) so the test classpath needs it back.
+    testImplementation("org.ow2.asm:asm")
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
 }

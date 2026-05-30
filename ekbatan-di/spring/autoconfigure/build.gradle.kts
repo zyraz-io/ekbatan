@@ -28,6 +28,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-jackson:${project.property("springBootVersion")}")
 
     implementation("tools.jackson.dataformat:jackson-dataformat-yaml:${project.property("jacksonDatabindVersion")}")
+    // Binds ekbatan.sharding.* / ekbatan.jobs.* / ekbatan.local-event-handler.* from Spring's flat
+    // (dotted-key + [idx]) Environment output directly into the core config types — JavaPropsMapper's
+    // default schema is an exact match for what Spring emits, so no custom tree rebuild is needed.
+    implementation("tools.jackson.dataformat:jackson-dataformat-properties:${project.property("jacksonDatabindVersion")}")
 
     // Generates META-INF/spring-configuration-metadata.json so IDEs offer autocomplete +
     // hover docs + typo validation for ekbatan.* keys.

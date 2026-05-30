@@ -3,6 +3,7 @@ package io.ekbatan.spring;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.events.localeventhandler.EventHandlerRegistry;
+import io.ekbatan.events.localeventhandler.config.LocalEventHandlerConfig;
 import io.ekbatan.events.localeventhandler.job.EventFanoutJob;
 import io.ekbatan.events.localeventhandler.job.EventHandlingJob;
 import java.time.Clock;
@@ -56,7 +57,7 @@ public class EkbatanLocalEventHandlerConfiguration {
      *
      * @param databaseRegistry the per-shard connection pools.
      * @param handlerRegistry the registry of event handlers.
-     * @param properties the Ekbatan runtime configuration (reads {@code ekbatan.local-event-handler.*}).
+     * @param localEventHandlerConfig the parsed {@code ekbatan.local-event-handler.*} subtree.
      * @param clock the system clock used for fanout cursor timestamps.
      * @return the fanout job, scheduled by Spring once started.
      */
@@ -65,15 +66,14 @@ public class EkbatanLocalEventHandlerConfiguration {
     public EventFanoutJob ekbatanEventFanoutJob(
             DatabaseRegistry databaseRegistry,
             EventHandlerRegistry handlerRegistry,
-            EkbatanProperties properties,
+            LocalEventHandlerConfig localEventHandlerConfig,
             Clock clock) {
         var builder = EventFanoutJob.eventFanoutJob()
                 .databaseRegistry(databaseRegistry)
                 .eventHandlerRegistry(handlerRegistry)
                 .clock(clock);
-        var leh = properties.localEventHandler();
-        if (leh.fanoutPollDelay() != null) builder.pollDelay(leh.fanoutPollDelay());
-        if (leh.fanoutBatchSize() != null) builder.batchSize(leh.fanoutBatchSize());
+        localEventHandlerConfig.fanoutPollDelay.ifPresent(builder::pollDelay);
+        localEventHandlerConfig.fanoutBatchSize.ifPresent(builder::batchSize);
         return builder.build();
     }
 
@@ -88,7 +88,7 @@ public class EkbatanLocalEventHandlerConfiguration {
      * @param databaseRegistry the per-shard connection pools.
      * @param handlerRegistry the registry of event handlers.
      * @param objectMapper the Jackson mapper used to deserialize event payloads before dispatch.
-     * @param properties the Ekbatan runtime configuration (reads {@code ekbatan.local-event-handler.*}).
+     * @param localEventHandlerConfig the parsed {@code ekbatan.local-event-handler.*} subtree.
      * @param clock the system clock used for retention windows and backoff timestamps.
      * @return the handling job, scheduled by Spring once started.
      */
@@ -99,18 +99,17 @@ public class EkbatanLocalEventHandlerConfiguration {
             DatabaseRegistry databaseRegistry,
             EventHandlerRegistry handlerRegistry,
             ObjectMapper objectMapper,
-            EkbatanProperties properties,
+            LocalEventHandlerConfig localEventHandlerConfig,
             Clock clock) {
         var builder = EventHandlingJob.eventHandlingJob()
                 .databaseRegistry(databaseRegistry)
                 .eventHandlerRegistry(handlerRegistry)
                 .objectMapper(objectMapper)
                 .clock(clock);
-        var leh = properties.localEventHandler();
-        if (leh.handlingPollDelay() != null) builder.pollDelay(leh.handlingPollDelay());
-        if (leh.handlingBatchSize() != null) builder.batchSize(leh.handlingBatchSize());
-        if (leh.handlingMaxBackoffCap() != null) builder.maxBackoffCap(leh.handlingMaxBackoffCap());
-        if (leh.handlingRetentionWindow() != null) builder.retentionWindow(leh.handlingRetentionWindow());
+        localEventHandlerConfig.handlingPollDelay.ifPresent(builder::pollDelay);
+        localEventHandlerConfig.handlingBatchSize.ifPresent(builder::batchSize);
+        localEventHandlerConfig.handlingMaxBackoffCap.ifPresent(builder::maxBackoffCap);
+        localEventHandlerConfig.handlingRetentionWindow.ifPresent(builder::retentionWindow);
         return builder.build();
     }
 }

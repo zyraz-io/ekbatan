@@ -1,6 +1,6 @@
 package io.example.wallet.startup;
 
-import io.ekbatan.core.shard.config.ShardingConfig;
+import io.ekbatan.core.config.ShardingConfig;
 import io.micronaut.context.annotation.Context;
 import org.flywaydb.core.Flyway;
 

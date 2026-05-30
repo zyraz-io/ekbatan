@@ -2,9 +2,9 @@ package io.ekbatan.core.shard;
 
 import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 
+import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
-import io.ekbatan.core.shard.config.ShardingConfig;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,7 +27,7 @@ import org.jooq.impl.DSL;
  *
  * <p>Build manually via {@link Builder#withDatabase(TransactionManager)} /
  * {@link Builder#withDefaultDatabase(TransactionManager)}, or - when wiring from external
- * config - via {@link #fromConfig(io.ekbatan.core.shard.config.ShardingConfig)} which reads
+ * config - via {@link #fromConfig(io.ekbatan.core.config.ShardingConfig)} which reads
  * the same shape that Spring / Quarkus / Micronaut auto-configure produces from
  * {@code ekbatan.sharding.*} keys.
  *

@@ -1,5 +1,7 @@
 package io.ekbatan.core.shard;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Objects;
 import org.apache.commons.lang3.Validate;
 
@@ -49,7 +51,8 @@ public final class ShardIdentifier {
      * @param member the physical member component.
      * @return a new {@link ShardIdentifier}.
      */
-    public static ShardIdentifier of(int group, int member) {
+    @JsonCreator
+    public static ShardIdentifier of(@JsonProperty("group") int group, @JsonProperty("member") int member) {
         Validate.inclusiveBetween(MIN_GROUP, MAX_GROUP, group, "group must be 0 or 255 or between them");
         Validate.inclusiveBetween(MIN_MEMBER, MAX_MEMBER, member, "member must be 0 or 63 or between them");
         return new ShardIdentifier(group, member);

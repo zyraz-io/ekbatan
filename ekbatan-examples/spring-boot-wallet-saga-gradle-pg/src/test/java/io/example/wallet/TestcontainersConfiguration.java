@@ -8,7 +8,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 /**
  * Boots a Postgres testcontainer and points Ekbatan's sharding config at it. Migrations are NOT
  * run here - {@link FlywayConfiguration} already owns that and runs against the same
- * {@link io.ekbatan.core.shard.config.ShardingConfig} this registrar populates, so the same
+ * {@link io.ekbatan.core.config.ShardingConfig} this registrar populates, so the same
  * code path serves both production and tests.
  *
  * <p>Bean-based wiring (rather than {@code @Container} + {@code @DynamicPropertySource}) is the

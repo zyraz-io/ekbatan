@@ -27,6 +27,11 @@ dependencies {
     api(project(":ekbatan-events-local-event-handler"))
     api(project(":ekbatan-distributed-jobs"))
 
+    // Used to bind ekbatan.sharding.* from Micronaut's flat (dotted-key + [idx]) PropertyResolver
+    // output directly into ShardingConfig — JavaPropsMapper's default schema (dot separator,
+    // [idx] array notation) is an exact match for what Micronaut emits.
+    implementation("tools.jackson.dataformat:jackson-dataformat-properties:${project.property("jacksonDatabindVersion")}")
+
     compileOnly("io.micronaut:micronaut-inject:${project.property("micronautVersion")}")
     compileOnly("io.micronaut:micronaut-context:${project.property("micronautVersion")}")
     compileOnly("io.micronaut:micronaut-runtime:${project.property("micronautVersion")}")
@@ -37,4 +42,15 @@ dependencies {
 
     // Pre-generates BeanDefinition classes for our @Factory beans at this module's compile time.
     annotationProcessor("io.micronaut:micronaut-inject-java:${project.property("micronautVersion")}")
+
+    testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
+    // Bootstraps a real Micronaut Environment so the binding tests exercise the same path
+    // production code takes — getProperties(prefix, CAMEL_CASE) → JavaPropsMapper → ShardingConfig.
+    testImplementation("io.micronaut:micronaut-context:${project.property("micronautVersion")}")
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
 }

@@ -2,8 +2,8 @@ package io.example.wallet;
 
 import io.ekbatan.core.concurrent.KeyedLockProvider;
 import io.ekbatan.core.concurrent.MySQLKeyedLockProvider;
+import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
-import io.ekbatan.core.shard.config.ShardingConfig;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 

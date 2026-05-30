@@ -8,7 +8,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 /**
  * Boots two Postgres testcontainers - one per shard - and points Ekbatan's sharding config at
  * them. Migrations are not run here; {@code EkbatanShardFlywayMigrator} iterates every shard's
- * {@code primaryConfig} from the same {@link io.ekbatan.core.shard.config.ShardingConfig}
+ * {@code primaryConfig} from the same {@link io.ekbatan.core.config.ShardingConfig}
  * this registrar populates.
  *
  * <p>The bean names ({@code globalPostgres} / {@code mexicoPostgres}) are deliberately distinct

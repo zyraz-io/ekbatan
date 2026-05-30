@@ -3,6 +3,7 @@ package io.ekbatan.micronaut;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.events.localeventhandler.EventHandler;
 import io.ekbatan.events.localeventhandler.EventHandlerRegistry;
+import io.ekbatan.events.localeventhandler.config.LocalEventHandlerConfig;
 import io.ekbatan.events.localeventhandler.job.EventFanoutJob;
 import io.ekbatan.events.localeventhandler.job.EventHandlingJob;
 import io.micronaut.context.annotation.Bean;
@@ -52,7 +53,7 @@ public class EkbatanLocalEventHandlerConfiguration {
      *
      * @param databaseRegistry the per-shard connection pools.
      * @param handlerRegistry the registry of event handlers.
-     * @param properties the Ekbatan runtime configuration (reads {@code ekbatan.local-event-handler.*}).
+     * @param localEventHandlerConfig the parsed {@code ekbatan.local-event-handler.*} subtree.
      * @param clock the system clock used for fanout cursor timestamps.
      * @return the fanout job, scheduled by Micronaut once started.
      */
@@ -61,15 +62,14 @@ public class EkbatanLocalEventHandlerConfiguration {
     public EventFanoutJob ekbatanEventFanoutJob(
             DatabaseRegistry databaseRegistry,
             EventHandlerRegistry handlerRegistry,
-            EkbatanProperties properties,
+            LocalEventHandlerConfig localEventHandlerConfig,
             Clock clock) {
         var builder = EventFanoutJob.eventFanoutJob()
                 .databaseRegistry(databaseRegistry)
                 .eventHandlerRegistry(handlerRegistry)
                 .clock(clock);
-        var leh = properties.getLocalEventHandler();
-        if (leh.getFanoutPollDelay() != null) builder.pollDelay(leh.getFanoutPollDelay());
-        if (leh.getFanoutBatchSize() != null) builder.batchSize(leh.getFanoutBatchSize());
+        localEventHandlerConfig.fanoutPollDelay.ifPresent(builder::pollDelay);
+        localEventHandlerConfig.fanoutBatchSize.ifPresent(builder::batchSize);
         return builder.build();
     }
 
@@ -84,7 +84,7 @@ public class EkbatanLocalEventHandlerConfiguration {
      * @param databaseRegistry the per-shard connection pools.
      * @param handlerRegistry the registry of event handlers.
      * @param jsonMapper the Jackson mapper used to deserialize event payloads before dispatch.
-     * @param properties the Ekbatan runtime configuration (reads {@code ekbatan.local-event-handler.*}).
+     * @param localEventHandlerConfig the parsed {@code ekbatan.local-event-handler.*} subtree.
      * @param clock the system clock used for retention windows and backoff timestamps.
      * @return the handling job, scheduled by Micronaut once started.
      */
@@ -95,18 +95,17 @@ public class EkbatanLocalEventHandlerConfiguration {
             DatabaseRegistry databaseRegistry,
             EventHandlerRegistry handlerRegistry,
             JsonMapper jsonMapper,
-            EkbatanProperties properties,
+            LocalEventHandlerConfig localEventHandlerConfig,
             Clock clock) {
         var builder = EventHandlingJob.eventHandlingJob()
                 .databaseRegistry(databaseRegistry)
                 .eventHandlerRegistry(handlerRegistry)
                 .objectMapper(jsonMapper)
                 .clock(clock);
-        var leh = properties.getLocalEventHandler();
-        if (leh.getHandlingPollDelay() != null) builder.pollDelay(leh.getHandlingPollDelay());
-        if (leh.getHandlingBatchSize() != null) builder.batchSize(leh.getHandlingBatchSize());
-        if (leh.getHandlingMaxBackoffCap() != null) builder.maxBackoffCap(leh.getHandlingMaxBackoffCap());
-        if (leh.getHandlingRetentionWindow() != null) builder.retentionWindow(leh.getHandlingRetentionWindow());
+        localEventHandlerConfig.handlingPollDelay.ifPresent(builder::pollDelay);
+        localEventHandlerConfig.handlingBatchSize.ifPresent(builder::batchSize);
+        localEventHandlerConfig.handlingMaxBackoffCap.ifPresent(builder::maxBackoffCap);
+        localEventHandlerConfig.handlingRetentionWindow.ifPresent(builder::retentionWindow);
         return builder.build();
     }
 }

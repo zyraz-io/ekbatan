@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>micronaut-wallet-rest-maven-native-mariadb</artifactId>
-    <version>0.0.3-SNAPSHOT</version>
+    <version>0.0.4-SNAPSHOT</version>
     <packaging>${packaging}</packaging>
     <name>micronaut-wallet-rest-maven-native-mariadb</name>
     <description>Micronaut + MariaDB wallet example demonstrating Ekbatan with Maven + GraalVM native-image (MariaDB dialect of the Maven Micronaut native triple).</description>
@@ -24,7 +24,7 @@
 
         <packaging>jar</packaging>
 
-        <ekbatan.version>0.0.3</ekbatan.version>
+        <ekbatan.version>0.0.4</ekbatan.version>
         <micronaut.runtime>netty</micronaut.runtime>
         <exec.mainClass>io.example.wallet.Application</exec.mainClass>
 
@@ -37,7 +37,6 @@
 
         <testcontainers.version>2.0.5</testcontainers.version>
 
-        <codegen.db.port>13306</codegen.db.port>
         <codegen.db.name>wallet</codegen.db.name>
         <codegen.db.user>root</codegen.db.user>
         <codegen.db.password>root</codegen.db.password>
@@ -80,6 +79,21 @@
             <groupId>org.jooq</groupId>
             <artifactId>jooq</artifactId>
             <version>3.20.10</version>
+        </dependency>
+
+        <!-- Jackson 3 (tools.jackson:jackson-databind:3.x) added new annotations to the
+             com.fasterxml.jackson.annotation package (e.g. JsonSerializeAs in 2.20+).
+             Micronaut 4.10's parent BOM pins jackson-annotations to 2.19.2 which lacks
+             these, so loading Ekbatan's @JsonDeserialize-bearing ShardingConfig blows
+             up with NoClassDefFoundError at Micronaut bean instantiation. Pin to a
+             version that has them (2.21 is what the Gradle-side resolution naturally
+             picks via Jackson 3's transitive). Explicit-dependency override matches the
+             jOOQ comment above - keeps it simple, avoids the dependencyManagement /
+             micronaut-maven-plugin AOT issue. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>2.21</version>
         </dependency>
 
 
@@ -324,7 +338,7 @@
                             <alias>mariadb-codegen</alias>
                             <run>
                                 <ports>
-                                    <port>${codegen.db.port}:3306</port>
+                                    <port>codegen.db.port:3306</port>
                                 </ports>
                                 <env>
                                     <MARIADB_ROOT_PASSWORD>${codegen.db.password}</MARIADB_ROOT_PASSWORD>

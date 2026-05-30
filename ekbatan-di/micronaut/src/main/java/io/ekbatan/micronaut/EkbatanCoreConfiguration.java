@@ -4,20 +4,27 @@ import io.ekbatan.core.action.Action;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.action.ActionRegistry;
 import io.ekbatan.core.action.persister.event.EventPersister;
-import io.ekbatan.core.config.jackson.EkbatanConfigJacksonModule;
+import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.repository.RepositoryRegistry;
 import io.ekbatan.core.shard.DatabaseRegistry;
-import io.ekbatan.core.shard.config.ShardingConfig;
+import io.ekbatan.distributedjobs.config.JobsConfig;
+import io.ekbatan.events.localeventhandler.config.LocalEventHandlerConfig;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.env.Environment;
+import io.micronaut.core.naming.conventions.StringConvention;
 import jakarta.inject.Singleton;
+import java.io.IOException;
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.dataformat.javaprop.JavaPropsMapper;
 
 /**
  * Micronaut {@code @Factory} class for Ekbatan's core surface. Binds {@code ekbatan.sharding.*}
@@ -36,40 +43,112 @@ public class EkbatanCoreConfiguration {
     /** Required by Micronaut; the container instantiates this {@code @Factory} class to invoke its {@code @Bean} methods. */
     public EkbatanCoreConfiguration() {}
 
-    /** {@return the Ekbatan-specific Jackson module that maps the framework's builder-based config types} */
-    @Bean
-    @Singleton
-    public EkbatanConfigJacksonModule ekbatanConfigJacksonModule() {
-        return new EkbatanConfigJacksonModule();
-    }
-
     /**
-     * Binds the {@code ekbatan.sharding} subtree from Micronaut's {@link Environment} via the
-     * Jackson hybrid path: an internal {@code ConfigTreeBuilder} reconstructs the nested tree
-     * from flat keys, then a private {@link JsonMapper} (with the Ekbatan mix-in module)
-     * deserializes it into {@link ShardingConfig}.
+     * Binds the {@code ekbatan.sharding} subtree from Micronaut's {@link Environment} into
+     * {@link ShardingConfig} via Jackson's {@link JavaPropsMapper}. Micronaut hands us a flat
+     * map keyed by dotted paths with {@code [idx]} array notation (e.g. {@code groups[0].primaryConfig.jdbcUrl})
+     * - the exact format JavaPropsMapper parses natively, so no custom tree reconstruction is needed.
+     * {@link StringConvention#CAMEL_CASE} normalises every path segment to camelCase regardless of
+     * whether the source YAML uses kebab-case ({@code jdbc-url}) or camelCase ({@code jdbcUrl}),
+     * so the resulting keys always match the Ekbatan builder methods. The Jackson binding metadata
+     * lives inline on those classes via {@code @JsonDeserialize} / {@code @JsonPOJOBuilder} /
+     * {@code @JsonIgnore}, so the {@link JavaPropsMapper} below picks it up without any extra
+     * module registration.
      *
      * @param environment Micronaut's environment, source of the {@code ekbatan.sharding.*} keys.
-     * @param module the Ekbatan Jackson module produced by {@link #ekbatanConfigJacksonModule}.
      * @return the parsed {@link ShardingConfig} for the running application.
      */
     @Bean
     @Singleton
-    public ShardingConfig ekbatanShardingConfig(Environment environment, EkbatanConfigJacksonModule module) {
-        var tree = ConfigTreeBuilder.readSubtree(environment, "ekbatan.sharding");
-        if (tree.isEmpty()) {
+    public ShardingConfig ekbatanShardingConfig(Environment environment) {
+        var flat = environment.getProperties("ekbatan.sharding", StringConvention.CAMEL_CASE);
+        if (flat.isEmpty()) {
             throw new IllegalStateException(
                     "Ekbatan requires 'ekbatan.sharding' to be configured (groups[].members[].configs.primaryConfig.*). "
                             + "Either populate it in application.yml/application.properties or define a ShardingConfig "
                             + "@Bean of your own.");
         }
+        // Micronaut emits synthetic aggregate entries (e.g. `groups` -> ArrayList<Map>) alongside
+        // the flat leaf keys; skip those - JavaPropsMapper rebuilds the structure from the leaves.
+        var props = new Properties();
+        flat.forEach((k, v) -> {
+            if (v != null && !(v instanceof Map<?, ?>) && !(v instanceof List<?>)) {
+                props.setProperty(k, v.toString());
+            }
+        });
         // Private mapper: FAIL_ON_UNKNOWN_PROPERTIES surfaces typos at startup without leaking
         // strictness into any application-level Jackson configuration.
-        var mapper = JsonMapper.builder()
-                .addModule(module)
+        var mapper = JavaPropsMapper.builder()
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .build();
-        return mapper.convertValue(tree, ShardingConfig.class);
+        try {
+            return mapper.readPropertiesAs(props, ShardingConfig.class);
+        } catch (IOException | JacksonException e) {
+            // Jackson 3 throws unchecked JacksonException for binding failures (the IOException
+            // path is declared on the method signature but only triggers on lower-level I/O
+            // problems we don't expect with an in-memory Properties source). Wrap both so any
+            // misconfiguration of `ekbatan.sharding.*` surfaces a single, contextual message.
+            throw new IllegalStateException("Failed to bind 'ekbatan.sharding' configuration to ShardingConfig", e);
+        }
+    }
+
+    /**
+     * Binds the {@code ekbatan.jobs} subtree from Micronaut's {@link Environment} into
+     * {@link JobsConfig} via the same Jackson hybrid path. Optional — falls through to
+     * {@link JobsConfig#defaults()} when no keys are present, so every knob lands at
+     * db-scheduler's framework default at builder-apply time.
+     *
+     * @param environment Micronaut's environment, source of the {@code ekbatan.jobs.*} keys.
+     * @return the parsed {@link JobsConfig} for the running application.
+     */
+    @Bean
+    @Singleton
+    public JobsConfig ekbatanJobsConfig(Environment environment) {
+        return bindOptionalSubtree(environment, "ekbatan.jobs", JobsConfig.class, JobsConfig.defaults());
+    }
+
+    /**
+     * Binds the {@code ekbatan.local-event-handler} subtree from Micronaut's {@link Environment}
+     * into {@link LocalEventHandlerConfig} via the same Jackson hybrid path. Optional — falls
+     * through to {@link LocalEventHandlerConfig#defaults()} when no keys are present.
+     *
+     * @param environment Micronaut's environment, source of the {@code ekbatan.local-event-handler.*} keys.
+     * @return the parsed {@link LocalEventHandlerConfig} for the running application.
+     */
+    @Bean
+    @Singleton
+    public LocalEventHandlerConfig ekbatanLocalEventHandlerConfig(Environment environment) {
+        return bindOptionalSubtree(
+                environment,
+                "ekbatan.local-event-handler",
+                LocalEventHandlerConfig.class,
+                LocalEventHandlerConfig.defaults());
+    }
+
+    /**
+     * Shared helper for the optional Jackson-hybrid subtrees (jobs / local-event-handler). Reads
+     * {@code prefix.*} keys via Micronaut's {@link Environment#getProperties} with camelCase
+     * normalisation, hands the leaf entries to a strict {@link JavaPropsMapper}, and falls back
+     * to {@code ifEmpty} when no keys are present.
+     */
+    private static <T> T bindOptionalSubtree(Environment environment, String prefix, Class<T> target, T ifEmpty) {
+        var flat = environment.getProperties(prefix, StringConvention.CAMEL_CASE);
+        if (flat.isEmpty()) return ifEmpty;
+        var props = new Properties();
+        flat.forEach((k, v) -> {
+            if (v != null && !(v instanceof Map<?, ?>) && !(v instanceof List<?>)) {
+                props.setProperty(k, v.toString());
+            }
+        });
+        var mapper = JavaPropsMapper.builder()
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .build();
+        try {
+            return mapper.readPropertiesAs(props, target);
+        } catch (IOException | JacksonException e) {
+            throw new IllegalStateException(
+                    "Failed to bind '" + prefix + "' configuration to " + target.getSimpleName(), e);
+        }
     }
 
     /**

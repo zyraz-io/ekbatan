@@ -1,16 +1,21 @@
 package io.ekbatan.spring;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.action.ActionRegistry;
-import io.ekbatan.core.config.jackson.EkbatanConfigJacksonModule;
+import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.core.repository.RepositoryRegistry;
 import io.ekbatan.core.shard.DatabaseRegistry;
-import io.ekbatan.core.shard.config.ShardingConfig;
+import io.ekbatan.distributedjobs.config.JobsConfig;
+import io.ekbatan.events.localeventhandler.config.LocalEventHandlerConfig;
 import io.ekbatan.spring.fixture.FixtureAction;
+import java.time.Duration;
+import java.util.Map;
 import org.jooq.SQLDialect;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledInNativeImage;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
@@ -20,7 +25,8 @@ import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import tools.jackson.databind.JacksonModule;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.StandardEnvironment;
 
 /**
  * Component test for the auto-config wiring up to {@link ShardingConfig} and {@link ActionExecutor}
@@ -58,7 +64,6 @@ class EkbatanCoreConfigurationTest {
                         "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize=20")
                 .run(ctx -> {
                     assertThat(ctx).hasNotFailed();
-                    assertThat(ctx).hasSingleBean(EkbatanConfigJacksonModule.class);
                     assertThat(ctx).hasSingleBean(ShardingConfig.class);
                     assertThat(ctx).hasSingleBean(ActionRegistry.class);
                     assertThat(ctx).hasSingleBean(RepositoryRegistry.class);
@@ -70,27 +75,6 @@ class EkbatanCoreConfigurationTest {
                     assertThat(member.primaryConfig().jdbcUrl).isEqualTo("jdbc:postgresql://primary:5432/db");
                     assertThat(member.primaryConfig().maximumPoolSize).isEqualTo(20);
                     assertThat(member.primaryConfig().dialect).isEqualTo(SQLDialect.POSTGRES);
-                });
-    }
-
-    @Test
-    void shouldExposeJacksonModuleForApplicationLevelMapper() {
-        contextRunner
-                .withPropertyValues(
-                        "ekbatan.sharding.defaultShard.group=0",
-                        "ekbatan.sharding.defaultShard.member=0",
-                        "ekbatan.sharding.groups[0].group=0",
-                        "ekbatan.sharding.groups[0].name=g",
-                        "ekbatan.sharding.groups[0].members[0].member=0",
-                        "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl=jdbc:postgresql://x:5432/db",
-                        "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username=u",
-                        "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password=p")
-                .run(ctx -> {
-                    // The JacksonModule bean we expose is auto-collected by Spring Boot 4's
-                    // JacksonAutoConfiguration via ObjectProvider<JacksonModule> - verify our
-                    // module appears among them.
-                    var modules = ctx.getBeansOfType(JacksonModule.class);
-                    assertThat(modules.values()).anyMatch(m -> m instanceof EkbatanConfigJacksonModule);
                 });
     }
 
@@ -159,6 +143,95 @@ class EkbatanCoreConfigurationTest {
         @Bean
         ActionExecutor mockActionExecutor() {
             return mock(ActionExecutor.class);
+        }
+    }
+
+    /**
+     * Direct-invocation tests for the {@code ekbatanJobsConfig} producer — no Spring context
+     * boot, just a {@link StandardEnvironment} with a {@link MapPropertySource} feeding the
+     * producer method. End-to-end wiring through the auto-config is exercised by the
+     * Testcontainers integration test in {@code ekbatan-integration-tests-di-spring-boot-starter}.
+     */
+    @Nested
+    class JobsConfigBinding {
+
+        private JobsConfig bindJobs(Map<String, Object> props) {
+            var env = new StandardEnvironment();
+            if (!props.isEmpty()) {
+                env.getPropertySources().addFirst(new MapPropertySource("test", props));
+            }
+            return new EkbatanCoreConfiguration().ekbatanJobsConfig(env);
+        }
+
+        @Test
+        void returnsDefaults_whenSubtreeAbsent() {
+            var cfg = bindJobs(Map.of());
+            assertThat(cfg.pollingInterval).isEmpty();
+            assertThat(cfg.heartbeatInterval).isEmpty();
+            assertThat(cfg.shutdownMaxWait).isEmpty();
+        }
+
+        @Test
+        void bindsKebabCaseKeysWithIso8601Durations() {
+            var cfg = bindJobs(Map.of(
+                    "ekbatan.jobs.polling-interval", "PT5S",
+                    "ekbatan.jobs.heartbeat-interval", "PT3S",
+                    "ekbatan.jobs.shutdown-max-wait", "PT30S"));
+
+            assertThat(cfg.pollingInterval).contains(Duration.ofSeconds(5));
+            assertThat(cfg.heartbeatInterval).contains(Duration.ofSeconds(3));
+            assertThat(cfg.shutdownMaxWait).contains(Duration.ofSeconds(30));
+        }
+
+        @Test
+        void failsOnUnknownProperty() {
+            assertThatThrownBy(() -> bindJobs(Map.of("ekbatan.jobs.not-a-real-field", "x")))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Failed to bind 'ekbatan.jobs'");
+        }
+    }
+
+    /**
+     * Direct-invocation tests for the {@code ekbatanLocalEventHandlerConfig} producer — mirror of
+     * {@link JobsConfigBinding}, covering both flat and nested ({@code handling.*}) knobs.
+     */
+    @Nested
+    class LocalEventHandlerConfigBinding {
+
+        private LocalEventHandlerConfig bindLeh(Map<String, Object> props) {
+            var env = new StandardEnvironment();
+            if (!props.isEmpty()) {
+                env.getPropertySources().addFirst(new MapPropertySource("test", props));
+            }
+            return new EkbatanCoreConfiguration().ekbatanLocalEventHandlerConfig(env);
+        }
+
+        @Test
+        void returnsDefaults_whenSubtreeAbsent() {
+            var cfg = bindLeh(Map.of());
+            assertThat(cfg.fanoutPollDelay).isEmpty();
+            assertThat(cfg.handling.enabled).isFalse();
+        }
+
+        @Test
+        void bindsFlatAndNestedKnobs() {
+            var cfg = bindLeh(Map.of(
+                    "ekbatan.local-event-handler.fanout-poll-delay", "PT0.2S",
+                    "ekbatan.local-event-handler.fanout-batch-size", "100",
+                    "ekbatan.local-event-handler.handling-poll-delay", "PT0.15S",
+                    "ekbatan.local-event-handler.handling.enabled", "true"));
+
+            assertThat(cfg.fanoutPollDelay).contains(Duration.ofMillis(200));
+            assertThat(cfg.fanoutBatchSize).contains(100);
+            assertThat(cfg.handlingPollDelay).contains(Duration.ofMillis(150));
+            assertThat(cfg.handling.enabled).isTrue();
+        }
+
+        @Test
+        void failsOnUnknownProperty() {
+            assertThatThrownBy(() -> bindLeh(Map.of("ekbatan.local-event-handler.not-a-real-field", "x")))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Failed to bind 'ekbatan.local-event-handler'");
         }
     }
 }

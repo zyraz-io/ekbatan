@@ -1,10 +1,12 @@
-package io.ekbatan.core.shard.config;
+package io.ekbatan.core.config;
 
-import io.ekbatan.core.config.DataSourceConfig;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import org.apache.commons.lang3.Validate;
+import tools.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.annotation.JsonPOJOBuilder;
 
 /**
  * Configuration for a single shard member.
@@ -24,6 +26,7 @@ import org.apache.commons.lang3.Validate;
  *     lockConfig:      { jdbcUrl: ..., maximumPoolSize: 50, leakDetectionThreshold: 0 }
  * </pre>
  */
+@JsonDeserialize(builder = ShardMemberConfig.Builder.class)
 public final class ShardMemberConfig {
 
     /** Reserved key for the required primary datasource configuration. */
@@ -83,6 +86,7 @@ public final class ShardMemberConfig {
     }
 
     /** Fluent builder for {@link ShardMemberConfig}. Obtain via {@link #shardMemberConfig()}. */
+    @JsonPOJOBuilder(withPrefix = "")
     public static final class Builder {
 
         private int member;
@@ -119,22 +123,27 @@ public final class ShardMemberConfig {
         }
 
         /**
-         * Typed shortcut for the reserved {@code "primaryConfig"} entry.
+         * Typed shortcut for the reserved {@code "primaryConfig"} entry. Hidden from Jackson so
+         * the canonical YAML form is a {@code configs} map with reserved keys
+         * {@code "primaryConfig"}/{@code "secondaryConfig"} plus user-defined names.
          *
          * @param primaryConfig the primary datasource configuration.
          * @return this builder, for chaining.
          */
+        @JsonIgnore
         public Builder primaryConfig(DataSourceConfig primaryConfig) {
             this.configs.put(PRIMARY_CONFIG, primaryConfig);
             return this;
         }
 
         /**
-         * Typed shortcut for the reserved {@code "secondaryConfig"} entry.
+         * Typed shortcut for the reserved {@code "secondaryConfig"} entry. See
+         * {@link #primaryConfig(DataSourceConfig)} for the Jackson hiding rationale.
          *
          * @param secondaryConfig the secondary datasource configuration.
          * @return this builder, for chaining.
          */
+        @JsonIgnore
         public Builder secondaryConfig(DataSourceConfig secondaryConfig) {
             this.configs.put(SECONDARY_CONFIG, secondaryConfig);
             return this;
@@ -147,6 +156,7 @@ public final class ShardMemberConfig {
          * @param config the datasource configuration.
          * @return this builder, for chaining.
          */
+        @JsonIgnore
         public Builder withConfig(String name, DataSourceConfig config) {
             Validate.notBlank(name, "name cannot be blank");
             this.configs.put(name, config);

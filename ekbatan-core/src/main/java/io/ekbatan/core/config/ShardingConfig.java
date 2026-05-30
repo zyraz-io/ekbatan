@@ -1,9 +1,12 @@
-package io.ekbatan.core.shard.config;
+package io.ekbatan.core.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.ekbatan.core.shard.ShardIdentifier;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.commons.lang3.Validate;
+import tools.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.annotation.JsonPOJOBuilder;
 
 /**
  * Top-level config describing all shards the application talks to. Built directly from
@@ -17,6 +20,7 @@ import org.apache.commons.lang3.Validate;
  * each member carries one or more {@code DataSourceConfig}s (primary + optional secondary
  * read-replica).
  */
+@JsonDeserialize(builder = ShardingConfig.Builder.class)
 public final class ShardingConfig {
 
     /** Shard the framework routes to when no strategy commits to a specific shard. */
@@ -32,6 +36,7 @@ public final class ShardingConfig {
     }
 
     /** Fluent builder for {@link ShardingConfig}. Obtain via {@link #shardingConfig()}. */
+    @JsonPOJOBuilder(withPrefix = "")
     public static final class Builder {
 
         private ShardIdentifier defaultShard;
@@ -72,6 +77,7 @@ public final class ShardingConfig {
          * @param group the group to add.
          * @return this builder, for chaining.
          */
+        @JsonIgnore
         public Builder withGroup(ShardGroupConfig group) {
             this.groups.add(group);
             return this;

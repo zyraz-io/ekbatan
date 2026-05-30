@@ -1,7 +1,7 @@
 package io.example.wallet.startup;
 
 import com.zaxxer.hikari.HikariDataSource;
-import io.ekbatan.core.shard.config.ShardingConfig;
+import io.ekbatan.core.config.ShardingConfig;
 import javax.sql.DataSource;
 import org.springframework.boot.flyway.autoconfigure.FlywayDataSource;
 import org.springframework.context.annotation.Bean;

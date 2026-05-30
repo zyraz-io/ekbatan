@@ -9,7 +9,7 @@ import org.testcontainers.mysql.MySQLContainer;
 /**
  * Boots a MySQL testcontainer and points Ekbatan's sharding config at it. Migrations are NOT run
  * here - {@link FlywayConfiguration} already owns that and runs against the same
- * {@link io.ekbatan.core.shard.config.ShardingConfig} this registrar populates, so the same code
+ * {@link io.ekbatan.core.config.ShardingConfig} this registrar populates, so the same code
  * path serves both production and tests.
  *
  * <p>The {@code mysql_init.sql} resource is copied into {@code /docker-entrypoint-initdb.d/} on

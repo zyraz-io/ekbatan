@@ -54,10 +54,10 @@ import org.springframework.boot.test.context.SpringBootTest;
             "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize=5",
             "ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize=4",
             // Tighten poll intervals so the test doesn't sit idle for default waits.
-            "ekbatan.local-event-handler.fanoutPollDelay=200ms",
-            "ekbatan.local-event-handler.handlingPollDelay=200ms",
-            "ekbatan.jobs.pollingInterval=1s",
-            "ekbatan.jobs.shutdownMaxWait=5s",
+            "ekbatan.local-event-handler.fanout-poll-delay=PT0.2S",
+            "ekbatan.local-event-handler.handling-poll-delay=PT0.2S",
+            "ekbatan.jobs.polling-interval=PT1S",
+            "ekbatan.jobs.shutdown-max-wait=PT5S",
             // Opt in to the in-process handling job (off by default).
             // Read by @ConditionalOnProperty during bean definition phase, which is
             // BEFORE DynamicPropertyRegistrar runs - must be set here, not the registrar.

@@ -75,10 +75,10 @@ public class MySQLTestResource implements QuarkusTestResourceLifecycleManager {
 
         // Tighten poll intervals so the test doesn't sit idle waiting for the listen-to-yourself
         // dispatch to drain.
-        props.put("ekbatan.local-event-handler.fanout-poll-delay", "200ms");
-        props.put("ekbatan.local-event-handler.handling-poll-delay", "200ms");
-        props.put("ekbatan.jobs.polling-interval", "1s");
-        props.put("ekbatan.jobs.shutdown-max-wait", "5s");
+        props.put("ekbatan.local-event-handler.fanout-poll-delay", "PT0.2S");
+        props.put("ekbatan.local-event-handler.handling-poll-delay", "PT0.2S");
+        props.put("ekbatan.jobs.polling-interval", "PT1S");
+        props.put("ekbatan.jobs.shutdown-max-wait", "PT5S");
 
         return props;
     }

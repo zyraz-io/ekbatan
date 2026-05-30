@@ -42,10 +42,10 @@ import org.testcontainers.mariadb.MariaDBContainer;
 // frameworks, so it's safer to declare the local-event-handler opt-in as a @Property here.
 @Property(name = "ekbatan.namespace", value = "test.wallet")
 @Property(name = "ekbatan.local-event-handler.handling.enabled", value = "true")
-@Property(name = "ekbatan.local-event-handler.fanout-poll-delay", value = "200ms")
-@Property(name = "ekbatan.local-event-handler.handling-poll-delay", value = "200ms")
-@Property(name = "ekbatan.jobs.polling-interval", value = "1s")
-@Property(name = "ekbatan.jobs.shutdown-max-wait", value = "5s")
+@Property(name = "ekbatan.local-event-handler.fanout-poll-delay", value = "PT0.2S")
+@Property(name = "ekbatan.local-event-handler.handling-poll-delay", value = "PT0.2S")
+@Property(name = "ekbatan.jobs.polling-interval", value = "PT1S")
+@Property(name = "ekbatan.jobs.shutdown-max-wait", value = "PT5S")
 class WalletControllerIntegrationTest implements TestPropertyProvider {
 
     private final MariaDBContainer mariadb = new MariaDBContainer("mariadb:11.8")

@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>micronaut-wallet-rest-maven-pg</artifactId>
-    <version>0.0.3-SNAPSHOT</version>
+    <version>0.0.4-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>micronaut-wallet-rest-maven-pg</name>
     <description>Micronaut + Postgres wallet example demonstrating Ekbatan with Maven (PG dialect of the Maven sibling triple).</description>
@@ -22,7 +22,7 @@
         <java.version>25</java.version>
         <maven.compiler.release>25</maven.compiler.release>
 
-        <ekbatan.version>0.0.3</ekbatan.version>
+        <ekbatan.version>0.0.4</ekbatan.version>
         <micronaut.runtime>netty</micronaut.runtime>
         <exec.mainClass>io.example.wallet.Application</exec.mainClass>
 
@@ -38,7 +38,6 @@
         <testcontainers.version>2.0.5</testcontainers.version>
 
         <!-- Single source of truth for the codegen-time database. -->
-        <codegen.db.port>15432</codegen.db.port>
         <codegen.db.name>wallet_codegen</codegen.db.name>
         <codegen.db.user>codegen</codegen.db.user>
         <codegen.db.password>codegen</codegen.db.password>
@@ -89,6 +88,20 @@
             <version>3.20.10</version>
         </dependency>
 
+        <!-- Jackson 3 (tools.jackson:jackson-databind:3.x) added new annotations to the
+             com.fasterxml.jackson.annotation package (e.g. JsonSerializeAs in 2.20+).
+             Micronaut 4.10's parent BOM pins jackson-annotations to 2.19.2 which lacks
+             these, so loading Ekbatan's @JsonDeserialize-bearing ShardingConfig blows
+             up with NoClassDefFoundError at Micronaut bean instantiation. Pin to a
+             version that has them (2.21 is what the Gradle-side resolution naturally
+             picks via Jackson 3's transitive). Explicit-dependency override matches the
+             jOOQ comment above - keeps it simple, avoids the dependencyManagement /
+             micronaut-maven-plugin AOT issue. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>2.21</version>
+        </dependency>
 
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -342,7 +355,7 @@
                             <alias>postgres-codegen</alias>
                             <run>
                                 <ports>
-                                    <port>${codegen.db.port}:5432</port>
+                                    <port>codegen.db.port:5432</port>
                                 </ports>
                                 <env>
                                     <POSTGRES_DB>${codegen.db.name}</POSTGRES_DB>

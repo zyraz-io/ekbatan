@@ -1,11 +1,12 @@
 package io.ekbatan.quarkus.runtime;
 
+import io.ekbatan.core.config.ShardMemberConfig;
+import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.shard.ShardIdentifier;
-import io.ekbatan.core.shard.config.ShardMemberConfig;
-import io.ekbatan.core.shard.config.ShardingConfig;
 import io.ekbatan.distributedjobs.DistributedJob;
 import io.ekbatan.distributedjobs.JobRegistry;
+import io.ekbatan.distributedjobs.config.JobsConfig;
 import io.quarkus.arc.All;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
@@ -83,7 +84,7 @@ public class EkbatanDistributedJobsConfiguration {
      * {@link StartupEvent} / {@link ShutdownEvent} observers below.
      *
      * @param jobsConnectionProvider the dedicated provider produced by {@link #ekbatanJobsConnectionProvider}.
-     * @param config the Ekbatan runtime configuration (reads {@code ekbatan.jobs.*}).
+     * @param jobsConfig the parsed {@code ekbatan.jobs.*} subtree.
      * @param jobs the application's distributed-job beans, injected via Arc {@code @All}.
      * @return the registry whose scheduler is started in {@link #onStartup}.
      */
@@ -91,15 +92,14 @@ public class EkbatanDistributedJobsConfiguration {
     @Singleton
     public JobRegistry ekbatanJobRegistry(
             @Named("ekbatanJobsConnectionProvider") ConnectionProvider jobsConnectionProvider,
-            EkbatanProperties config,
+            JobsConfig jobsConfig,
             @All List<DistributedJob> jobs) {
         var builder = JobRegistry.jobRegistry()
                 .connectionProvider(jobsConnectionProvider)
                 .registerShutdownHook(false);
-        var j = config.jobs();
-        j.pollingInterval().ifPresent(builder::pollInterval);
-        j.heartbeatInterval().ifPresent(builder::heartbeatInterval);
-        j.shutdownMaxWait().ifPresent(builder::shutdownMaxWait);
+        jobsConfig.pollingInterval.ifPresent(builder::pollInterval);
+        jobsConfig.heartbeatInterval.ifPresent(builder::heartbeatInterval);
+        jobsConfig.shutdownMaxWait.ifPresent(builder::shutdownMaxWait);
         return builder.withJobs(jobs).build();
     }
 

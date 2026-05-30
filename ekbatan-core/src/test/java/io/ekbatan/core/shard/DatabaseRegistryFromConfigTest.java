@@ -1,9 +1,9 @@
 package io.ekbatan.core.shard;
 
 import static io.ekbatan.core.config.DataSourceConfig.Builder.dataSourceConfig;
-import static io.ekbatan.core.shard.config.ShardGroupConfig.Builder.shardGroupConfig;
-import static io.ekbatan.core.shard.config.ShardMemberConfig.Builder.shardMemberConfig;
-import static io.ekbatan.core.shard.config.ShardingConfig.Builder.shardingConfig;
+import static io.ekbatan.core.config.ShardGroupConfig.Builder.shardGroupConfig;
+import static io.ekbatan.core.config.ShardMemberConfig.Builder.shardMemberConfig;
+import static io.ekbatan.core.config.ShardingConfig.Builder.shardingConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

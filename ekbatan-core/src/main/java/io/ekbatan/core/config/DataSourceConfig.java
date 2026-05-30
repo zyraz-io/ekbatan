@@ -3,10 +3,13 @@ package io.ekbatan.core.config;
 import java.util.Optional;
 import org.apache.commons.lang3.Validate;
 import org.jooq.SQLDialect;
+import tools.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.annotation.JsonPOJOBuilder;
 
 /**
  * HikariCP-compatible configuration with auto-resolved dialect from JDBC URL.
  */
+@JsonDeserialize(builder = DataSourceConfig.Builder.class)
 public final class DataSourceConfig {
 
     /** The JDBC connection URL (e.g. {@code jdbc:postgresql://...}). */
@@ -56,6 +59,7 @@ public final class DataSourceConfig {
     }
 
     /** Fluent builder for {@link DataSourceConfig}. Obtain via {@link #dataSourceConfig()}. */
+    @JsonPOJOBuilder(withPrefix = "")
     public static final class Builder {
 
         private String jdbcUrl;

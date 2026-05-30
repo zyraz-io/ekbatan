@@ -1,11 +1,12 @@
 package io.ekbatan.spring;
 
+import io.ekbatan.core.config.ShardMemberConfig;
+import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.shard.ShardIdentifier;
-import io.ekbatan.core.shard.config.ShardMemberConfig;
-import io.ekbatan.core.shard.config.ShardingConfig;
 import io.ekbatan.distributedjobs.DistributedJob;
 import io.ekbatan.distributedjobs.JobRegistry;
+import io.ekbatan.distributedjobs.config.JobsConfig;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -74,7 +75,7 @@ public class EkbatanDistributedJobsConfiguration {
      * jobs before pools close.
      *
      * @param jobsConnectionProvider the dedicated provider produced by {@link #ekbatanJobsConnectionProvider}.
-     * @param properties the Ekbatan runtime configuration (reads {@code ekbatan.jobs.*}).
+     * @param jobsConfig the parsed {@code ekbatan.jobs.*} subtree.
      * @param jobs the application's distributed-job beans, injected by Spring.
      * @return the registry whose scheduler is started by Spring's {@code initMethod} hook.
      */
@@ -83,15 +84,14 @@ public class EkbatanDistributedJobsConfiguration {
     @DependsOn({"ekbatanActionRegistry", "ekbatanActionExecutor"})
     public JobRegistry ekbatanJobRegistry(
             @Qualifier("ekbatanJobsConnectionProvider") ConnectionProvider jobsConnectionProvider,
-            EkbatanProperties properties,
+            JobsConfig jobsConfig,
             List<DistributedJob> jobs) {
         var builder = JobRegistry.jobRegistry()
                 .connectionProvider(jobsConnectionProvider)
                 .registerShutdownHook(false);
-        var j = properties.jobs();
-        if (j.pollingInterval() != null) builder.pollInterval(j.pollingInterval());
-        if (j.heartbeatInterval() != null) builder.heartbeatInterval(j.heartbeatInterval());
-        if (j.shutdownMaxWait() != null) builder.shutdownMaxWait(j.shutdownMaxWait());
+        jobsConfig.pollingInterval.ifPresent(builder::pollInterval);
+        jobsConfig.heartbeatInterval.ifPresent(builder::heartbeatInterval);
+        jobsConfig.shutdownMaxWait.ifPresent(builder::shutdownMaxWait);
         return builder.withJobs(jobs).build();
     }
 

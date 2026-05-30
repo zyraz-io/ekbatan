@@ -13,7 +13,7 @@ repositories {
 }
 
 // The runtime jar's META-INF/quarkus-extension.properties points at the Maven coordinate
-// io.ekbatan:ekbatan-di-quarkus-deployment:0.0.3-SNAPSHOT. The actual artifact lives at the
+// io.ekbatan:ekbatan-di-quarkus-deployment:0.0.4-SNAPSHOT. The actual artifact lives at the
 // in-build subproject :ekbatan-di:quarkus:deployment whose implicit publication name is
 // "deployment" — those don't match, so Gradle's automatic project substitution can't bridge
 // them. Map them explicitly. With this rule, the Quarkus Gradle plugin's specialized deployment

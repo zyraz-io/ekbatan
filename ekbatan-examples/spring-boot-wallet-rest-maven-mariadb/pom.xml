@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>spring-boot-wallet-rest-maven-mariadb</artifactId>
-    <version>0.0.3-SNAPSHOT</version>
+    <version>0.0.4-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>spring-boot-wallet-rest-maven-mariadb</name>
     <description>Spring Boot + MariaDB wallet example demonstrating Ekbatan with Maven (MariaDB dialect of the Maven sibling triple).</description>
@@ -27,7 +27,7 @@
              Override the parent's property so the generated record classes and the runtime jOOQ classpath agree. -->
         <jooq.version>3.20.10</jooq.version>
 
-        <ekbatan.version>0.0.3</ekbatan.version>
+        <ekbatan.version>0.0.4</ekbatan.version>
         <!-- Hyphenated property names - avoid the `flyway.*` / `jooq.*` namespace, which the
              respective Maven plugins scan and reject for unrecognized keys. -->
         <flyway-version>12.0.0</flyway-version>
@@ -44,7 +44,6 @@
              We connect as root so the V0000 migration's `CREATE DATABASE eventlog` succeeds - the runtime
              / test containers use a less-privileged `wallet` user with a mariadb_init.sql GRANT, but the
              codegen container is throwaway and root is simpler. -->
-        <codegen.db.port>13306</codegen.db.port>
         <codegen.db.name>wallet</codegen.db.name>
         <codegen.db.user>root</codegen.db.user>
         <codegen.db.password>root</codegen.db.password>
@@ -250,7 +249,7 @@
                             <alias>mariadb-codegen</alias>
                             <run>
                                 <ports>
-                                    <port>${codegen.db.port}:3306</port>
+                                    <port>codegen.db.port:3306</port>
                                 </ports>
                                 <env>
                                     <!-- MARIADB_ROOT_PASSWORD + MARIADB_DATABASE: the container starts

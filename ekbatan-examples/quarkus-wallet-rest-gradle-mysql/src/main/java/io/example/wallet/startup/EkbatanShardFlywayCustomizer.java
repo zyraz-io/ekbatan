@@ -1,6 +1,6 @@
 package io.example.wallet.startup;
 
-import io.ekbatan.core.shard.config.ShardingConfig;
+import io.ekbatan.core.config.ShardingConfig;
 import io.quarkus.flyway.FlywayConfigurationCustomizer;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.flywaydb.core.api.configuration.FluentConfiguration;
