@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>micronaut-wallet-rest-maven-pg</artifactId>
-    <version>0.0.5-SNAPSHOT</version>
+    <version>0.1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>micronaut-wallet-rest-maven-pg</name>
     <description>Micronaut + Postgres wallet example demonstrating Ekbatan with Maven (PG dialect of the Maven sibling triple).</description>
@@ -22,7 +22,7 @@
         <java.version>25</java.version>
         <maven.compiler.release>25</maven.compiler.release>
 
-        <ekbatan.version>0.0.5</ekbatan.version>
+        <ekbatan.version>0.1.0</ekbatan.version>
         <micronaut.runtime>netty</micronaut.runtime>
         <exec.mainClass>io.example.wallet.Application</exec.mainClass>
 

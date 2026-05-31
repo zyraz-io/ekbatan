@@ -98,8 +98,13 @@ public final class KeyedReentrantHolder<LOCK_PAYLOAD> {
      * Registers a freshly-acquired hold, starts its watchdog, and returns the outermost
      * {@link Lease}. Must only be called when {@link #tryReenter(String)} just returned empty
      * for the same key on the same thread, so that no other holding for
-     * {@code (currentThread, userKey)} exists. The same {@link ReleaseCallback} is invoked both
-     * when the watchdog fires and when the outermost lease is closed.
+     * {@code (currentThread, userKey)} exists. The same {@link ReleaseCallback} is invoked when
+     * the watchdog fires and when the outermost lease is closed.
+     *
+     * <p>If registration itself fails (e.g. the watchdog thread cannot be started), the
+     * callback is invoked once with {@link ReleaseReason#CLOSE} so the backend lock the caller
+     * just acquired is released. Any exception thrown by that cleanup is attached as a
+     * suppressed exception on the original failure, which is rethrown.
      *
      * @param userKey the lock key being held.
      * @param payload the backend-specific payload associated with the hold.
@@ -109,21 +114,46 @@ public final class KeyedReentrantHolder<LOCK_PAYLOAD> {
      */
     public Lease register(
             String userKey, LOCK_PAYLOAD payload, Duration maxHold, ReleaseCallback<LOCK_PAYLOAD> lockReleaseCallback) {
-        var rkey = new EntryKey(Thread.currentThread().threadId(), userKey);
-        var holding = new Holding(rkey, payload, lockReleaseCallback);
-        map.put(rkey, holding);
-        holding.watchdog = Thread.ofVirtual().name(watchdogThreadName).start(() -> {
-            try {
-                Thread.sleep(maxHold);
-                if (holding.markReleasedByWatchdog()) {
-                    LOG.warn("Auto-released held lock for key {} (hold limit exceeded)", userKey);
-                    map.remove(rkey, holding);
-                    lockReleaseCallback.release(payload, ReleaseReason.WATCHDOG);
-                }
-            } catch (InterruptedException ignored) {
+        Holding holding = null;
+        var mapped = false;
+        try {
+            var rkey = new EntryKey(Thread.currentThread().threadId(), userKey);
+            holding = new Holding(rkey, payload, lockReleaseCallback);
+            var registeredHolding = holding;
+            var lease = new HeldLease(registeredHolding);
+            map.put(rkey, registeredHolding);
+            mapped = true;
+            registeredHolding.watchdog = Thread.ofVirtual()
+                    .name(watchdogThreadName)
+                    .start(() -> {
+                        try {
+                            Thread.sleep(maxHold);
+                            if (registeredHolding.markReleasedByWatchdog()) {
+                                LOG.warn("Auto-released held lock for key {} (hold limit exceeded)", userKey);
+                                map.remove(registeredHolding.rkey, registeredHolding);
+                                lockReleaseCallback.release(payload, ReleaseReason.WATCHDOG);
+                            }
+                        } catch (InterruptedException ignored) {
+                        }
+                    });
+            return lease;
+        } catch (RuntimeException | Error e) {
+            if (mapped && holding != null) {
+                map.remove(holding.rkey, holding);
             }
-        });
-        return new HeldLease(holding);
+            if (holding != null) {
+                var w = holding.watchdog;
+                if (w != null) {
+                    w.interrupt();
+                }
+            }
+            try {
+                lockReleaseCallback.release(payload, ReleaseReason.CLOSE);
+            } catch (RuntimeException | Error cleanupFailure) {
+                e.addSuppressed(cleanupFailure);
+            }
+            throw e;
+        }
     }
 
     private final class Holding {

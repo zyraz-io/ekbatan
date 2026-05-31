@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>spring-boot-wallet-rest-maven-native-mariadb</artifactId>
-    <version>0.0.5-SNAPSHOT</version>
+    <version>0.1.0-SNAPSHOT</version>
     <packaging>${packaging}</packaging>
     <name>spring-boot-wallet-rest-maven-native-mariadb</name>
     <description>Spring Boot + MariaDB wallet example demonstrating Ekbatan with Maven (MariaDB dialect of the Maven sibling triple).</description>
@@ -30,7 +30,7 @@
              Override the parent's property so the generated record classes and the runtime jOOQ classpath agree. -->
         <jooq.version>3.20.10</jooq.version>
 
-        <ekbatan.version>0.0.5</ekbatan.version>
+        <ekbatan.version>0.1.0</ekbatan.version>
         <!-- Hyphenated property names - avoid the `flyway.*` / `jooq.*` namespace, which the
              respective Maven plugins scan and reject for unrecognized keys. -->
         <flyway-version>12.0.0</flyway-version>

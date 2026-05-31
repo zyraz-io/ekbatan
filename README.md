@@ -26,7 +26,7 @@ Ekbatan is published on [Maven Central](https://central.sonatype.com/namespace/i
 
 ```kotlin
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.0.5")
+    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.1.0")
 }
 ```
 
@@ -34,7 +34,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-quarkus:0.0.5")
+    implementation("io.github.zyraz-io:ekbatan-quarkus:0.1.0")
 }
 ```
 
@@ -42,8 +42,8 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-micronaut:0.0.5")
-    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.0.5")
+    implementation("io.github.zyraz-io:ekbatan-micronaut:0.1.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.1.0")
     annotationProcessor("io.micronaut:micronaut-inject-java")
 }
 ```
@@ -53,35 +53,35 @@ dependencies {
 ```kotlin
 dependencies {
     // ── Required ────────────────────────────────────────────────────────────
-    implementation("io.github.zyraz-io:ekbatan-core:0.0.5")
+    implementation("io.github.zyraz-io:ekbatan-core:0.1.0")
 
     // ── Optional capabilities ───────────────────────────────────────────────
 
     // @AutoBuilder code generation — generates *Builder classes for Models/Entities
     // (skip if you'd rather write the builders by hand)
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.0.5")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.0.5")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.0")
 
     // In-process event handlers (fanout + handling jobs over the eventlog)
-    implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.0.5")
+    implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.1.0")
 
     // Distributed background jobs (db-scheduler facade; cluster-exclusive scheduling)
-    implementation("io.github.zyraz-io:ekbatan-distributed-jobs:0.0.5")
+    implementation("io.github.zyraz-io:ekbatan-distributed-jobs:0.1.0")
 
     // Redis-backed distributed KeyedLockProvider (Redisson under the hood)
-    implementation("io.github.zyraz-io:ekbatan-keyed-lock-redis:0.0.5")
+    implementation("io.github.zyraz-io:ekbatan-keyed-lock-redis:0.1.0")
 
     // GraalVM native-image Features (auto-loaded; include only if you build native binaries)
-    implementation("io.github.zyraz-io:ekbatan-native:0.0.5")
+    implementation("io.github.zyraz-io:ekbatan-native:0.1.0")
 
     // Testing helpers: ActionSpec, ActionAssert, VirtualClock, and Testcontainers utilities
-    testImplementation("io.github.zyraz-io:ekbatan-test-support:0.0.5")
+    testImplementation("io.github.zyraz-io:ekbatan-test-support:0.1.0")
 
     // ── Wire-format DTOs (only for Kafka consumer apps reading from the eventlog) ──
     // Pick the one matching your Kafka serializer; not needed in the producer app itself.
-    implementation("io.github.zyraz-io:ekbatan-action-event-json:0.0.5")
-    implementation("io.github.zyraz-io:ekbatan-action-event-avro:0.0.5")
-    implementation("io.github.zyraz-io:ekbatan-action-event-protobuf:0.0.5")
+    implementation("io.github.zyraz-io:ekbatan-action-event-json:0.1.0")
+    implementation("io.github.zyraz-io:ekbatan-action-event-avro:0.1.0")
+    implementation("io.github.zyraz-io:ekbatan-action-event-protobuf:0.1.0")
 }
 ```
 
@@ -93,7 +93,7 @@ Substitute the artifactId for your stack — `ekbatan-spring-boot-starter`, `ekb
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-spring-boot-starter</artifactId>
-    <version>0.0.5</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 
