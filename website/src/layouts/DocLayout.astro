@@ -34,9 +34,10 @@ const { frontmatter } = Astro.props;
             </h1>
             {
                 frontmatter.lead && (
-                    <p class="mt-4 text-lg leading-relaxed text-muted-foreground max-w-2xl">
-                        {frontmatter.lead}
-                    </p>
+                    <p
+                        class="mt-4 text-lg leading-relaxed text-muted-foreground max-w-2xl"
+                        set:html={frontmatter.lead}
+                    />
                 )
             }
         </header>

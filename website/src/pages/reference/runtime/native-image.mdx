@@ -2,7 +2,7 @@
 layout: ../../../layouts/DocLayout.astro
 title: 'GraalVM native-image'
 activeSection: reference
-lead: 'Ekbatan ships first-class GraalVM native-image support via the `ekbatan-native` module. Drop it on the classpath and a set of `Feature` classes auto-load at native-image build time, registering the reflection metadata that Jackson 3 records, `@AutoBuilder` builders, JDBC drivers, Avro `SpecificRecord`s, Kafka clients, Flyway migrations, and Testcontainers'' docker-java types need at runtime.'
+lead: 'Ekbatan ships first-class GraalVM native-image support via the <code>ekbatan-native</code> module. Drop it on the classpath and a set of <code>Feature</code> classes auto-load at native-image build time, registering the reflection metadata that Jackson 3 records, <code>@AutoBuilder</code> builders, JDBC drivers, Avro <code>SpecificRecord</code>s, Kafka clients, Flyway migrations, and Testcontainers'' docker-java types need at runtime.'
 ---
 
 The module also exposes `FlywayHelper`, a thin wrapper that detects native-image and swaps in a `ResourceProvider` capable of walking GraalVM Substrate's `resource:/` filesystem so Flyway can find migrations. Same code path runs on JVM and native.

@@ -2,7 +2,7 @@
 layout: ../../../layouts/DocLayout.astro
 title: 'Distributed background jobs'
 activeSection: reference
-lead: 'For periodic background work that should run on **at most one** instance across a cluster — daily reports, hourly cleanups, periodic reconciliation — Ekbatan ships `JobRegistry` in the `ekbatan-distributed-jobs` module. It''s a thin, opinionated facade over [db-scheduler](https://github.com/kagkarlsson/db-scheduler) that handles the tricky parts (atomic claim across instances, heartbeat-based crash recovery, graceful shutdown, per-task virtual-thread workers) while keeping the user-facing API tiny.'
+lead: 'For periodic background work that should run on <strong>at most one</strong> instance across a cluster — daily reports, hourly cleanups, periodic reconciliation — Ekbatan ships <code>JobRegistry</code> in the <code>ekbatan-distributed-jobs</code> module. It''s a thin, opinionated facade over <a href="https://github.com/kagkarlsson/db-scheduler">db-scheduler</a> that handles the tricky parts (atomic claim across instances, heartbeat-based crash recovery, graceful shutdown, per-task virtual-thread workers) while keeping the user-facing API tiny.'
 ---
 
 ## Defining a job

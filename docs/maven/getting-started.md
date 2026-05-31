@@ -406,6 +406,8 @@ These aren't redundant; `<annotationProcessorPaths>` is isolated from the main c
 - Without the provided `<dependency>` → compile fails with `cannot find symbol: class AutoBuilder`.
 - Without the `<annotationProcessorPaths>` entry → compile succeeds, the processor never runs, you find out at the first reference to `WalletBuilder.wallet()` (`cannot find symbol: class WalletBuilder`).
 
+The processor runs as part of normal compilation — any goal that triggers `javac` (`compile`, `package`, `install`, `test`) also runs it. There is no separate code-generation goal. The generated `*Builder.java` files land under `target/generated-sources/annotations/`.
+
 This mirrors Gradle's `compileOnly` + `annotationProcessor` dual declaration.
 
 ## (4) `-parameters` is mandatory

@@ -1,6 +1,6 @@
 # Ekbatan
 
-**A Java persistence framework with the outbox pattern built in - easy to do and hassle-free.**
+**Ekbatan is an event-driven Java persistence framework with built-in outbox pattern, atomic transactions with domain events, and support for Spring, Quarkus, and Micronaut or plain Java.**
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.zyraz-io/ekbatan-core?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.zyraz-io/ekbatan-core)
 [![Java 25+](https://img.shields.io/badge/Java-25%2B-orange)](https://openjdk.org/projects/jdk/25/)
@@ -13,6 +13,8 @@ Ekbatan is a Java library you embed in your application - Spring, Quarkus, Micro
 Built for **Java 25+**, sitting directly on **JOOQ**, designed around **virtual threads**.
 
 **Works with:** PostgreSQL · MariaDB · MySQL — and Spring Boot · Quarkus · Micronaut · plain Java. The same domain code compiles and runs identically against every database and DI container; only the wiring at the edges changes.
+
+Read more in the Ekbatan documentation website: https://zyraz-io.github.io/ekbatan/
 
 ---
 
@@ -327,24 +329,20 @@ Every business change produces **two things at once** - a new state, and an even
 
 The **state** is what your application reads. The **events** are what downstream systems consume - audit logs, analytics, other services. Persisting them as **two separate writes** - state to the database, events to Kafka - is where things break:
 
-```
-  ✗  TWO WRITES - the dual-write problem        ✓  ONE WRITE + OUTBOX
-
-             app                                              app
-            ╱   ╲                                              │
-           ▼     ▼                                             ▼
-        ┌────┐ ┌───────┐                              ┌────────────────────┐
-        │ DB │ │ Kafka │                              │      DATABASE      │
-        └────┘ └───────┘                              │   state │  outbox  │
-        state    events                               └────────────────────┘
-                                                               │
-        crash between the two writes                           ▼  CDC tails the outbox
-          ⇒ DB and Kafka disagree                          ┌───────┐
-            ⇒ downstream consumers                         │ Kafka │
-              see an inconsistent view                     └───────┘
-                                                                ⇒ events shipped later,
-                                                                  always in sync with state
-```
+<table>
+<tr>
+<td width="50%" align="center">
+<strong>✗ Two writes — the dual-write problem</strong><br><br>
+<img src="docs/article-assets/gifs/dual-write-broken.gif" alt="Two writes: state saved, publish failed, no events" width="100%">
+<br><em>Crash between the two writes ⇒ DB and Kafka disagree</em>
+</td>
+<td width="50%" align="center">
+<strong>✓ One write + outbox</strong><br><br>
+<img src="docs/article-assets/gifs/outbox-ekbatan.gif" alt="One write plus outbox: app writes state and events in one transaction, CDC ships events to the broker" width="100%">
+<br><em>CDC tails the outbox ⇒ events shipped later, always in sync with state</em>
+</td>
+</tr>
+</table>
 
 The **outbox pattern** - the right-hand side - is well known and not specific to Ekbatan. What Ekbatan adds is making it **easy to do**: the outbox table, the row schema, and the write path are part of the framework. Applications just attach events to their domain objects, and the framework persists state-and-events together.
 

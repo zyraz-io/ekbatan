@@ -227,6 +227,8 @@ This isn't redundant — `annotationProcessor` is isolated from the main compile
 - Without `compileOnly` → compile fails with `cannot find symbol: class AutoBuilder`.
 - Without `annotationProcessor` → compile succeeds, processor never runs, you find out at the first reference to `WalletBuilder.wallet()` (`cannot find symbol: class WalletBuilder`).
 
+The processor runs as part of normal compilation — any task that triggers `javac` (`compileJava`, `build`, `test`, `assemble`) also runs it. There is no separate code-generation task. The generated `*Builder.java` files land under `build/generated/sources/annotationProcessor/java/main/`.
+
 ## (4) `-parameters` is mandatory
 
 Ekbatan reflects over constructor *parameter names* for two things: the `@AutoBuilder` processor names builder methods after them, and Jackson 3's `RecordsModule` uses them to bind JSON fields to record components. Without `-parameters` the bytecode stores them as `arg0`, `arg1`, … and the runtime fails with "no setter for property X" or "missing required field arg0".

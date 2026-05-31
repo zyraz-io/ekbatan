@@ -2,8 +2,8 @@ package io.example.wallet.model.events;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.ekbatan.core.domain.Id;
 import io.ekbatan.core.domain.ModelEvent;
-import io.ekbatan.core.domain.ModelId;
 import io.example.wallet.model.Wallet;
 import java.math.BigDecimal;
 import java.util.Currency;
@@ -15,8 +15,8 @@ public class WalletCreatedEvent extends ModelEvent<Wallet> {
     public final String currency;
     public final BigDecimal initialBalance;
 
-    public WalletCreatedEvent(ModelId<UUID> walletId, UUID ownerId, Currency currency, BigDecimal initialBalance) {
-        super(walletId.getId().toString(), Wallet.class);
+    public WalletCreatedEvent(Id<Wallet> walletId, UUID ownerId, Currency currency, BigDecimal initialBalance) {
+        super(walletId.getValue().toString(), Wallet.class);
         this.ownerId = ownerId;
         this.currency = currency.getCurrencyCode();
         this.initialBalance = initialBalance;

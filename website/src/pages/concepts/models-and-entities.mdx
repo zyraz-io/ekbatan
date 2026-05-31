@@ -2,7 +2,7 @@
 layout: ../../layouts/DocLayout.astro
 title: 'Models and Entities'
 activeSection: concepts
-lead: 'Two flavors of persistable domain object. Both are immutable, both are version-tracked, both end up in tables with a `state` column that supports soft delete. The difference is whether mutations to them produce events.'
+lead: 'Two flavors of persistable domain object. Both are immutable, both are version-tracked, both end up in tables with a <code>state</code> column that supports soft delete. The difference is whether mutations to them produce events.'
 ---
 
 |                                                          | `Model` | `Entity` |
@@ -106,8 +106,8 @@ public class WalletMoneyDepositedEvent extends ModelEvent<Wallet> {
     public final BigDecimal amount;
     public final BigDecimal newBalance;
 
-    public WalletMoneyDepositedEvent(ModelId<UUID> walletId, BigDecimal amount, BigDecimal newBalance) {
-        super(walletId.getId().toString(), Wallet.class);
+    public WalletMoneyDepositedEvent(Id<Wallet> walletId, BigDecimal amount, BigDecimal newBalance) {
+        super(walletId.getValue().toString(), Wallet.class);
         this.amount = amount;
         this.newBalance = newBalance;
     }

@@ -2,7 +2,7 @@
 layout: ../../../layouts/DocLayout.astro
 title: 'OpenTelemetry tracing'
 activeSection: reference
-lead: 'Ekbatan instruments its action execution pipeline with the **OpenTelemetry API** (`opentelemetry-api`). The library depends only on the API — no SDK. When no OTel SDK is registered at runtime, all tracing calls are no-ops with zero overhead. Consumers bring their own `opentelemetry-sdk` and exporters.'
+lead: 'Ekbatan instruments its action execution pipeline with the <strong>OpenTelemetry API</strong> (<code>opentelemetry-api</code>). The library depends only on the API — no SDK. When no OTel SDK is registered at runtime, all tracing calls are no-ops with zero overhead. Consumers bring their own <code>opentelemetry-sdk</code> and exporters.'
 ---
 
 The instrumentation scope is `io.ekbatan.core` version `1.0.0`, obtained from `GlobalOpenTelemetry.get().getTracer(...)`.

@@ -2,7 +2,7 @@
 layout: ../../layouts/DocLayout.astro
 title: 'TransactionManager'
 activeSection: reference
-lead: '`ActionExecutor` is the right entry point for **business operations** — anything that mutates a domain object and emits events. But sometimes you need raw transactional database access outside that pipeline: an admin script that backfills a column, a startup hook that reconciles two tables, a custom multi-step read that doesn''t fit the Action shape, or batch maintenance that has no associated event.'
+lead: '<code>ActionExecutor</code> is the right entry point for <strong>business operations</strong> — anything that mutates a domain object and emits events. But sometimes you need raw transactional database access outside that pipeline: an admin script that backfills a column, a startup hook that reconciles two tables, a custom multi-step read that doesn''t fit the Action shape, or batch maintenance that has no associated event.'
 ---
 
 For those, the framework gives you `TransactionManager` directly. It's the same primitive `ActionExecutor.persistChanges()` uses internally — one transaction, one JDBC connection, auto commit-or-rollback, with the connection bound to the calling thread via `ScopedValue` so any repository methods you invoke from inside automatically join the transaction.

@@ -1,8 +1,8 @@
 ---
 layout: ../../layouts/DocLayout.astro
-title: 'Pessimistic locking via `KeyedLockProvider`'
+title: 'Pessimistic locking via KeyedLockProvider'
 activeSection: reference
-lead: 'Most of Ekbatan''s write path uses **optimistic** locking — every update carries `WHERE version = ?` and conflicting writes surface as `StaleRecordException` for the executor to retry. That works well at low-to-medium contention. Some operations don''t fit that model:'
+lead: 'Most of Ekbatan''s write path uses <strong>optimistic</strong> locking — every update carries <code>WHERE version = ?</code> and conflicting writes surface as <code>StaleRecordException</code> for the executor to retry. That works well at low-to-medium contention. Some operations don''t fit that model:'
 ---
 
 - **At-most-once side effects** around external systems — a webhook handler that calls a payment API where retrying would charge twice.

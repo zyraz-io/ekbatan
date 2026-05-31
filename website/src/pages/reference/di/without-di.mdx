@@ -2,7 +2,7 @@
 layout: ../../../layouts/DocLayout.astro
 title: 'DI · Plain Java'
 activeSection: reference
-lead: 'Ekbatan does not require Spring, Quarkus, Micronaut, or any DI container. Everything the framework needs is reachable through a small set of builders. You can wire it up by hand from a plain `main()`, a CLI, a Servlet listener, or any plain-JVM bootstrap path. The integration tests under [`ekbatan-integration-tests/postgres-simple/`](../../ekbatan-integration-tests/postgres-simple) do exactly this — no Spring on the classpath.'
+lead: 'Ekbatan does not require Spring, Quarkus, Micronaut, or any DI container. Everything the framework needs is reachable through a small set of builders. You can wire it up by hand from a plain <code>main()</code>, a CLI, a Servlet listener, or any plain-JVM bootstrap path. The integration tests under <a href="../../ekbatan-integration-tests/postgres-simple"><code>ekbatan-integration-tests/postgres-simple/</code></a> do exactly this — no Spring on the classpath.'
 ---
 
 This page walks through the **complete** wiring of one running app. Domain classes (the Wallet model, three actions, the repository) are taken straight from [`postgres-simple`](../../ekbatan-integration-tests/postgres-simple); the wiring step at the end is what you'd typically run from `main()` or from a once-per-startup hook in your own framework.

@@ -103,8 +103,8 @@ public class WalletMoneyDepositedEvent extends ModelEvent<Wallet> {
     public final BigDecimal amount;
     public final BigDecimal newBalance;
 
-    public WalletMoneyDepositedEvent(ModelId<UUID> walletId, BigDecimal amount, BigDecimal newBalance) {
-        super(walletId.getId().toString(), Wallet.class);
+    public WalletMoneyDepositedEvent(Id<Wallet> walletId, BigDecimal amount, BigDecimal newBalance) {
+        super(walletId.getValue().toString(), Wallet.class);
         this.amount = amount;
         this.newBalance = newBalance;
     }
