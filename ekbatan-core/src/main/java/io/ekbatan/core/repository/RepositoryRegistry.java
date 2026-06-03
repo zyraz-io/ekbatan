@@ -1,12 +1,12 @@
 package io.ekbatan.core.repository;
 
-import com.google.common.collect.ImmutableMap;
 import io.ekbatan.core.domain.Entity;
 import io.ekbatan.core.domain.Model;
 import io.ekbatan.core.domain.Persistable;
+import io.ekbatan.core.internal.Validate;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import org.apache.commons.lang3.Validate;
 
 /**
  * Maps each {@link Model} / {@link Entity} subclass to the {@link Repository} that persists it.
@@ -30,7 +30,7 @@ public final class RepositoryRegistry {
 
     private RepositoryRegistry(Builder builder) {
         Validate.notNull(builder.repositories, "repositories cannot be empty");
-        this.repositories = builder.repositories.build();
+        this.repositories = Map.copyOf(builder.repositories);
     }
 
     /**
@@ -47,7 +47,7 @@ public final class RepositoryRegistry {
 
     /** Fluent builder for {@link RepositoryRegistry}. Obtain via {@link #repositoryRegistry()}. */
     public static final class Builder {
-        private final ImmutableMap.Builder<Class<?>, Repository<?>> repositories = ImmutableMap.builder();
+        private final Map<Class<?>, Repository<?>> repositories = new LinkedHashMap<>();
 
         private Builder() {}
 

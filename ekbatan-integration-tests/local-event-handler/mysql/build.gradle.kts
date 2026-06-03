@@ -75,8 +75,6 @@ dependencies {
     implementation(project(":ekbatan-events-local-event-handler"))
 
     implementation("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
-    implementation("org.jooq:jooq-meta")
-    implementation("org.jooq:jooq-codegen")
 
     implementation("com.mysql:mysql-connector-j:${project.property("mysqlConnectorVersion")}")
     jooqCodegen("com.mysql:mysql-connector-j:${project.property("mysqlConnectorVersion")}")

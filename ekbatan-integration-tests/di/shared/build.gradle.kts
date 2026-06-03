@@ -78,8 +78,6 @@ dependencies {
     compileOnly("io.micronaut:micronaut-inject:${project.property("micronautVersion")}")
 
     api("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
-    api("org.jooq:jooq-meta")
-    api("org.jooq:jooq-codegen")
 
     api("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
     jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
@@ -90,5 +88,8 @@ dependencies {
     api("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
 
     // The widget action's Action subclass + AutoBuilder generation needs the Ekbatan AP.
+    // compileOnly: makes @AutoBuilder visible to javac symbol resolution; annotationProcessor:
+    // runs the processor that emits the Builder source. Neither leaks to runtime.
+    compileOnly(project(":ekbatan-annotation-processor"))
     annotationProcessor(project(":ekbatan-annotation-processor"))
 }

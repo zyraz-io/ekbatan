@@ -35,10 +35,11 @@ configure<SpotlessExtension> {
 }
 
 dependencies {
-    if (project.path != ":ekbatan-annotation-processor" && project.path != ":ekbatan-test-support") {
-        "annotationProcessor"(project(":ekbatan-annotation-processor"))
-        "implementation"(project(":ekbatan-annotation-processor"))
-    }
+    // ekbatan-annotation-processor is NOT wired here: @AutoBuilder is a consumer concern
+    // (applied to concrete domain classes like Wallet/Order), not a framework concern. No
+    // published framework module applies the annotation. Modules that DO use @AutoBuilder
+    // (integration tests with domain models, every ekbatan-examples app) declare the AP
+    // themselves with `compileOnly + annotationProcessor`.
 
     "testImplementation"(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     "testImplementation"("org.junit.jupiter:junit-jupiter:${project.property("junitJupiterVersion")}")

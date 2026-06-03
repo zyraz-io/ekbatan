@@ -5,6 +5,7 @@ import static io.ekbatan.core.config.DataSourceConfig.Builder.dataSourceConfig;
 import static io.ekbatan.core.persistence.ConnectionProvider.hikariConnectionProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.zaxxer.hikari.HikariDataSource;
 import io.ekbatan.core.concurrent.KeyedLockProvider;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import java.time.Duration;
@@ -51,7 +52,7 @@ class MySQLKeyedLockProviderIntegrationTest {
 
     @AfterAll
     static void tearDown() {
-        provider.getDataSource().close();
+        provider.close();
     }
 
     // ----- Mutual exclusion semantics -----
@@ -230,7 +231,7 @@ class MySQLKeyedLockProviderIntegrationTest {
     @Test
     void close_lease_should_return_connection_to_pool() throws Exception {
         // GIVEN
-        var hikari = provider.getDataSource();
+        var hikari = (HikariDataSource) provider.getDataSource();
         var beforeActive = hikari.getHikariPoolMXBean().getActiveConnections();
 
         // WHEN
@@ -282,7 +283,7 @@ class MySQLKeyedLockProviderIntegrationTest {
     @Test
     void reentry_same_thread_should_not_block_or_borrow_extra_connections() throws Exception {
         var key = uniqueKey();
-        var hikari = provider.getDataSource();
+        var hikari = (HikariDataSource) provider.getDataSource();
         var beforeActive = hikari.getHikariPoolMXBean().getActiveConnections();
 
         try (var outer = lock.acquire(key, FIVE_MIN);

@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.example"
-version = "0.1.0-SNAPSHOT"
+version = "0.1.1-SNAPSHOT"
 
 // jOOQ codegen ships 3.20.x; pin runtime jOOQ to match.
 extra["jooq.version"] = "3.20.10"

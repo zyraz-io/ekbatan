@@ -32,6 +32,13 @@ dependencies {
     // [idx] array notation) is an exact match for what Micronaut emits.
     implementation("tools.jackson.dataformat:jackson-dataformat-properties:${project.property("jacksonDatabindVersion")}")
 
+    // ekbatan-core declares HikariCP as compileOnly so its public API stays Hikari-free; the
+    // Micronaut module declares Hikari as implementation so Micronaut apps using this module
+    // get a working framework out of the box without an extra dep line - on the consumer's
+    // compile classpath (not just runtime), so user code that constructs HikariDataSource
+    // directly compiles cleanly.
+    implementation("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
+
     compileOnly("io.micronaut:micronaut-inject:${project.property("micronautVersion")}")
     compileOnly("io.micronaut:micronaut-context:${project.property("micronautVersion")}")
     compileOnly("io.micronaut:micronaut-runtime:${project.property("micronautVersion")}")

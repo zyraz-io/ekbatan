@@ -2,10 +2,10 @@ package io.ekbatan.keyedlock.redis;
 
 import io.ekbatan.core.concurrent.KeyedLockProvider;
 import io.ekbatan.core.concurrent.KeyedReentrantHolder;
+import io.ekbatan.core.internal.Validate;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import org.apache.commons.lang3.Validate;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;

@@ -53,8 +53,6 @@ dependencies {
     jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
 
     // Add explicit dependency on the JOOQ API
-    implementation("org.jooq:jooq-meta")
-    implementation("org.jooq:jooq-codegen")
 
     // Flyway for database migrations
     implementation("org.flywaydb:flyway-core:${project.property("flywayVersion")}")
@@ -73,6 +71,11 @@ dependencies {
 
     testImplementation("org.testcontainers:testcontainers:${project.property("testcontainersVersion")}")
     testImplementation("org.testcontainers:testcontainers-postgresql:${project.property("testcontainersVersion")}")
+
+    // @AutoBuilder generation for the Wallet domain models; compileOnly exposes the annotation
+    // to javac, annotationProcessor runs the processor. Neither leaks to runtime.
+    compileOnly(project(":ekbatan-annotation-processor"))
+    annotationProcessor(project(":ekbatan-annotation-processor"))
 }
 
 tasks.withType<Test> {

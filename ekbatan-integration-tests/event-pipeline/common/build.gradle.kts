@@ -47,8 +47,6 @@ dependencies {
     api(project(":ekbatan-core"))
     api(project(":ekbatan-events-streaming-action-event-json"))
     api("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
-    implementation("org.jooq:jooq-meta")
-    implementation("org.jooq:jooq-codegen")
 
     jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
     api("org.postgresql:postgresql:${project.property("postgresqlVersion")}")

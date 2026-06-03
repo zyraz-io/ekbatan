@@ -1,9 +1,9 @@
 package io.ekbatan.core.action;
 
-import com.google.common.collect.ImmutableMap;
+import io.ekbatan.core.internal.Validate;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import org.apache.commons.lang3.Validate;
 
 /**
  * Maps each {@code @EkbatanAction} subclass to its singleton instance. {@link Action}s are
@@ -20,7 +20,7 @@ public class ActionRegistry {
     public final Map<Class<? extends Action<?, ?>>, Action<?, ?>> actions;
 
     private ActionRegistry(Builder builder) {
-        this.actions = builder.actions.build();
+        this.actions = Map.copyOf(builder.actions);
     }
 
     /**
@@ -41,8 +41,7 @@ public class ActionRegistry {
     /** Fluent builder for {@link ActionRegistry}. Obtain via {@link #actionRegistry()}. */
     public static final class Builder {
 
-        private final ImmutableMap.Builder<Class<? extends Action<?, ?>>, Action<?, ?>> actions =
-                ImmutableMap.builder();
+        private final Map<Class<? extends Action<?, ?>>, Action<?, ?>> actions = new LinkedHashMap<>();
 
         private Builder() {}
 

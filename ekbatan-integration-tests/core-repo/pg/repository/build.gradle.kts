@@ -50,8 +50,6 @@ dependencies {
     jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
 
     // Add explicit dependency on the JOOQ API
-    implementation("org.jooq:jooq-meta")
-    implementation("org.jooq:jooq-codegen")
 
     // Flyway for database migrations
     implementation("org.flywaydb:flyway-core:${project.property("flywayVersion")}")

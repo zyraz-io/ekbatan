@@ -24,16 +24,13 @@ dependencies {
     api(project(":ekbatan-core"))
     api("com.github.kagkarlsson:db-scheduler:${project.property("dbSchedulerVersion")}")
 
-    // Hikari is needed only at compile time, to resolve the HikariDataSource return type
-    // of ConnectionProvider#getDataSource(). It's already on the runtime classpath via
-    // ekbatan-core's transitive runtime deps.
-    compileOnly("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
-
-    implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
-
     // JobRegistryBuilderTest uses a real Hikari pool with a bogus postgresql URL as its
     // ConnectionProvider fixture. Hikari calls Class.forName on the driver during validation
     // before the test's expected IllegalArgumentException is thrown, so the driver class must
     // be on the test classpath.
     testImplementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
+    // ekbatan-core declares HikariCP as compileOnly so it does not leak transitively to this
+    // module's test classpath; the JobRegistryBuilderTest fixture needs a real pool, so pull
+    // Hikari in for tests explicitly.
+    testRuntimeOnly("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
 }

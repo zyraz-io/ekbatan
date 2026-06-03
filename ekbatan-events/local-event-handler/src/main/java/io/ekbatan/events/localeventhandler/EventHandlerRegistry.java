@@ -1,6 +1,7 @@
 package io.ekbatan.events.localeventhandler;
 
 import io.ekbatan.core.domain.ModelEvent;
+import io.ekbatan.core.internal.Validate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -9,7 +10,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.commons.lang3.Validate;
 
 /**
  * The user-facing registry of {@link EventHandler}s. Built up via {@link Builder} at

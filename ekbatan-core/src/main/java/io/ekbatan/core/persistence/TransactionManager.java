@@ -1,5 +1,6 @@
 package io.ekbatan.core.persistence;
 
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.shard.ShardIdentifier;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
@@ -9,7 +10,6 @@ import java.sql.Connection;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import org.apache.commons.lang3.Validate;
 import org.jooq.DSLContext;
 import org.jooq.SQLDialect;
 import org.slf4j.Logger;

@@ -1,7 +1,7 @@
 package io.ekbatan.core.domain;
 
+import io.ekbatan.core.internal.Validate;
 import java.io.Serializable;
-import org.apache.commons.lang3.Validate;
 
 /**
  * A domain event emitted by a {@link Model}. Subclasses describe state transitions worth

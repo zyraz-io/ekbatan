@@ -4,6 +4,8 @@ import io.ekbatan.core.action.persister.event.EventPersister;
 import io.ekbatan.core.domain.Model;
 import io.ekbatan.core.domain.ModelEvent;
 import io.ekbatan.core.domain.Persistable;
+import io.ekbatan.core.internal.MapUtils;
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.repository.Repository;
 import io.ekbatan.core.repository.RepositoryRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
@@ -12,8 +14,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import org.apache.commons.collections4.MapUtils;
-import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

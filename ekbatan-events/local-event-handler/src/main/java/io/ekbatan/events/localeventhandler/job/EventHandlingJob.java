@@ -5,6 +5,7 @@ import static io.ekbatan.events.localeventhandler.EventEnvelope.Builder.eventEnv
 import com.github.kagkarlsson.scheduler.task.ExecutionContext;
 import com.github.kagkarlsson.scheduler.task.schedule.FixedDelay;
 import com.github.kagkarlsson.scheduler.task.schedule.Schedule;
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.distributedjobs.DistributedJob;
@@ -26,7 +27,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
-import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.databind.ObjectMapper;

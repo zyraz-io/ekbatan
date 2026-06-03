@@ -17,7 +17,7 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
 
     <groupId>com.example</groupId>
     <artifactId>my-service</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1-SNAPSHOT</version>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
@@ -32,7 +32,7 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
         <!-- (1) Spring Boot 4.0.x's BOM pins jOOQ to 3.19.x; Ekbatan needs 3.20.x. -->
         <jooq.version>3.20.10</jooq.version>
 
-        <ekbatan.version>0.1.0</ekbatan.version>
+        <ekbatan.version>0.1.1</ekbatan.version>
     </properties>
 
     <dependencies>
@@ -101,7 +101,7 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
 
     <groupId>com.example</groupId>
     <artifactId>my-service</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
@@ -111,7 +111,7 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
              NoSuchMethodError as on Spring Boot. -->
         <jooq.version>3.20.10</jooq.version>
 
-        <ekbatan.version>0.1.0</ekbatan.version>
+        <ekbatan.version>0.1.1</ekbatan.version>
         <quarkus.platform.version>3.34.6</quarkus.platform.version>
     </properties>
 
@@ -205,7 +205,7 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
 
     <groupId>com.example</groupId>
     <artifactId>my-service</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1-SNAPSHOT</version>
 
     <parent>
         <groupId>io.micronaut.platform</groupId>
@@ -216,7 +216,7 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
         <jooq.version>3.20.10</jooq.version>
-        <ekbatan.version>0.1.0</ekbatan.version>
+        <ekbatan.version>0.1.1</ekbatan.version>
         <micronaut.version>4.10.7</micronaut.version>
         <micronaut.runtime>netty</micronaut.runtime>
         <exec.mainClass>com.example.Application</exec.mainClass>
@@ -302,11 +302,11 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
 
     <groupId>com.example</groupId>
     <artifactId>my-service</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
-        <ekbatan.version>0.1.0</ekbatan.version>
+        <ekbatan.version>0.1.1</ekbatan.version>
     </properties>
 
     <dependencies>

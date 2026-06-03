@@ -2,8 +2,8 @@ package io.ekbatan.core.shard;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.ekbatan.core.internal.Validate;
 import java.util.Objects;
-import org.apache.commons.lang3.Validate;
 
 /**
  * Two-tier shard coordinate: a {@code group} (logical grouping - e.g. region, tenant tier)

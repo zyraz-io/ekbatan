@@ -3,6 +3,7 @@ package io.ekbatan.events.localeventhandler.job;
 import com.github.kagkarlsson.scheduler.task.ExecutionContext;
 import com.github.kagkarlsson.scheduler.task.schedule.FixedDelay;
 import com.github.kagkarlsson.scheduler.task.schedule.Schedule;
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.distributedjobs.DistributedJob;
@@ -20,7 +21,6 @@ import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
-import org.apache.commons.lang3.Validate;
 
 /**
  * {@link DistributedJob} that scans every shard's {@code eventlog.events} for newly-committed

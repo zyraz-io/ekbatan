@@ -23,6 +23,4 @@ repositories {
 dependencies {
     api(project(":ekbatan-core"))
     api("org.redisson:redisson:${project.property("redissonVersion")}")
-
-    implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
 }

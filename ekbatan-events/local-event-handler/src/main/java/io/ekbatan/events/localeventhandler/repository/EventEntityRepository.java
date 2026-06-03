@@ -1,6 +1,7 @@
 package io.ekbatan.events.localeventhandler.repository;
 
 import io.ekbatan.core.action.persister.event.single_table_json.EventEntity;
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.persistence.jooq.converter.InstantConverter;
 import io.ekbatan.core.persistence.jooq.converter.JSONBObjectNodeConverter;
 import io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter;
@@ -12,7 +13,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.apache.commons.lang3.Validate;
 import org.jooq.DSLContext;
 import org.jooq.Field;
 import org.jooq.SQLDialect;

@@ -1,11 +1,11 @@
 package io.ekbatan.core.domain;
 
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.shard.ShardAwareId;
 import io.ekbatan.core.shard.ShardIdentifier;
 import io.ekbatan.core.shard.ShardedUUID;
 import java.util.Objects;
 import java.util.UUID;
-import org.apache.commons.lang3.Validate;
 
 /**
  * A type-parameterised UUID identifier that <em>also</em> encodes the shard the aggregate

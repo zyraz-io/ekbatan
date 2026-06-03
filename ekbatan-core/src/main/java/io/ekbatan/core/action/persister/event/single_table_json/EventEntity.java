@@ -1,8 +1,8 @@
 package io.ekbatan.core.action.persister.event.single_table_json;
 
+import io.ekbatan.core.internal.Validate;
 import java.time.Instant;
 import java.util.UUID;
-import org.apache.commons.lang3.Validate;
 import tools.jackson.databind.node.ObjectNode;
 
 /**

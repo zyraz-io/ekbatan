@@ -47,4 +47,8 @@ dependencies {
     // URL to drive the @ConditionalOnBean wiring path; Hikari calls DriverManager.getDriver(...)
     // during pool init and fails fast if the driver class isn't on the test classpath.
     testImplementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
+    // ekbatan-core declares HikariCP as compileOnly so it does not leak transitively to this
+    // module's test classpath; tests that exercise the ConnectionProvider factory still need
+    // Hikari available at runtime, so pull it in explicitly here.
+    testRuntimeOnly("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
 }

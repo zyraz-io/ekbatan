@@ -1,6 +1,6 @@
 package io.ekbatan.core.domain;
 
-import org.apache.commons.lang3.Validate;
+import io.ekbatan.core.internal.Validate;
 
 /**
  * A persistent aggregate that does NOT emit events. Use {@code Entity} when the persistence

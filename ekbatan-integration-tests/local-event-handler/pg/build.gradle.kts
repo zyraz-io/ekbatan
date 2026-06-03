@@ -49,8 +49,6 @@ dependencies {
     implementation(project(":ekbatan-events-local-event-handler"))
 
     implementation("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
-    implementation("org.jooq:jooq-meta")
-    implementation("org.jooq:jooq-codegen")
 
     implementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
     jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")

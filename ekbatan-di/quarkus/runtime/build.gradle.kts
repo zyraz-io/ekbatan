@@ -53,6 +53,13 @@ dependencies {
     api("io.quarkus:quarkus-core:${project.property("quarkusVersion")}")
     api("io.quarkus:quarkus-arc:${project.property("quarkusVersion")}")
 
+    // ekbatan-core declares HikariCP as compileOnly so its public API stays Hikari-free; the
+    // Quarkus extension declares Hikari as implementation so Quarkus apps using this extension
+    // get a working framework out of the box without an extra dep line - on the consumer's
+    // compile classpath (not just runtime), so user code that constructs HikariDataSource
+    // directly compiles cleanly.
+    implementation("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
+
     implementation("tools.jackson.dataformat:jackson-dataformat-yaml:${project.property("jacksonDatabindVersion")}")
     // Binds ekbatan.sharding.* from SmallRye's flat (dotted-key + [idx]) property output directly
     // into ShardingConfig — JavaPropsMapper's default schema (dot separator, [idx] array notation)

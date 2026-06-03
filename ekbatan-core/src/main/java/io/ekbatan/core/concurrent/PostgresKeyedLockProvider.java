@@ -1,14 +1,12 @@
 package io.ekbatan.core.concurrent;
 
-import static com.google.common.hash.Hashing.sipHash24;
-
+import io.ekbatan.core.internal.LockKeyHash;
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.persistence.ConnectionProvider;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.Optional;
-import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -103,7 +101,7 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
     }
 
     private static long hash(String key) {
-        return sipHash24().hashString(key, StandardCharsets.UTF_8).asLong();
+        return LockKeyHash.hashUtf8(key);
     }
 
     private static void advisoryLock(Connection conn, long hashedKey) throws SQLException {

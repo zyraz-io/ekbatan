@@ -1,7 +1,7 @@
 package io.ekbatan.core.domain;
 
+import io.ekbatan.core.internal.Validate;
 import java.util.UUID;
-import org.apache.commons.lang3.Validate;
 
 /**
  * A type-parameterised UUID identifier. {@code Id<Wallet>} and {@code Id<Account>} are

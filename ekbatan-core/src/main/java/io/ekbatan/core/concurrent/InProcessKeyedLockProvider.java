@@ -1,12 +1,12 @@
 package io.ekbatan.core.concurrent;
 
+import io.ekbatan.core.internal.Validate;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.apache.commons.lang3.Validate;
 
 /**
  * In-process {@link KeyedLockProvider} backed by per-key {@link Semaphore}s. FIFO-fair across

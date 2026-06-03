@@ -6,6 +6,7 @@ import com.github.kagkarlsson.scheduler.Scheduler;
 import com.github.kagkarlsson.scheduler.SchedulerBuilder;
 import com.github.kagkarlsson.scheduler.task.helper.RecurringTask;
 import com.github.kagkarlsson.scheduler.task.helper.Tasks;
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -14,7 +15,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
-import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

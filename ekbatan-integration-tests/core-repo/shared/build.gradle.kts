@@ -49,9 +49,6 @@ dependencies {
     testFixturesApi("org.jooq:jooq:${RecommendedVersions.JOOQ_VERSION}")
     jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
 
-    testFixturesApi("org.jooq:jooq-meta")
-    testFixturesApi("org.jooq:jooq-codegen")
-
     // Flyway for database migrations
     testFixturesApi("org.flywaydb:flyway-core:${project.property("flywayVersion")}")
     testFixturesApi("org.flywaydb:flyway-database-postgresql:${project.property("flywayVersion")}")

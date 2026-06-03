@@ -3,6 +3,8 @@ package io.ekbatan.core.repository;
 import static java.lang.String.format;
 
 import io.ekbatan.core.domain.Persistable;
+import io.ekbatan.core.internal.CollectionUtils;
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.repository.exception.EntityNotFoundException;
 import io.ekbatan.core.repository.exception.StaleRecordException;
 import io.ekbatan.core.shard.CrossShardException;
@@ -23,8 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.Validate;
 import org.jooq.Condition;
 import org.jooq.DSLContext;
 import org.jooq.Field;

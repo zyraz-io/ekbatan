@@ -1,6 +1,6 @@
 package io.ekbatan.core.domain;
 
-import org.apache.commons.lang3.Validate;
+import io.ekbatan.core.internal.Validate;
 
 /**
  * Base class for typed value wrappers that give a raw value a domain-specific type.

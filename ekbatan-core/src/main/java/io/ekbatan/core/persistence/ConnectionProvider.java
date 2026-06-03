@@ -4,19 +4,23 @@ import com.zaxxer.hikari.HikariDataSource;
 import io.ekbatan.core.config.DataSourceConfig;
 import java.sql.Connection;
 import java.sql.SQLException;
+import javax.sql.DataSource;
 
 /**
  * Owns a HikariCP connection pool and exposes acquire / release / evict / close on top of it.
  * Each {@link TransactionManager} holds a pair (primary + optional read-replica secondary);
  * the framework wraps individual {@code Connection}s through {@code acquire()} / {@code
- * release()} rather than handing the {@link HikariDataSource} out directly so connection
+ * release()} rather than handing the underlying {@link DataSource} out directly so connection
  * lifecycle is centralised here.
  *
  * <p>Construct via {@link #hikariConnectionProvider(DataSourceConfig)} - the canonical
  * factory wires {@code jdbcUrl}, {@code username}, {@code password}, pool sizes, and leak-
  * detection threshold straight from a {@link DataSourceConfig}. The constructor is private,
  * so the factory method is the only public construction path; the pool implementation is
- * HikariCP and not pluggable from outside this class.
+ * HikariCP and not pluggable from outside this class. The public {@link #getDataSource()}
+ * accessor returns {@link DataSource} (the JDBC standard interface) so {@code HikariDataSource}
+ * never appears in this class's public API surface; consumers who need pool-specific tuning
+ * may downcast, but must then declare HikariCP in their own build.
  *
  * <p>{@link #close()} is idempotent; the registry closes every provider on application
  * shutdown.
@@ -67,8 +71,15 @@ public class ConnectionProvider implements AutoCloseable {
         pool.evictConnection(connection);
     }
 
-    /** {@return the underlying Hikari {@link HikariDataSource}; rarely needed - prefer acquire/release} */
-    public HikariDataSource getDataSource() {
+    /**
+     * {@return the underlying {@link DataSource}; rarely needed - prefer acquire/release}
+     *
+     * <p>The runtime implementation is {@code HikariDataSource}, but the declared return type
+     * is the JDBC standard interface so HikariCP does not leak into this class's public API.
+     * Callers needing pool-specific tuning may downcast - that downcast couples their build
+     * to HikariCP, which they then must declare for themselves.
+     */
+    public DataSource getDataSource() {
         return pool;
     }
 

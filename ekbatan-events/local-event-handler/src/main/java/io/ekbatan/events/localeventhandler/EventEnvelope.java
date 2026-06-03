@@ -1,9 +1,9 @@
 package io.ekbatan.events.localeventhandler;
 
 import io.ekbatan.core.domain.ModelEvent;
+import io.ekbatan.core.internal.Validate;
 import java.time.Instant;
 import java.util.UUID;
-import org.apache.commons.lang3.Validate;
 import tools.jackson.databind.node.ObjectNode;
 
 /**

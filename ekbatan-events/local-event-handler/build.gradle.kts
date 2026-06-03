@@ -25,9 +25,5 @@ dependencies {
     api(project(":ekbatan-distributed-jobs"))
     api("com.github.kagkarlsson:db-scheduler:${project.property("dbSchedulerVersion")}")
 
-    // Hikari only needed at compile time to resolve ConnectionProvider#getDataSource()'s return type.
-    compileOnly("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
-
-    implementation("org.apache.commons:commons-lang3:${project.property("commonsLang3Version")}")
     implementation("io.opentelemetry:opentelemetry-api:${project.property("opentelemetryVersion")}")
 }

@@ -1,7 +1,7 @@
 package io.ekbatan.core.config;
 
+import io.ekbatan.core.internal.Validate;
 import java.util.Optional;
-import org.apache.commons.lang3.Validate;
 import org.jooq.SQLDialect;
 import tools.jackson.databind.annotation.JsonDeserialize;
 import tools.jackson.databind.annotation.JsonPOJOBuilder;

@@ -1,7 +1,7 @@
 package io.ekbatan.core.action;
 
+import io.ekbatan.core.internal.Validate;
 import java.time.Duration;
-import org.apache.commons.lang3.Validate;
 
 /**
  * Retry policy for a single exception type within an {@link ExecutionConfiguration}: how many

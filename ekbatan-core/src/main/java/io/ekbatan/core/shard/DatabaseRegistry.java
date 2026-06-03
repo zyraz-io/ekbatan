@@ -3,6 +3,7 @@ package io.ekbatan.core.shard;
 import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 
 import io.ekbatan.core.config.ShardingConfig;
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import java.util.Collection;
@@ -11,7 +12,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import org.apache.commons.lang3.Validate;
 import org.jooq.DSLContext;
 import org.jooq.impl.DSL;
 

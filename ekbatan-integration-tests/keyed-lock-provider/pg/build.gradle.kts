@@ -52,9 +52,6 @@ dependencies {
     implementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
     jooqCodegen("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
 
-    implementation("org.jooq:jooq-meta")
-    implementation("org.jooq:jooq-codegen")
-
     implementation("org.flywaydb:flyway-core:${project.property("flywayVersion")}")
     implementation("org.flywaydb:flyway-database-postgresql:${project.property("flywayVersion")}")
 
@@ -70,6 +67,11 @@ dependencies {
 
     testImplementation("org.testcontainers:testcontainers:${project.property("testcontainersVersion")}")
     testImplementation("org.testcontainers:testcontainers-postgresql:${project.property("testcontainersVersion")}")
+
+    // @AutoBuilder generation for the Wallet test fixture; compileOnly exposes the annotation
+    // to javac, annotationProcessor runs the processor. Neither leaks to runtime.
+    compileOnly(project(":ekbatan-annotation-processor"))
+    annotationProcessor(project(":ekbatan-annotation-processor"))
 }
 
 tasks.withType<Test> {

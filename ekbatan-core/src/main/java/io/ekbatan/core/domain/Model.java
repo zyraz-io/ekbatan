@@ -2,10 +2,10 @@ package io.ekbatan.core.domain;
 
 import static java.time.temporal.ChronoUnit.MICROS;
 
+import io.ekbatan.core.internal.Validate;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.commons.lang3.Validate;
 
 /**
  * A persistent aggregate that emits domain events. Every state change worth telling the rest

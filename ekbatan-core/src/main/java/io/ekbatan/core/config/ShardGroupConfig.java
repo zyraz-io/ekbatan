@@ -1,9 +1,9 @@
 package io.ekbatan.core.config;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import io.ekbatan.core.internal.Validate;
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.commons.lang3.Validate;
 import tools.jackson.databind.annotation.JsonDeserialize;
 import tools.jackson.databind.annotation.JsonPOJOBuilder;
 

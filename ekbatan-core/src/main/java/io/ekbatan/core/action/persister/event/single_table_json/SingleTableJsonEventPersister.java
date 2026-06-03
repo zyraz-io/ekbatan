@@ -4,6 +4,7 @@ import static io.ekbatan.core.action.persister.event.single_table_json.EventEnti
 
 import io.ekbatan.core.action.persister.event.EventPersister;
 import io.ekbatan.core.domain.ModelEvent;
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -15,7 +16,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import org.apache.commons.lang3.Validate;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 

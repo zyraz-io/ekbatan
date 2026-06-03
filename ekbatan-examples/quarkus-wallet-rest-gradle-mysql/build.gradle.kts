@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.example"
-version = "0.1.0-SNAPSHOT"
+version = "0.1.1-SNAPSHOT"
 
 extra["jooq.version"] = "3.20.10"
 

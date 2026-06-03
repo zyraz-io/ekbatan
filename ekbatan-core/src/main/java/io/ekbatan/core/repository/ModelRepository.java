@@ -1,10 +1,10 @@
 package io.ekbatan.core.repository;
 
 import io.ekbatan.core.domain.Model;
+import io.ekbatan.core.internal.Validate;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardingStrategy;
 import java.time.Instant;
-import org.apache.commons.lang3.Validate;
 import org.jooq.Table;
 import org.jooq.TableField;
 import org.jooq.TableRecord;
