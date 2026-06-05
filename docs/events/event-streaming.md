@@ -143,6 +143,8 @@ A reference implementation in ~130 lines lives in [`ekbatan-integration-tests/ev
 
 The router is **not** a published framework artifact — Kafka client versions, error handling, retry, DLQ shape, and deployment topology are too org-specific to standardize as a library. Treat the integration tests as a working template.
 
+The router can be as small as a custom Kafka consumer/producer, or it can be built with Kafka Streams, ksqlDB, Apache Flink, Apache Beam, Pulsar Functions, or another stream-processing layer. Use this step when a single raw outbox stream needs to become many topics, or when a downstream consumer needs the same event stream with a different message key.
+
 ## SMTs (Variant B only)
 
 For binary wire encoding, the framework ships two Kafka Connect SMTs as shadow JARs:

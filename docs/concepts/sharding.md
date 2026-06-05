@@ -55,7 +55,17 @@ The cost is that the ID is no longer self-describing. Any query that starts from
 
 By default, an action's staged changes must all route to a single shard. The framework opens one transaction on that shard, writes everything, commits. This is the only way to keep the outbox guarantee — state + events atomic — intact, because atomic-across-databases doesn't exist.
 
-When you set `@EkbatanAction(allowCrossShard = true)`, the executor groups staged changes by shard and opens **one transaction per shard**, in deterministic order, rolling each back independently on failure. This buys you cross-shard workflows (e.g. a wallet-to-wallet transfer where source and destination live on different shards) at the price of:
+When the effective `ExecutionConfiguration` has `allowCrossShard(true)`, the executor groups staged changes by shard and opens **one transaction per shard**, in deterministic order, rolling each back independently on failure. You opt in by setting the executor default configuration or by passing an explicit configuration to one `execute(...)` call:
+
+```java
+var config = ExecutionConfiguration.Builder.executionConfiguration()
+        .allowCrossShard(true)
+        .build();
+
+executor.execute(principal, WalletTransferAction.class, params, config);
+```
+
+This buys you cross-shard workflows (e.g. a wallet-to-wallet transfer where source and destination live on different shards) at the price of:
 
 - **Per-shard atomicity, not global atomicity.** Shard A's commit can succeed while shard B's rolls back. You're back in dual-write territory for that specific action — except now the dual write is between two shards of your own database, not between a database and a broker. The mitigation pattern is the [saga](./the-dual-write-trap.md) — split the cross-shard work into one action per shard, chained via outbox events, with a compensation action that runs if the destination action fails.
 - **No cross-shard reads inside a single transaction.** Joins between rows on different shards happen in application code, after each shard's transaction commits.

@@ -49,7 +49,9 @@ public class WalletDepositAction extends Action<WalletDepositAction.Params, Wall
 }
 ```
 
-The `@EkbatanAction` annotation marks the class for compile-time discovery by `ekbatan-annotation-processor` — the generated `ActionRegistry` includes it, so `ActionExecutor` can route `execute(WalletDepositAction.class, params)` calls without reflection at runtime.
+The `@EkbatanAction` annotation is a discovery marker for the DI integrations (Spring Boot, Quarkus, Micronaut). The integration registers the action instance in `ActionRegistry`, so `ActionExecutor` can route `execute(WalletDepositAction.class, params)` calls to it. Without DI, you register action instances manually with `ActionRegistry.Builder`.
+
+`@EkbatanAction` does not configure execution behavior. Retries and cross-shard allowance are controlled by `ExecutionConfiguration` on the `ActionExecutor` default or on a single `execute(...)` call.
 
 ## The two-phase lifecycle
 
@@ -69,7 +71,7 @@ The `@EkbatanAction` annotation marks the class for compile-time discovery by `e
    │        EventPersister.persistActionEvents → outbox rows   │
    │        commit  ─or─  rollback                             │
    │      });                                                  │
-   │   3. on StaleRecordException → retry whole action         │
+   │   3. on configured retryable exception → retry whole call  │
    └───────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -90,11 +92,31 @@ The method you implement. Receives the caller-supplied `Principal` (for auditing
 
 ## Retry semantics
 
-When Phase 2 fails with `StaleRecordException` (an optimistic-lock conflict on any updated row), the framework discards the plan and re-runs Phase 1 from the start. The number of retries is configured per-action via `@EkbatanAction(maxOptimisticLockRetries = 3)` — default is 3. Other exception types propagate to the caller.
+When a configured retryable exception is thrown, the framework discards the plan and re-runs Phase 1 from the start. The default `ExecutionConfiguration` retries `StaleRecordException` once after 100ms. You can change the retry policy for the whole executor via `ActionExecutor.Builder.defaultExecutionConfiguration(...)`, or for one invocation by passing an explicit `ExecutionConfiguration` to `execute(...)`.
+
+```java
+var config = ExecutionConfiguration.Builder.executionConfiguration()
+        .withRetry(StaleRecordException.class, new RetryConfig(3, Duration.ofMillis(50)))
+        .build();
+
+executor.execute(principal, WalletDepositAction.class, params, config);
+```
+
+The retry map can contain multiple exception classes. Exceptions not present in the effective retry config propagate to the caller.
 
 ## Cross-shard execution
 
-By default, an action's staged changes must all route to a single shard. To allow staging changes across shards (and commit them in independent per-shard transactions), set `@EkbatanAction(allowCrossShard = true)`. The executor then opens one transaction per shard, in deterministic order, and rolls each back independently on failure. See [Sharding](/reference/sharding/) for the consistency caveats.
+By default, an action's staged changes must all route to a single shard. To allow staging changes across shards for one invocation, pass an `ExecutionConfiguration` with `allowCrossShard(true)`:
+
+```java
+var config = ExecutionConfiguration.Builder.executionConfiguration()
+        .allowCrossShard(true)
+        .build();
+
+executor.execute(principal, WalletTransferAction.class, params, config);
+```
+
+The executor then opens one transaction per shard, in deterministic order, and rolls each back independently on failure. You can also set this as the executor default, but there is no action-level `@EkbatanAction` switch. See [Sharding](/reference/sharding/) for the consistency caveats.
 
 ## See also
 

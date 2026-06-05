@@ -68,6 +68,14 @@ Multiple handlers may subscribe to the same event type; each gets its own `event
 
 The registry keys subscriptions by the event class's simple name, matching `eventlog.events.event_type`. It allows multiple handlers for the same event class, but rejects two different event classes with the same simple name because those would be indistinguishable in the outbox. Handler names and aliases must be globally unique.
 
+### Using a handler as a broker publisher
+
+A local handler does not have to keep the work inside the database. You can write an event handler for an event type, and inside `handle(...)` manually publish to Kafka, Pulsar, RabbitMQ, SQS, or another broker with your own client code.
+
+Use this shape when you want full control over the outgoing broker message: topic or stream name, message key, headers, schema, partitioning key, tenant route, destination broker, or whether one event should publish to multiple destinations. The handler receives the typed event and action context in `EventEnvelope`, so it can map an internal event into whatever public broker contract the rest of the system needs.
+
+This is still at-least-once. If the broker publish succeeds but the process crashes before the notification row is marked `SUCCEEDED`, the handler can run again. Downstream consumers should dedupe by the outbox event id or another stable business key.
+
 ### Renaming a handler safely
 
 Assume version 1 of your app had this handler:

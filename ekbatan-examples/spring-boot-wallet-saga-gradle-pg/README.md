@@ -130,6 +130,6 @@ Each scenario uses Awaitility to wait for the saga's asynchronous steps to conve
 ## See also
 
 - [`spring-boot-wallet-rest-gradle-pg`](../spring-boot-wallet-rest-gradle-pg) — the single-step listen-to-yourself example. Compare side-by-side: same event/handler API, different chaining shape.
-- [`spring-boot-wallet-rest-gradle-sharded-pg`](../spring-boot-wallet-rest-gradle-sharded-pg) — the atomic cross-shard transfer with `allowCrossShard(true)`. That example uses **one** action that touches both wallets in a single (cross-shard) transaction; this example uses **three** actions chained by events. Different trade-offs.
+- [`spring-boot-wallet-rest-gradle-sharded-pg`](../spring-boot-wallet-rest-gradle-sharded-pg) — the opt-in cross-shard example with `allowCrossShard(true)`. That example uses **one** action that touches both wallets and commits one independent transaction per shard; this example uses **three** actions chained by events. Different trade-offs.
 - [`docs/concepts/outbox.md`](../../docs/concepts/outbox.md) — why the outbox makes saga steps durable.
 - [`docs/events/local-event-handler.md`](../../docs/events/local-event-handler.md) — the in-process consumer that drives the choreography.

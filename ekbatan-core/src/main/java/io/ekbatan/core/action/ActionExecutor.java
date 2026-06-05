@@ -42,7 +42,7 @@ import tools.jackson.databind.ObjectMapper;
  * {@link io.ekbatan.core.shard.ShardingStrategy}, and writes everything in
  * {@link io.ekbatan.core.persistence.TransactionManager#inTransactionChecked} per shard. If
  * any per-shard transaction fails, that shard rolls back. Within a single shard the domain
- * rows and the corresponding {@code action_event} rows are committed in the same transaction
+ * rows and the corresponding {@code eventlog.events} rows are committed in the same transaction
  * - so the outbox is always consistent with the data it describes.
  *
  * <h2>Cross-shard behaviour</h2>

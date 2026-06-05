@@ -156,7 +156,7 @@ public class WalletDepositMoneyAction extends Action<WalletDepositMoneyAction.Pa
 }
 ```
 
-`@EkbatanAction` marks the class for compile-time discovery — the generated `ActionRegistry` finds it, so the executor can route `execute(WalletDepositMoneyAction.class, params)` calls without runtime reflection. See [Action](/reference/action/) and [Annotations](/reference/annotations/).
+`@EkbatanAction` marks the class for discovery by the DI integration. The integration registers it in `ActionRegistry`, so the executor can route `execute(WalletDepositMoneyAction.class, params)` calls to it. See [Action](/reference/action/) and [Annotations](/reference/annotations/).
 
 ## 4. Expose it over HTTP
 

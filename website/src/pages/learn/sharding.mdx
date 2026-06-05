@@ -229,10 +229,10 @@ curl -X POST http://localhost:8080/wallets/<mexicanWalletId>/deposit -d '{"amoun
 
 ## 6. (Optional) Cross-shard transfer
 
-A "send money from a US wallet to a Mexican one" action touches two shards. By default the framework rejects it with `CrossShardException`. Opt in:
+A "send money from a US wallet to a Mexican one" action touches two shards. By default the framework rejects it with `CrossShardException`. The action is still a normal discovered action:
 
 ```java
-@EkbatanAction(allowCrossShard = true)
+@EkbatanAction
 public class WalletTransferAction extends Action<WalletTransferAction.Params, Void> {
 
     @Override
@@ -246,6 +246,16 @@ public class WalletTransferAction extends Action<WalletTransferAction.Params, Vo
         return null;
     }
 }
+```
+
+Opt in at the call site by passing an `ExecutionConfiguration`:
+
+```java
+var config = ExecutionConfiguration.Builder.executionConfiguration()
+        .allowCrossShard(true)
+        .build();
+
+executor.execute(principal, WalletTransferAction.class, params, config);
 ```
 
 **Watch the consistency model carefully**: per-shard atomicity, NOT global atomicity. The source-shard transaction can commit while the destination-shard one rolls back. For real transfers, use a [saga](/concepts/the-dual-write-trap/) — split into `InitiateTransferAction` (source only) + `CompleteTransferAction` (dest only), chained by `@EkbatanEventHandler`, with `RefundTransferAction` as compensation if the dest leg fails. The runnable example: [`ekbatan-examples/spring-boot-wallet-saga-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-saga-gradle-pg).

@@ -99,7 +99,7 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
 
 ### WalletDepositAction — the Action
 
-`@EkbatanAction` registers it with `ActionRegistry`. Constructor params are resolved by the DI container.
+`@EkbatanAction` registers it with `ActionRegistry`. Constructor params are resolved by the DI container. This annotation is discovery-only; execution behavior such as retries and cross-shard allowance is configured with `ExecutionConfiguration` on the `ActionExecutor` default or on a single `execute(...)` call.
 
 ```java
 @EkbatanAction

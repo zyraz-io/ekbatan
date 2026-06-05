@@ -39,7 +39,7 @@ Each `execute(...)` call:
 1. Opens a fresh [`ActionPlan`](/reference/action-plan/) bound via `ScopedValue`.
 2. Invokes `Action.perform(principal, params)`, which stages additions, updates, and events on the plan.
 3. Groups the staged changes by shard via each repository's [`ShardingStrategy`](/reference/sharding/).
-4. Writes everything in `TransactionManager.inTransactionChecked(...)` **per shard** — domain rows and the corresponding `action_event` rows committed in the same transaction.
+4. Writes everything in `TransactionManager.inTransactionChecked(...)` **per shard** — domain rows and the corresponding `eventlog.events` rows committed in the same transaction.
 
 The outbox is therefore always consistent with the data it describes — by construction, not by convention.
 

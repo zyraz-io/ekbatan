@@ -10,6 +10,10 @@ import java.lang.annotation.Target;
  * (Spring Boot, Quarkus, Micronaut). Discovered actions are registered as managed
  * beans and added to the framework's {@code ActionRegistry} so they can be invoked
  * via {@code ActionExecutor.execute(...)}.
+ *
+ * <p>This annotation is discovery-only. Execution behavior such as retries and
+ * cross-shard allowance is configured with {@code ExecutionConfiguration} on the
+ * {@code ActionExecutor} default or on a single {@code execute(...)} call.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
