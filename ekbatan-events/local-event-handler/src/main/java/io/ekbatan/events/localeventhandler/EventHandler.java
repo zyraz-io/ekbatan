@@ -1,6 +1,7 @@
 package io.ekbatan.events.localeventhandler;
 
 import io.ekbatan.core.domain.ModelEvent;
+import java.util.Set;
 
 /**
  * The contract a user implements to react to a specific {@link ModelEvent} subtype.
@@ -19,12 +20,29 @@ public interface EventHandler<E extends ModelEvent<?>> {
 
     /**
      * Cluster-stable identifier for this handler. Stored in
-     * {@code event_notifications.handler_name}; renaming a deployed handler effectively
-     * makes it a new handler (existing rows for the old name will eventually expire).
+     * {@code event_notifications.handler_name} when new notification rows are created.
+     * Keep this stable across class/package renames unless you intentionally want a new
+     * subscription identity.
      *
      * @return the handler's stable name.
      */
     String name();
+
+    /**
+     * Former cluster-stable identifiers that should still resolve to this handler when
+     * existing {@code event_notifications} rows are drained. Aliases are lookup-only:
+     * {@code EventFanoutJob} writes new notification rows with {@link #name()}, never
+     * with an alias.
+     *
+     * <p>Use aliases for safe handler renames. Leave them in place until every queued row
+     * under the old name has reached a terminal state, or longer if old rows may be restored
+     * from backups.
+     *
+     * @return former handler names that should route to this handler.
+     */
+    default Set<String> aliases() {
+        return Set.of();
+    }
 
     /** {@return the {@link ModelEvent} subtype this handler subscribes to} */
     Class<E> eventType();

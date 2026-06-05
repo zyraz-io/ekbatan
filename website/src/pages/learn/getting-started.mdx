@@ -2748,8 +2748,9 @@ With `ekbatan-local-event-handler` on the classpath (the Spring Boot starter pul
   }
 `} />
 
-Three required methods:
-- **`name()`** — cluster-stable handler identifier, stored in `event_notifications.handler_name`. Renaming re-delivers every historical event the new name hasn't seen.
+Three required methods, plus one optional rename helper:
+- **`name()`** — cluster-stable handler identifier, stored in `event_notifications.handler_name`. Renaming changes the handler identity: queued rows under the old name only resolve if that old name is listed in `aliases()`, and already fanned-out historical events are not replayed for the new name.
+- **`aliases()`** — optional old handler names that should still route to this handler while queued rows drain. Fan-out writes only `name()` for new rows.
 - **`eventType()`** — the typed payload class; drives JSON deserialization from the outbox row's `payload` column.
 - **`handle(envelope)`** — your logic. `envelope.event` is the typed payload; `envelope.actionParams` is the source Action's params as a Jackson `ObjectNode` (so you can read fields the event itself doesn't carry).
 

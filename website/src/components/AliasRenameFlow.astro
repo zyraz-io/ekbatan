@@ -1,0 +1,638 @@
+---
+interface Props {
+    oldName: string;
+    newName: string;
+    handlerClass: string;
+    oldEventIdOne?: string;
+    oldEventIdTwo?: string;
+    newEventId?: string;
+    oldStateOne?: string;
+    oldStateTwo?: string;
+    newState?: string;
+}
+
+const {
+    oldName,
+    newName,
+    handlerClass,
+    oldEventIdOne = "7e4f9a2d-3c83-4fd5-a833-7b5cc2e11f00",
+    oldEventIdTwo = "313a255e-26a0-41ef-adf5-30cbefcf9b10",
+    newEventId = "bba0d197-8083-4760-9446-d7b781dbcb6f",
+    oldStateOne = "PENDING",
+    oldStateTwo = "FAILED",
+    newState = "PENDING",
+} = Astro.props;
+---
+
+<section class="alias-rename-flow" data-alias-flow data-step="1" aria-labelledby="alias-flow-title">
+    <div class="flow-header">
+        <div>
+            <div class="flow-kicker">handler rename flow</div>
+            <h4 id="alias-flow-title">How aliases drain old rows while fan-out writes the new name</h4>
+        </div>
+        <button type="button" class="play-button" data-flow-play>Play flow</button>
+    </div>
+
+    <div class="step-controls" role="tablist" aria-label="Alias rename steps">
+        <button
+            type="button"
+            class="step-button"
+            data-step-target="1"
+            data-summary="Before the rename, fan-out writes notification rows with the old handler name."
+            aria-selected="true"
+        >
+            <span>1</span>
+            <strong>Before rename</strong>
+        </button>
+        <button
+            type="button"
+            class="step-button"
+            data-step-target="2"
+            data-summary="After the deploy, the handler advertises the new canonical name and keeps the old name in aliases()."
+            aria-selected="false"
+        >
+            <span>2</span>
+            <strong>Deploy alias</strong>
+        </button>
+        <button
+            type="button"
+            class="step-button"
+            data-step-target="3"
+            data-summary="New fan-out rows use the new canonical name. Aliases are not used when creating rows."
+            aria-selected="false"
+        >
+            <span>3</span>
+            <strong>New fan-out</strong>
+        </button>
+        <button
+            type="button"
+            class="step-button"
+            data-step-target="4"
+            data-summary="The handling job routes old rows through aliases() and new rows through name(), so both reach the current handler."
+            aria-selected="false"
+        >
+            <span>4</span>
+            <strong>Consume both</strong>
+        </button>
+    </div>
+
+    <p class="step-summary" data-step-summary>
+        Before the rename, fan-out writes notification rows with the old handler name.
+    </p>
+
+    <div class="flow-grid" aria-hidden="true">
+        <div class="flow-panel">
+            <div class="panel-title">EventFanoutJob writes</div>
+            <div class="flow-line line-old">
+                <span class="line-label">before deploy</span>
+                <span class="line-arrow"></span>
+                <code>{oldName}</code>
+            </div>
+            <div class="flow-line line-new">
+                <span class="line-label">after deploy</span>
+                <span class="line-arrow"></span>
+                <code>{newName}</code>
+            </div>
+        </div>
+
+        <div class="flow-panel">
+            <div class="panel-title">Current handler identity</div>
+            <div class="identity-card identity-name">
+                <span>name()</span>
+                <code>{newName}</code>
+            </div>
+            <div class="identity-card identity-alias">
+                <span>aliases()</span>
+                <code>Set.of("{oldName}")</code>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-wrap">
+        <table class="notification-table">
+            <thead>
+                <tr>
+                    <th>row</th>
+                    <th>event_id</th>
+                    <th>handler_name</th>
+                    <th>state</th>
+                    <th>route</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="flow-row row-old row-old-one">
+                    <td><span class="row-chip old-chip"></span>old-name row</td>
+                    <td><code>{oldEventIdOne}</code></td>
+                    <td><code>{oldName}</code></td>
+                    <td><code>{oldStateOne}</code></td>
+                    <td><code>aliases()</code> -> {handlerClass}</td>
+                </tr>
+                <tr class="flow-row row-old row-old-two">
+                    <td><span class="row-chip old-chip"></span>old-name row</td>
+                    <td><code>{oldEventIdTwo}</code></td>
+                    <td><code>{oldName}</code></td>
+                    <td><code>{oldStateTwo}</code></td>
+                    <td><code>aliases()</code> -> {handlerClass}</td>
+                </tr>
+                <tr class="flow-row row-new">
+                    <td><span class="row-chip new-chip"></span>new-name row</td>
+                    <td><code>{newEventId}</code></td>
+                    <td><code>{newName}</code></td>
+                    <td><code>{newState}</code></td>
+                    <td><code>name()</code> -> {handlerClass}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="routing-panel" aria-hidden="true">
+        <div class="route route-old">
+            <span class="row-chip old-chip"></span>
+            <code>{oldName}</code>
+            <span class="route-arrow"></span>
+            <span>alias lookup</span>
+            <span class="route-arrow"></span>
+            <strong>{handlerClass}</strong>
+        </div>
+        <div class="route route-new">
+            <span class="row-chip new-chip"></span>
+            <code>{newName}</code>
+            <span class="route-arrow"></span>
+            <span>canonical lookup</span>
+            <span class="route-arrow"></span>
+            <strong>{handlerClass}</strong>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.querySelectorAll<HTMLElement>("[data-alias-flow]").forEach((flow) => {
+        const buttons = Array.from(flow.querySelectorAll<HTMLButtonElement>("[data-step-target]"));
+        const summary = flow.querySelector<HTMLElement>("[data-step-summary]");
+        const play = flow.querySelector<HTMLButtonElement>("[data-flow-play]");
+        let timer: number | undefined;
+
+        const setStep = (step: number) => {
+            flow.dataset.step = String(step);
+            for (const button of buttons) {
+                const selected = button.dataset.stepTarget === String(step);
+                button.setAttribute("aria-selected", selected ? "true" : "false");
+                if (selected && summary) {
+                    summary.textContent = button.dataset.summary ?? "";
+                }
+            }
+        };
+
+        const stop = () => {
+            if (timer !== undefined) {
+                window.clearInterval(timer);
+                timer = undefined;
+            }
+            if (play) play.textContent = "Play flow";
+        };
+
+        buttons.forEach((button) => {
+            button.addEventListener("click", () => {
+                stop();
+                setStep(Number(button.dataset.stepTarget ?? "1"));
+            });
+        });
+
+        play?.addEventListener("click", () => {
+            if (timer !== undefined) {
+                stop();
+                return;
+            }
+            play.textContent = "Pause";
+            let step = 1;
+            setStep(step);
+            timer = window.setInterval(() => {
+                step += 1;
+                setStep(step);
+                if (step >= 4) {
+                    stop();
+                }
+            }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 1450);
+        });
+    });
+</script>
+
+<style>
+    .alias-rename-flow {
+        --old-color: #ffd23f;
+        --old-soft: #fff4b3;
+        --new-color: #68d391;
+        --new-soft: #d8f8e4;
+        margin: 2rem 0;
+        border: 2px solid var(--ink, #0a0a0a);
+        box-shadow: 6px 6px 0 0 var(--ink, #0a0a0a);
+        background: var(--paper, #fafafa);
+        padding: 1rem;
+        font-family: "DM Sans", system-ui, sans-serif;
+    }
+
+    .flow-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        border-bottom: 2px solid var(--ink, #0a0a0a);
+        padding-bottom: 0.85rem;
+    }
+
+    .flow-kicker {
+        display: inline-block;
+        border: 2px solid var(--ink, #0a0a0a);
+        background: var(--ink, #0a0a0a);
+        color: var(--paper, #fafafa);
+        padding: 0.1rem 0.35rem;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.68rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .alias-rename-flow h4 {
+        margin: 0.55rem 0 0;
+        font-family: "Space Grotesk", system-ui, sans-serif;
+        font-size: 1.15rem;
+        line-height: 1.2;
+        letter-spacing: 0;
+    }
+
+    .play-button,
+    .step-button {
+        border: 2px solid var(--ink, #0a0a0a);
+        background: var(--paper, #fafafa);
+        color: var(--ink, #0a0a0a);
+        cursor: pointer;
+        font: inherit;
+        transition: background 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+    }
+
+    .play-button {
+        flex: 0 0 auto;
+        padding: 0.45rem 0.65rem;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        box-shadow: 3px 3px 0 0 var(--ink, #0a0a0a);
+    }
+
+    .play-button:hover,
+    .step-button:hover {
+        background: var(--brand-yellow, #ffd23f);
+    }
+
+    .step-controls {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.55rem;
+        margin-top: 1rem;
+    }
+
+    .step-button {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        min-height: 3rem;
+        padding: 0.45rem;
+        text-align: left;
+    }
+
+    .step-button span {
+        display: inline-grid;
+        place-items: center;
+        flex: 0 0 1.55rem;
+        height: 1.55rem;
+        border: 2px solid var(--ink, #0a0a0a);
+        background: var(--paper, #fafafa);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+
+    .step-button strong {
+        font-size: 0.82rem;
+        line-height: 1.1;
+    }
+
+    .step-button[aria-selected="true"] {
+        background: var(--brand-yellow, #ffd23f);
+        box-shadow: 3px 3px 0 0 var(--ink, #0a0a0a);
+        transform: translate(-1px, -1px);
+    }
+
+    .step-summary {
+        min-height: 3.25rem;
+        margin: 1rem 0;
+        border-left: 6px solid var(--brand-orange, #ff6633);
+        background: #fff;
+        padding: 0.65rem 0.8rem;
+        font-size: 0.95rem;
+        line-height: 1.45;
+    }
+
+    .flow-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 0.85rem;
+    }
+
+    .flow-panel,
+    .routing-panel {
+        border: 2px solid var(--ink, #0a0a0a);
+        background: #fff;
+        padding: 0.75rem;
+    }
+
+    .panel-title {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 0.65rem;
+    }
+
+    .flow-line,
+    .identity-card,
+    .route {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        min-width: 0;
+    }
+
+    .flow-line,
+    .identity-card {
+        min-height: 2.7rem;
+        border: 2px solid var(--ink, #0a0a0a);
+        padding: 0.45rem;
+        background: #f6f6f6;
+        opacity: 0.45;
+        transition: opacity 0.22s ease, background 0.22s ease, transform 0.22s ease;
+    }
+
+    .flow-line + .flow-line,
+    .identity-card + .identity-card,
+    .route + .route {
+        margin-top: 0.55rem;
+    }
+
+    .line-label,
+    .identity-card span,
+    .route span {
+        font-size: 0.82rem;
+        line-height: 1.15;
+    }
+
+    .line-arrow,
+    .route-arrow {
+        position: relative;
+        flex: 1 1 2rem;
+        min-width: 1.5rem;
+        height: 2px;
+        background: var(--ink, #0a0a0a);
+        overflow: hidden;
+    }
+
+    .line-arrow::after,
+    .route-arrow::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        top: -4px;
+        border-left: 7px solid var(--ink, #0a0a0a);
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+    }
+
+    .line-arrow::before,
+    .route-arrow::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 -30%;
+        width: 30%;
+        background: var(--brand-orange, #ff6633);
+        opacity: 0;
+    }
+
+    code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.82em;
+        overflow-wrap: anywhere;
+    }
+
+    .identity-name {
+        background: var(--new-soft);
+    }
+
+    .identity-alias {
+        background: var(--old-soft);
+    }
+
+    .table-wrap {
+        overflow-x: auto;
+        margin-top: 0.85rem;
+        border: 2px solid var(--ink, #0a0a0a);
+        background: #fff;
+    }
+
+    .notification-table {
+        width: 100%;
+        min-width: 780px;
+        border-collapse: collapse;
+        margin: 0;
+        font-size: 0.86rem;
+    }
+
+    .notification-table th,
+    .notification-table td {
+        border: 2px solid var(--ink, #0a0a0a);
+        padding: 0.5rem 0.6rem;
+        vertical-align: middle;
+        text-align: left;
+    }
+
+    .notification-table th {
+        background: var(--ink, #0a0a0a);
+        color: var(--paper, #fafafa);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    .flow-row {
+        background: #f7f7f7;
+        opacity: 0.55;
+        transition: opacity 0.22s ease, background 0.22s ease, transform 0.22s ease;
+    }
+
+    .row-chip {
+        display: inline-block;
+        width: 0.8rem;
+        height: 0.8rem;
+        border: 2px solid var(--ink, #0a0a0a);
+        margin-right: 0.35rem;
+        vertical-align: -0.1rem;
+    }
+
+    .old-chip {
+        background: var(--old-color);
+    }
+
+    .new-chip {
+        background: var(--new-color);
+    }
+
+    .routing-panel {
+        margin-top: 0.85rem;
+    }
+
+    .route {
+        border: 2px solid var(--ink, #0a0a0a);
+        padding: 0.55rem;
+        opacity: 0.4;
+        background: #f7f7f7;
+        transition: opacity 0.22s ease, background 0.22s ease, transform 0.22s ease;
+    }
+
+    .route strong {
+        font-size: 0.9rem;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .route code {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .alias-rename-flow[data-step="1"] .line-old,
+    .alias-rename-flow[data-step="2"] .line-old,
+    .alias-rename-flow[data-step="3"] .line-new,
+    .alias-rename-flow[data-step="4"] .line-old,
+    .alias-rename-flow[data-step="4"] .line-new {
+        opacity: 1;
+        transform: translateX(2px);
+    }
+
+    .alias-rename-flow[data-step="1"] .row-old,
+    .alias-rename-flow[data-step="2"] .row-old,
+    .alias-rename-flow[data-step="3"] .row-new,
+    .alias-rename-flow[data-step="4"] .flow-row {
+        opacity: 1;
+    }
+
+    .alias-rename-flow[data-step="1"] .row-old,
+    .alias-rename-flow[data-step="2"] .row-old,
+    .alias-rename-flow[data-step="4"] .row-old {
+        background: var(--old-soft);
+    }
+
+    .alias-rename-flow[data-step="3"] .row-new,
+    .alias-rename-flow[data-step="4"] .row-new {
+        background: var(--new-soft);
+    }
+
+    .alias-rename-flow[data-step="2"] .identity-alias,
+    .alias-rename-flow[data-step="3"] .identity-name,
+    .alias-rename-flow[data-step="4"] .identity-card,
+    .alias-rename-flow[data-step="4"] .route {
+        opacity: 1;
+        transform: translateX(2px);
+    }
+
+    .alias-rename-flow[data-step="4"] .route-old {
+        background: var(--old-soft);
+    }
+
+    .alias-rename-flow[data-step="4"] .route-new {
+        background: var(--new-soft);
+    }
+
+    .alias-rename-flow[data-step="1"] .line-old .line-arrow::before,
+    .alias-rename-flow[data-step="2"] .line-old .line-arrow::before,
+    .alias-rename-flow[data-step="3"] .line-new .line-arrow::before,
+    .alias-rename-flow[data-step="4"] .route-arrow::before {
+        opacity: 1;
+        animation: arrow-flow 1.1s linear infinite;
+    }
+
+    .alias-rename-flow[data-step="1"] .row-old,
+    .alias-rename-flow[data-step="2"] .identity-alias,
+    .alias-rename-flow[data-step="3"] .row-new,
+    .alias-rename-flow[data-step="4"] .route {
+        animation: row-pulse 1.35s ease-in-out infinite;
+    }
+
+    @keyframes arrow-flow {
+        from {
+            transform: translateX(0);
+        }
+        to {
+            transform: translateX(430%);
+        }
+    }
+
+    @keyframes row-pulse {
+        0%,
+        100% {
+            box-shadow: inset 0 0 0 0 transparent;
+        }
+        50% {
+            box-shadow: inset 0 0 0 3px rgba(255, 102, 51, 0.35);
+        }
+    }
+
+    @media (max-width: 760px) {
+        .flow-header {
+            display: block;
+        }
+
+        .play-button {
+            margin-top: 0.85rem;
+        }
+
+        .step-controls,
+        .flow-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .step-summary {
+            min-height: 0;
+        }
+
+        .route {
+            flex-wrap: wrap;
+        }
+
+        .route-arrow {
+            flex: 1 0 100%;
+            min-width: 100%;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .play-button,
+        .step-button,
+        .flow-line,
+        .identity-card,
+        .flow-row,
+        .route {
+            transition: none;
+        }
+
+        .line-arrow::before,
+        .route-arrow::before,
+        .flow-row,
+        .identity-card,
+        .route {
+            animation: none !important;
+        }
+    }
+</style>

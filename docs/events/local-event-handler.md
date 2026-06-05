@@ -64,9 +64,114 @@ public class WidgetCreatedEmailHandler implements EventHandler<WidgetCreatedEven
 }
 ```
 
-Multiple handlers may subscribe to the same event type; each gets its own `event_notifications` row and its own retry/expiry lifecycle. `name()` is the cluster-stable identifier persisted on every notification row, so **treat handler names as part of your schema**: renaming a handler in code orphans the rows queued under the old name.
+Multiple handlers may subscribe to the same event type; each gets its own `event_notifications` row and its own retry/expiry lifecycle. `name()` is the canonical durable subscription id persisted on new notification rows, so **treat handler names as part of your schema**. For a safe rename, override `aliases()` with the old name: the handling job resolves queued old-name rows through aliases, while fan-out keeps writing only the canonical `name()`. Removing an alias before old rows reach a terminal state leaves those rows unresolved until expiry.
 
-The registry keys subscriptions by the event class's simple name, matching `eventlog.events.event_type`. It allows multiple handlers for the same event class, but rejects two different event classes with the same simple name because those would be indistinguishable in the outbox.
+The registry keys subscriptions by the event class's simple name, matching `eventlog.events.event_type`. It allows multiple handlers for the same event class, but rejects two different event classes with the same simple name because those would be indistinguishable in the outbox. Handler names and aliases must be globally unique.
+
+### Renaming a handler safely
+
+Assume version 1 of your app had this handler:
+
+```java
+@EkbatanEventHandler
+public class WidgetCreatedEmailHandler implements EventHandler<WidgetCreatedEvent> {
+
+    @Override
+    public String name() {
+        return "widget-created-email";
+    }
+
+    @Override
+    public Class<WidgetCreatedEvent> eventType() {
+        return WidgetCreatedEvent.class;
+    }
+
+    @Override
+    public void handle(EventEnvelope<WidgetCreatedEvent> envelope) {
+        emailService.sendWelcome(envelope.event.modelId, envelope.event.name);
+    }
+}
+```
+
+While that version was running, fan-out created rows like this:
+
+```text
+event_id                              handler_name          state
+7e4f9a2d-3c83-4fd5-a833-7b5cc2e11f00  widget-created-email  PENDING
+```
+
+Now suppose you rename the class and want the durable subscription id to be more precise:
+
+```java
+import java.util.Set;
+
+@EkbatanEventHandler
+public class WidgetCreatedWelcomeEmailHandler implements EventHandler<WidgetCreatedEvent> {
+
+    @Override
+    public String name() {
+        return "widget-created-welcome-email";
+    }
+
+    @Override
+    public Set<String> aliases() {
+        return Set.of("widget-created-email");
+    }
+
+    @Override
+    public Class<WidgetCreatedEvent> eventType() {
+        return WidgetCreatedEvent.class;
+    }
+
+    @Override
+    public void handle(EventEnvelope<WidgetCreatedEvent> envelope) {
+        emailService.sendWelcome(envelope.event.modelId, envelope.event.name);
+    }
+}
+```
+
+During the rollout, the table can contain both old-name and new-name rows:
+
+```text
+Before deploy
+EventFanoutJob ── writes handler_name = 'widget-created-email' ──▶ eventlog.event_notifications
+
+After deploy
+EventFanoutJob ── writes handler_name = 'widget-created-welcome-email' ──▶ eventlog.event_notifications
+```
+
+| row | event_id | handler_name | state | how `EventHandlingJob` routes it |
+|---|---|---|---|---|
+| 🟨 old-name row | `7e4f9a2d-3c83-4fd5-a833-7b5cc2e11f00` | `widget-created-email` | `PENDING` | `aliases()` contains `widget-created-email` → invoke `WidgetCreatedWelcomeEmailHandler` |
+| 🟨 old-name row | `313a255e-26a0-41ef-adf5-30cbefcf9b10` | `widget-created-email` | `FAILED` | `aliases()` contains `widget-created-email` → retry `WidgetCreatedWelcomeEmailHandler` |
+| 🟩 new-name row | `bba0d197-8083-4760-9446-d7b781dbcb6f` | `widget-created-welcome-email` | `PENDING` | `name()` is `widget-created-welcome-email` → invoke `WidgetCreatedWelcomeEmailHandler` |
+
+Visually, dispatch works like this:
+
+```text
+EventHandlingJob
+  ├─ 🟨 row.handler_name = 'widget-created-email'
+  │     └─ alias lookup: aliases() contains 'widget-created-email'
+  │        └─ invokes WidgetCreatedWelcomeEmailHandler
+  │
+  └─ 🟩 row.handler_name = 'widget-created-welcome-email'
+        └─ canonical lookup: name() == 'widget-created-welcome-email'
+           └─ invokes WidgetCreatedWelcomeEmailHandler
+```
+
+So aliases are lookup-only: they let the handling job consume old rows that already exist. They do not make fan-out write old names again, and they do not replay historical events that were already fanned out under the old name.
+
+You can remove the alias after there are no non-terminal rows under the old name. In practice, that means no `PENDING` or `FAILED` rows remain; `SUCCEEDED` and `EXPIRED` are terminal:
+
+```sql
+SELECT state, COUNT(*)
+FROM eventlog.event_notifications
+WHERE handler_name = 'widget-created-email'
+  AND state IN ('PENDING', 'FAILED')
+GROUP BY state;
+```
+
+Keeping an alias longer is harmless and often simpler, especially if backups or delayed environments might still contain old-name rows. Do not use aliases to replay history or create a second independent subscription; for that, create a new handler with its own `name()` and no alias.
 
 The `@EkbatanEventHandler` annotation is for the Spring Boot / Quarkus / Micronaut integrations. Without DI, register handlers directly into an `EventHandlerRegistry` builder.
 
@@ -161,7 +266,7 @@ The denormalization is deliberate: dispatch reads everything it needs from one n
 `EventFanoutJob` polls every shard in parallel on virtual threads. Each round:
 
 1. Drain a batch of undelivered events whose `event_type` currently has at least one registered handler (`delivered = FALSE AND event_type IN (...)`, limited, ordered by `event_date`).
-2. For each event, look up subscribed handler names from `EventHandlerRegistry` and insert one `event_notifications` row per `(event × handler)` with the full denormalized context. State `PENDING`, `attempts = 0`, `next_retry_at = now`.
+2. For each event, look up subscribed canonical handler names from `EventHandlerRegistry` and insert one `event_notifications` row per `(event × handler)` with the full denormalized context. State `PENDING`, `attempts = 0`, `next_retry_at = now`.
 3. Mark the source events `delivered = TRUE` so they don't get re-fanned-out next round.
 4. If anything was drained, loop immediately; otherwise sleep `fanoutPollDelay`.
 

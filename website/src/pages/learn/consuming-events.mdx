@@ -141,7 +141,7 @@ public class WalletMoneyDepositedNotifier implements EventHandler<WalletMoneyDep
     @Override
     public String name() {
         // Cluster-stable identifier; stored in event_notifications.handler_name.
-        // Renaming this would re-deliver all past events.
+        // If you rename it, keep the old value in aliases() until old rows drain.
         return "wallet-money-deposited-notifier";
     }
 
@@ -161,10 +161,29 @@ public class WalletMoneyDepositedNotifier implements EventHandler<WalletMoneyDep
 }
 ```
 
-Three required methods:
-- **`name()`** — cluster-stable handler identifier. Stored in `event_notifications.handler_name`. **Don't rename casually** — a rename re-delivers every historical event the new name hasn't seen.
+Three required methods, plus one optional rename helper:
+- **`name()`** — cluster-stable handler identifier. Stored in `event_notifications.handler_name`. **Don't rename casually** — changing it makes future notifications use a new handler identity, while queued rows under the old name only resolve if that old name is listed in `aliases()`. Already fanned-out historical events are not replayed for the new name; only source events still marked `delivered=false` can be backfilled.
+- **`aliases()`** — optional previous names for the same logical handler. Use this when you rename a handler but still need to process rows that were already written with the old `handler_name`. The handling job can resolve old rows through `aliases()`, but the fan-out job writes only the current `name()` for new rows.
 - **`eventType()`** — what payload class this handler accepts. Drives JSON deserialization.
 - **`handle(envelope)`** — your business logic. `envelope.event` is the typed payload; `envelope.actionParams` is the JSON of the source action's params (handy for routing concerns you don't want polluting the event payload).
+
+For example, suppose the handler used to return `"wallet-money-deposited-notifier"`, and you rename the durable subscription to `"wallet-money-deposit-alert"`. Existing `event_notifications` rows may still contain the old name, so keep it as an alias:
+
+```java
+@Override
+public String name() {
+    return "wallet-money-deposit-alert";
+}
+
+@Override
+public Set<String> aliases() {
+    return Set.of("wallet-money-deposited-notifier");
+}
+```
+
+After that deploy, old rows with `handler_name = 'wallet-money-deposited-notifier'` still invoke this handler through `aliases()`, and new rows are created with `handler_name = 'wallet-money-deposit-alert'`. Remove the alias only after the old-name queue has drained, or keep it indefinitely if old rows might reappear from restored backups or delayed environments.
+
+The [Local event handler reference](/reference/events/local-event-handler/) has an animated walkthrough that shows this rename mechanism: old rows routing through `aliases()`, and new rows routing through the current `name()`.
 
 Per the [listen-to-yourself pattern](/concepts/the-dual-write-trap/), the handler can dispatch its own actions via an injected `ActionExecutor` to record its work in the same outbox.
 

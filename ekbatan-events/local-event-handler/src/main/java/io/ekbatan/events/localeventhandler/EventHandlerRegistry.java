@@ -20,9 +20,9 @@ import java.util.Set;
  * <ul>
  *   <li>{@code EventFanoutJob} calls {@link #handledEventTypes()} and
  *       {@link #subscribersFor(String)} to learn which source events are actionable and
- *       which handler names need notification rows for each event type.</li>
+ *       which canonical handler names need notification rows for each event type.</li>
  *   <li>{@code EventHandlingJob} calls {@link #handlerFor(String)} to route a claimed
- *       delivery to the matching handler instance.</li>
+ *       delivery to the matching handler instance by canonical name or alias.</li>
  * </ul>
  *
  * <p>These methods are public for cross-package access from the framework's job classes;
@@ -31,11 +31,11 @@ import java.util.Set;
  */
 public final class EventHandlerRegistry {
 
-    private final Map<String, EventHandler<?>> handlersByName;
+    private final Map<String, EventHandler<?>> handlersByLookupName;
     private final Map<String, List<String>> namesByEventType;
 
     private EventHandlerRegistry(Builder builder) {
-        this.handlersByName = Map.copyOf(builder.handlersByName);
+        this.handlersByLookupName = Map.copyOf(builder.handlersByLookupName);
         final var namesByEventType = new LinkedHashMap<String, List<String>>();
         builder.namesByEventType.forEach((type, names) -> namesByEventType.put(type, List.copyOf(names)));
         this.namesByEventType = Collections.unmodifiableMap(namesByEventType);
@@ -48,7 +48,8 @@ public final class EventHandlerRegistry {
 
     /**
      * Framework hook used by {@code EventFanoutJob}: the cluster-stable names of every
-     * handler subscribed to {@code eventTypeSimpleName}. Empty list if none.
+     * handler subscribed to {@code eventTypeSimpleName}. Aliases are intentionally excluded:
+     * fan-out writes only canonical handler names into new notification rows. Empty list if none.
      *
      * @param eventTypeSimpleName the event subtype's simple class name.
      * @return the handler names subscribed to that event type.
@@ -69,20 +70,21 @@ public final class EventHandlerRegistry {
 
     /**
      * Framework hook used by {@code EventHandlingJob}: the handler instance registered
-     * under {@code handlerName}, or {@code null} if no such handler is registered (e.g.
-     * a notification row exists for a handler that has since been removed from the code).
+     * under {@code handlerName} or one of its aliases, or {@code null} if no such handler
+     * is registered (e.g. a notification row exists for a handler that has since been
+     * removed from the code).
      *
      * @param handlerName the cluster-stable handler name from {@code event_notifications}.
      * @return the matching handler instance, or {@code null}.
      */
     public EventHandler<?> handlerFor(String handlerName) {
-        return handlersByName.get(handlerName);
+        return handlersByLookupName.get(handlerName);
     }
 
     /** Fluent builder for {@link EventHandlerRegistry}. Obtain via {@link #eventHandlerRegistry()}. */
     public static final class Builder {
 
-        private final Map<String, EventHandler<?>> handlersByName = new HashMap<>();
+        private final Map<String, EventHandler<?>> handlersByLookupName = new HashMap<>();
         private final Map<String, Class<?>> eventTypesBySimpleName = new HashMap<>();
         private final Map<String, List<String>> namesByEventType = new LinkedHashMap<>();
 
@@ -101,10 +103,7 @@ public final class EventHandlerRegistry {
             final var eventTypeSimpleName =
                     Validate.notBlank(eventType.getSimpleName(), "handler.eventType().getSimpleName() cannot be blank");
 
-            if (handlersByName.containsKey(name)) {
-                throw new IllegalArgumentException(
-                        "Handler name already registered: " + name + " (handlers must have unique names)");
-            }
+            rejectDuplicateLookupName(name);
 
             final var previousEventType = eventTypesBySimpleName.get(eventTypeSimpleName);
             if (previousEventType != null && !previousEventType.equals(eventType)) {
@@ -117,11 +116,27 @@ public final class EventHandlerRegistry {
             }
 
             eventTypesBySimpleName.put(eventTypeSimpleName, eventType);
-            handlersByName.put(name, handler);
+            handlersByLookupName.put(name, handler);
+            for (var alias : Validate.notNull(handler.aliases(), "handler.aliases() cannot be null")) {
+                final var validAlias = Validate.notBlank(alias, "handler.aliases() cannot contain blank values");
+                if (validAlias.equals(name)) {
+                    throw new IllegalArgumentException("Handler alias duplicates canonical name: " + name);
+                }
+                rejectDuplicateLookupName(validAlias);
+                handlersByLookupName.put(validAlias, handler);
+            }
             namesByEventType
                     .computeIfAbsent(eventTypeSimpleName, _ -> new ArrayList<>())
                     .add(name);
             return this;
+        }
+
+        private void rejectDuplicateLookupName(String lookupName) {
+            if (handlersByLookupName.containsKey(lookupName)) {
+                throw new IllegalArgumentException("Handler name or alias already registered: "
+                        + lookupName
+                        + " (handler names and aliases must be globally unique)");
+            }
         }
 
         /**
