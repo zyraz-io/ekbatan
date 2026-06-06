@@ -102,7 +102,7 @@ var config = ExecutionConfiguration.Builder.executionConfiguration()
 executor.execute(principal, WalletDepositAction.class, params, config);
 ```
 
-The retry map can contain multiple exception classes. Exceptions not present in the effective retry config propagate to the caller.
+The retry map can contain multiple exception classes. Matching is exact by exception class, and Ekbatan also checks the cause chain so wrapped retryable exceptions still retry. Superclass matching is not used. Exceptions not present in the effective retry config propagate to the caller.
 
 ## Cross-shard execution
 

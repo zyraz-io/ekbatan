@@ -2,6 +2,8 @@ package io.ekbatan.core.action;
 
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.trace.Span;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,8 +32,8 @@ final class Retry<R> {
             try {
                 return operation.get();
             } catch (Exception e) {
-                var config = retryConfigs.get(e.getClass());
-                if (config == null || currentRetryCount >= config.maxRetries) {
+                var retryMatch = retryConfigFor(e);
+                if (retryMatch == null || currentRetryCount >= retryMatch.config.maxRetries) {
                     throw e;
                 }
                 currentRetryCount++;
@@ -39,20 +41,46 @@ final class Retry<R> {
                         "Retrying {} (retry {}/{}) due to {}: {}",
                         actionName,
                         currentRetryCount,
-                        config.maxRetries,
-                        e.getClass().getSimpleName(),
-                        e.getMessage());
+                        retryMatch.config.maxRetries,
+                        retryMatch.exception.getClass().getSimpleName(),
+                        retryMatch.exception.getMessage());
                 Span.current()
                         .addEvent(
                                 "retry",
                                 Attributes.builder()
                                         .put("retry.count", currentRetryCount)
-                                        .put("retry.exception", e.getClass().getSimpleName())
+                                        .put(
+                                                "retry.exception",
+                                                retryMatch.exception.getClass().getSimpleName())
                                         .build());
-                Thread.sleep(config.delay.toMillis());
+                sleepBeforeRetry(retryMatch.config.delay);
             }
         } while (true);
     }
+
+    private void sleepBeforeRetry(java.time.Duration delay) throws InterruptedException {
+        try {
+            Thread.sleep(delay.toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw e;
+        }
+    }
+
+    private RetryMatch retryConfigFor(Exception exception) {
+        var seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
+        Throwable current = exception;
+        while (current != null && seen.add(current)) {
+            var config = retryConfigs.get(current.getClass());
+            if (config != null) {
+                return new RetryMatch(config, current);
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
+    private record RetryMatch(RetryConfig config, Throwable exception) {}
 
     @FunctionalInterface
     interface CheckedSupplier<R> {

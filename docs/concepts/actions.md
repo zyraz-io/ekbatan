@@ -152,6 +152,8 @@ ExecutionConfiguration.Builder.executionConfiguration()
         .build();
 ```
 
+Retry matching is exact by exception class. Ekbatan also checks the cause chain, so a configured `StaleRecordException` retry still applies if that exception is wrapped. Superclass matching is not used: a config for `RuntimeException.class` does not retry an `IllegalStateException` unless the thrown exception is exactly `RuntimeException`.
+
 The retry replays the entire action from Phase 1 with a fresh plan. Side effects in `perform()` outside the plan (logging, counters, external API calls) will replay too — keep `perform()` pure.
 
 ## Cross-shard actions

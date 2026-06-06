@@ -56,10 +56,11 @@ import tools.jackson.databind.ObjectMapper;
  * <h2>Retries</h2>
  *
  * <p>Each {@code execute(...)} call is wrapped in a {@link Retry} driver keyed on the
- * configured {@link RetryConfig}s. The default {@link ExecutionConfiguration} retries
- * {@link io.ekbatan.core.repository.exception.StaleRecordException} once after 100ms - enough
- * to absorb a transient optimistic-lock conflict without hiding a deeper problem. A retry
- * builds a brand-new {@code ActionPlan} so each attempt is logically independent.
+ * configured {@link RetryConfig}s. Matching is exact by exception class and also checks the
+ * cause chain; superclass matching is not used. The default {@link ExecutionConfiguration}
+ * retries {@link io.ekbatan.core.repository.exception.StaleRecordException} once after 100ms
+ * - enough to absorb a transient optimistic-lock conflict without hiding a deeper problem. A
+ * retry builds a brand-new {@code ActionPlan} so each attempt is logically independent.
  *
  * <h2>Tracing</h2>
  *

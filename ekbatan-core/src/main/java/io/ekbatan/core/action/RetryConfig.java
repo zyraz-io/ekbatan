@@ -4,8 +4,9 @@ import io.ekbatan.core.internal.Validate;
 import java.time.Duration;
 
 /**
- * Retry policy for a single exception type within an {@link ExecutionConfiguration}: how many
- * times to retry and how long to wait between attempts.
+ * Retry policy for a single exact exception type within an {@link ExecutionConfiguration}: how
+ * many times to retry and how long to wait between attempts. The executor also checks causes
+ * for exact matches to configured exception classes; superclass matching is not used.
  *
  * <p>{@code maxRetries = 0} disables retrying (the exception propagates on first throw);
  * larger values give the executor up to N retries (so up to N+1 total attempts). Each retry

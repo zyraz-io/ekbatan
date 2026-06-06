@@ -63,7 +63,7 @@ See [Concepts → Sharding strategies → Cross-shard actions](/concepts/shardin
 
 ## Retries
 
-Each `execute(...)` call is wrapped in a `Retry` driver keyed on the configured `RetryConfig`s. The default `ExecutionConfiguration` retries `StaleRecordException` **once after 100ms** — enough to absorb a transient optimistic-lock conflict without hiding a deeper problem. **A retry builds a brand-new `ActionPlan`** so each attempt is logically independent.
+Each `execute(...)` call is wrapped in a `Retry` driver keyed on the configured `RetryConfig`s. Matching is exact by exception class and also checks the cause chain; superclass matching is not used. The default `ExecutionConfiguration` retries `StaleRecordException` **once after 100ms** — enough to absorb a transient optimistic-lock conflict without hiding a deeper problem. **A retry builds a brand-new `ActionPlan`** so each attempt is logically independent.
 
 ## Tracing
 

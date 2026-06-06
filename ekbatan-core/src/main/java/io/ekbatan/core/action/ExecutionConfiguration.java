@@ -7,7 +7,7 @@ import java.util.Map;
 
 /**
  * Per-call (or default per-executor) knobs for {@link ActionExecutor}: the retry policy
- * keyed by exception type, and whether the action is allowed to touch more than one shard.
+ * keyed by exact exception type, and whether the action is allowed to touch more than one shard.
  *
  * <p>The default configuration is conservative: retry {@link StaleRecordException} once
  * after 100ms (absorbs a transient optimistic-lock conflict) and reject any action that
@@ -24,7 +24,10 @@ import java.util.Map;
  */
 public final class ExecutionConfiguration {
 
-    /** Immutable map of retry policies, keyed by exception class; consulted by the executor on each failure. */
+    /**
+     * Immutable map of retry policies, keyed by exact exception class. The executor checks the
+     * thrown exception and its cause chain; superclass matching is not used.
+     */
     public final Map<Class<? extends Exception>, RetryConfig> retryConfigs;
 
     /** Whether the action is allowed to touch more than one shard (no atomic cross-shard commit - see class docs). */
@@ -49,10 +52,12 @@ public final class ExecutionConfiguration {
         }
 
         /**
-         * Adds (or replaces) a retry policy for the given exception type.
+         * Adds (or replaces) a retry policy for the given exact exception type. The executor
+         * matches this class against the thrown exception and each cause in its cause chain;
+         * superclass matching is not used.
          *
-         * @param exceptionType the exception class to match.
-         * @param config the retry configuration to apply when this exception is thrown.
+         * @param exceptionType the exact exception class to match.
+         * @param config the retry configuration to apply when this exception is thrown or found in the cause chain.
          * @return this builder, for chaining.
          */
         public Builder withRetry(Class<? extends Exception> exceptionType, RetryConfig config) {

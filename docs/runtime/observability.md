@@ -39,7 +39,7 @@ A single action that touches one shard produces one of each span. A cross-shard 
 
 ## Retry events
 
-Each retry attempt adds a span event named `"retry"` to the action span with attributes `retry.attempt` (int) and `retry.exception` (exception class name). Retries are **not** their own spans — each retry re-executes `perform` + `persist`, so the child spans of each attempt already appear under the action span; a separate retry span would just add a redundant level.
+Each retry attempt adds a span event named `"retry"` to the action span with attributes `retry.count` (int) and `retry.exception` (the matched retryable exception class name, which may come from the cause chain). Retries are **not** their own spans — each retry re-executes `perform` + `persist`, so the child spans of each attempt already appear under the action span; a separate retry span would just add a redundant level.
 
 ## Errors
 
