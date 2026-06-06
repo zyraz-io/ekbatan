@@ -1,0 +1,293 @@
+name: Heavy Verification
+
+on:
+  schedule:
+    # Run shortly after midnight UTC, but only continue if main changed during
+    # the previous UTC day.
+    - cron: "17 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: heavy-verification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  activity:
+    name: Check Recent Activity
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.activity.outputs.should_run }}
+      reason: ${{ steps.activity.outputs.reason }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide Whether To Run
+        id: activity
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" != "schedule" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "reason=manual trigger" >> "$GITHUB_OUTPUT"
+            echo "Heavy verification was manually triggered." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git fetch --no-tags --prune origin +refs/heads/main:refs/remotes/origin/main
+
+          since="$(date -u -d 'yesterday 00:00' '+%Y-%m-%dT%H:%M:%SZ')"
+          until="$(date -u -d 'today 00:00' '+%Y-%m-%dT%H:%M:%SZ')"
+          commit="$(git log --since="$since" --until="$until" --max-count=1 --format=%H origin/main --)"
+
+          if [[ -n "$commit" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "reason=main changed between $since and $until" >> "$GITHUB_OUTPUT"
+            echo "Found commits on main between $since and $until." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no commits on main between $since and $until" >> "$GITHUB_OUTPUT"
+            echo "No commits on main between $since and $until. Skipping heavy verification." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  root-native-tests:
+    name: Root Native Tests
+    needs: activity
+    if: needs.activity.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set Up GraalVM
+        uses: actions/setup-java@v4
+        with:
+          distribution: graalvm
+          java-version: 25
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify GraalVM
+        shell: bash
+        run: |
+          java -version
+          native-image --version
+
+      - name: Run Root Native Tests
+        shell: bash
+        run: |
+          export GRAALVM_HOME="$JAVA_HOME"
+          ./gradlew \
+            -Dorg.gradle.java.installations.paths="$JAVA_HOME" \
+            -Dorg.gradle.java.installations.auto-detect=false \
+            nativeTest --parallel --max-workers=4 --continue --stacktrace
+
+      - name: Upload Root Native Test Reports
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-native-test-reports
+          if-no-files-found: ignore
+          path: |
+            **/build/reports/tests/nativeTest/**
+            **/build/test-results/nativeTest/**
+
+  examples-jvm-tests:
+    name: Example JVM Tests / ${{ matrix.project }}
+    needs: activity
+    if: needs.activity.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: micronaut-wallet-rest-gradle-mariadb
+            command: ./gradlew test --stacktrace
+          - project: micronaut-wallet-rest-gradle-mysql
+            command: ./gradlew test --stacktrace
+          - project: micronaut-wallet-rest-gradle-pg
+            command: ./gradlew test --stacktrace
+          - project: quarkus-wallet-rest-gradle-mariadb
+            command: ./gradlew test --stacktrace
+          - project: quarkus-wallet-rest-gradle-mysql
+            command: ./gradlew test --stacktrace
+          - project: quarkus-wallet-rest-gradle-pg
+            command: ./gradlew test --stacktrace
+          - project: spring-boot-job-worker-gradle-pg
+            command: ./gradlew test --stacktrace
+          - project: spring-boot-wallet-rest-gradle-mariadb
+            command: ./gradlew test --stacktrace
+          - project: spring-boot-wallet-rest-gradle-mysql
+            command: ./gradlew test --stacktrace
+          - project: spring-boot-wallet-rest-gradle-pg
+            command: ./gradlew test --stacktrace
+          - project: spring-boot-wallet-rest-gradle-sharded-pg
+            command: ./gradlew test --stacktrace
+          - project: spring-boot-wallet-saga-gradle-pg
+            command: ./gradlew test --stacktrace
+          - project: micronaut-wallet-rest-maven-mariadb
+            command: ./mvnw -B -ntp verify
+          - project: micronaut-wallet-rest-maven-mysql
+            command: ./mvnw -B -ntp verify
+          - project: micronaut-wallet-rest-maven-pg
+            command: ./mvnw -B -ntp verify
+          - project: quarkus-wallet-rest-maven-mariadb
+            command: ./mvnw -B -ntp verify
+          - project: quarkus-wallet-rest-maven-mysql
+            command: ./mvnw -B -ntp verify
+          - project: quarkus-wallet-rest-maven-pg
+            command: ./mvnw -B -ntp verify
+          - project: spring-boot-wallet-rest-maven-mariadb
+            command: ./mvnw -B -ntp verify
+          - project: spring-boot-wallet-rest-maven-mysql
+            command: ./mvnw -B -ntp verify
+          - project: spring-boot-wallet-rest-maven-pg
+            command: ./mvnw -B -ntp verify
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set Up GraalVM
+        uses: actions/setup-java@v4
+        with:
+          distribution: graalvm
+          java-version: 25
+          cache: maven
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run Example JVM Tests
+        working-directory: ekbatan-examples/${{ matrix.project }}
+        shell: bash
+        run: ${{ matrix.command }}
+
+      - name: Upload Example JVM Test Reports
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: example-jvm-${{ matrix.project }}-reports
+          if-no-files-found: ignore
+          path: |
+            ekbatan-examples/${{ matrix.project }}/build/reports/tests/**
+            ekbatan-examples/${{ matrix.project }}/build/test-results/**
+            ekbatan-examples/${{ matrix.project }}/target/surefire-reports/**
+            ekbatan-examples/${{ matrix.project }}/target/failsafe-reports/**
+
+  examples-native-tests:
+    name: Example Native Verification / ${{ matrix.project }}
+    needs: activity
+    if: needs.activity.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: micronaut-wallet-rest-gradle-native-mariadb
+            command: ./gradlew test nativeTest --stacktrace
+            allow_failure: false
+          - project: micronaut-wallet-rest-gradle-native-mysql
+            command: ./gradlew test nativeTest --stacktrace
+            allow_failure: false
+          - project: micronaut-wallet-rest-gradle-native-pg
+            command: ./gradlew test nativeTest --stacktrace
+            allow_failure: false
+          # The example README documents a current native-runtime startup caveat.
+          # Execute it so the signal remains visible, but do not block the whole workflow yet.
+          - project: quarkus-wallet-rest-gradle-native-mariadb
+            command: ./gradlew test testNative --stacktrace
+            allow_failure: true
+          - project: quarkus-wallet-rest-gradle-native-mysql
+            command: ./gradlew test testNative --stacktrace
+            allow_failure: false
+          - project: quarkus-wallet-rest-gradle-native-pg
+            command: ./gradlew test testNative --stacktrace
+            allow_failure: false
+          - project: spring-boot-wallet-rest-gradle-native-mariadb
+            command: ./gradlew test nativeTest --stacktrace
+            allow_failure: false
+          - project: spring-boot-wallet-rest-gradle-native-mysql
+            command: ./gradlew test nativeTest --stacktrace
+            allow_failure: false
+          - project: spring-boot-wallet-rest-gradle-native-pg
+            command: ./gradlew test nativeTest --stacktrace
+            allow_failure: false
+          # Micronaut Maven native examples currently document native tests as not enabled.
+          # Run JVM verification and build the native image as the native-side check.
+          - project: micronaut-wallet-rest-maven-native-mariadb
+            command: ./mvnw -B -ntp verify && ./mvnw -B -ntp -Dpackaging=native-image -DskipTests package
+            allow_failure: false
+          - project: micronaut-wallet-rest-maven-native-mysql
+            command: ./mvnw -B -ntp verify && ./mvnw -B -ntp -Dpackaging=native-image -DskipTests package
+            allow_failure: false
+          - project: micronaut-wallet-rest-maven-native-pg
+            command: ./mvnw -B -ntp verify && ./mvnw -B -ntp -Dpackaging=native-image -DskipTests package
+            allow_failure: false
+          - project: quarkus-wallet-rest-maven-native-mariadb
+            command: ./mvnw -B -ntp -Dnative verify
+            allow_failure: false
+          - project: quarkus-wallet-rest-maven-native-mysql
+            command: ./mvnw -B -ntp -Dnative verify
+            allow_failure: false
+          - project: quarkus-wallet-rest-maven-native-pg
+            command: ./mvnw -B -ntp -Dnative verify
+            allow_failure: false
+          - project: spring-boot-wallet-rest-maven-native-mariadb
+            command: ./mvnw -B -ntp verify && ./mvnw -B -ntp -PnativeTest test
+            allow_failure: false
+          - project: spring-boot-wallet-rest-maven-native-mysql
+            command: ./mvnw -B -ntp verify && ./mvnw -B -ntp -PnativeTest test
+            allow_failure: false
+          - project: spring-boot-wallet-rest-maven-native-pg
+            command: ./mvnw -B -ntp verify && ./mvnw -B -ntp -PnativeTest test
+            allow_failure: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set Up GraalVM
+        uses: actions/setup-java@v4
+        with:
+          distribution: graalvm
+          java-version: 25
+          cache: maven
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify GraalVM
+        shell: bash
+        run: |
+          java -version
+          native-image --version
+
+      - name: Run Example Native Tests
+        working-directory: ekbatan-examples/${{ matrix.project }}
+        shell: bash
+        run: |
+          export GRAALVM_HOME="$JAVA_HOME"
+          if [[ "${{ matrix.command }}" == ./gradlew* ]]; then
+            export GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.java.installations.paths=$JAVA_HOME -Dorg.gradle.java.installations.auto-detect=false"
+          fi
+          ${{ matrix.command }}
+
+      - name: Upload Example Native Test Reports
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: example-native-${{ matrix.project }}-reports
+          if-no-files-found: ignore
+          path: |
+            ekbatan-examples/${{ matrix.project }}/build/reports/tests/**
+            ekbatan-examples/${{ matrix.project }}/build/test-results/**
+            ekbatan-examples/${{ matrix.project }}/target/surefire-reports/**
+            ekbatan-examples/${{ matrix.project }}/target/failsafe-reports/**

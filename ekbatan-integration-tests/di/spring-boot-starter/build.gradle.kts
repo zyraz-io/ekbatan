@@ -19,7 +19,7 @@ repositories {
     mavenCentral()
 }
 
-// This module produces no runnable application — it's only an integration-test harness.
+// This module produces no runnable application - it's only an integration-test harness.
 // Keep the regular jar; disable bootJar so Gradle doesn't complain about a missing main.
 // `processAot` is the production-side Spring AOT task (auto-wired into `build` by the
 // Spring Boot plugin); disable it too — it requires a main class and fails `clean build`
@@ -31,16 +31,16 @@ tasks.named("processAot") { enabled = false }
 // The root build.gradle.kts already sets `toolchainDetection.set(true)` on the GraalVM
 // extension, but applying the org.springframework.boot plugin reorders extension
 // configuration and the Spring Boot AOT integration ends up reading nativeTest's
-// runtimeArgs through the env-var fallback (~/.sdkman/.../current/bin/native-image)
-// which on this machine points at Temurin and fails. Re-asserting the toolchain
-// settings here puts the detection back in front.
+// runtimeArgs through the env-var fallback (~/.sdkman/.../current/bin/native-image).
+// Re-asserting the Java 25 native-image-capable toolchain here puts the detection
+// back in front without depending on one exact vendor label.
 extensions.configure<org.graalvm.buildtools.gradle.dsl.GraalVMExtension> {
     toolchainDetection.set(true)
     binaries.all {
         javaLauncher.set(
             javaToolchains.launcherFor {
                 languageVersion.set(JavaLanguageVersion.of(25))
-                vendor.set(JvmVendorSpec.GRAAL_VM)
+                nativeImageCapable.set(true)
             },
         )
     }

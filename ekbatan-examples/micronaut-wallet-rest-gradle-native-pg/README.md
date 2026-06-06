@@ -9,7 +9,7 @@ A GraalVM native-image variant of [`micronaut-wallet-rest-gradle-pg`](../microna
 | Build plugins | `io.micronaut.application` | same — the plugin auto-applies `org.graalvm.buildtools.native` |
 | Dependencies | core + flyway + jdbc | + `io.github.zyraz-io:ekbatan-native` for `FlywayHelper`, `Jackson3RecordsFeature`, jOOQ array-type fix, etc. |
 | `FlywayConfiguration` | `Flyway.configure()...migrate()` | `FlywayHelper.migrate(...)` — substrate-VM aware |
-| `graalvmNative {}` block | n/a | pins GraalVM 25 launcher, bundles `db/migration/*.sql` into the image, points Jackson3RecordsFeature at `io.example.*` |
+| `graalvmNative {}` block | n/a | requires a Java 25 `native-image`-capable launcher, bundles `db/migration/*.sql` into the image, points Jackson3RecordsFeature at `io.example.*` |
 
 ### Why `FlywayHelper`, not `Flyway.configure()`
 
@@ -48,7 +48,7 @@ docker compose -f compose.yaml up -d
 
 ### Native binary
 
-GraalVM 25 must be available — Gradle's toolchain auto-detection picks up SDKMAN / asdf / system installs, so `JAVA_HOME` juggling isn't required.
+GraalVM 25 must be available — Gradle's toolchain auto-detection picks up SDKMAN / asdf / system installs, so `JAVA_HOME` juggling usually isn't required. If you have several Java 25 installs and Gradle picks the wrong one, set `JAVA_HOME` to the GraalVM install before running the native task.
 
 ```bash
 ./gradlew nativeCompile          # produces build/native/nativeCompile/<app>

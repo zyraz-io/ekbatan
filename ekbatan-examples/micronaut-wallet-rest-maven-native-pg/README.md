@@ -9,7 +9,7 @@ A GraalVM native-image variant of [`micronaut-wallet-rest-maven-pg`](../micronau
 | Dependencies | core + flyway + jdbc | + `io.github.zyraz-io:ekbatan-native` for `FlywayHelper`, `Jackson3RecordsFeature`, jOOQ array-type fix, etc. |
 | `FlywayConfiguration` | `Flyway.configure()...migrate()` | `FlywayHelper.migrate(...)` — substrate-VM aware |
 | `native-maven-plugin` build args | n/a | adds `-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,io.example` and `-H:IncludeResources=db/migration/.*\.sql` |
-| `<aotDependencies>` on `micronaut-maven-plugin` | `false` | `true` — enables Micronaut AOT optimization for the native image |
+| `micronaut-maven-plugin` | disables JVM AOT executions | leaves the native packaging flow to run Micronaut's native/AOT steps |
 | Packaging | `jar` (default) | `${packaging}` — defaults to `jar`; flip to `native-image` for the native build via `-Dpackaging=native-image` |
 
 ### Why `FlywayHelper`, not `Flyway.configure()`
@@ -63,7 +63,7 @@ This triggers Micronaut's native build pipeline:
 
 1. Compile Java sources.
 2. Run the codegen chain (fabric8 docker → flyway-maven → jooq-codegen-maven) to produce JOOQ classes.
-3. Run Micronaut AOT (because `<aotDependencies>true</aotDependencies>`) to substitute reflection with compile-time code.
+3. Run Micronaut's native packaging flow, including its native/AOT steps.
 4. Invoke `native-image` with the assembled classpath and our build args.
 
 Output: `target/<artifactId>` — a single-file executable. Run it directly:

@@ -149,18 +149,18 @@ sourceSets {
 }
 
 // ── GraalVM native-image ────────────────────────────────────────────────────────────
-// Pin the native binary's JavaLauncher to GraalVM 25. Gradle's toolchain auto-detection picks
-// up SDKMAN / asdf / system installs — no JAVA_HOME juggling. Bundle Flyway migration SQL files
-// into the image (without this they're not on the runtime classpath and FlywayHelper has
-// nothing to migrate from). The reachability-metadata repo brings in published native hints
-// for Postgres JDBC, HikariCP, Jackson, etc.
+// Use a Java 25 toolchain that can run native-image. Gradle's toolchain auto-detection picks up
+// SDKMAN / asdf / system installs without relying on one exact vendor label. Bundle Flyway
+// migration SQL files into the image (without this they're not on the runtime classpath and
+// FlywayHelper has nothing to migrate from). The reachability-metadata repo brings in published
+// native hints for Postgres JDBC, HikariCP, Jackson, etc.
 graalvmNative {
     toolchainDetection.set(true)
     binaries.all {
         javaLauncher.set(
             javaToolchains.launcherFor {
                 languageVersion.set(JavaLanguageVersion.of(25))
-                vendor.set(JvmVendorSpec.GRAAL_VM)
+                nativeImageCapable.set(true)
             },
         )
         resources.includedPatterns.add("db/migration/.*\\.sql")

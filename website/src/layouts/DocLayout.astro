@@ -220,6 +220,37 @@ const { frontmatter } = Astro.props;
         margin: 1.5rem 0;
         font-size: 0.9rem;
     }
+    .doc-prose .table-scroll-wrap {
+        max-width: 100%;
+        margin: 1.5rem 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(10, 10, 10, 0.25) transparent;
+    }
+    .doc-prose .table-scroll-wrap table {
+        width: max-content;
+        min-width: 100%;
+        margin: 0;
+    }
+    .doc-prose .table-scroll-wrap::-webkit-scrollbar {
+        height: 6px;
+    }
+    .doc-prose .table-scroll-wrap::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .doc-prose .table-scroll-wrap::-webkit-scrollbar-thumb {
+        background: rgba(10, 10, 10, 0.25);
+        border-radius: 3px;
+    }
+    .doc-prose .table-scroll-wrap::-webkit-scrollbar-thumb:hover {
+        background: rgba(10, 10, 10, 0.45);
+    }
+    .doc-prose .table-scroll-wrap thead,
+    .doc-prose .table-scroll-wrap tbody {
+        width: max-content;
+        min-width: 100%;
+    }
     .doc-prose th,
     .doc-prose td {
         border: 2px solid var(--ink, #0a0a0a);
@@ -235,6 +266,19 @@ const { frontmatter } = Astro.props;
 </style>
 
 <script>
+    // Markdown tables can be wider than mobile viewports. Wrap them in a
+    // scrolling container while leaving the table itself intact, so header and
+    // body columns are laid out together and stay aligned.
+    document
+        .querySelectorAll<HTMLTableElement>(".doc-prose table")
+        .forEach((table) => {
+            if (table.closest(".table-scroll-wrap, .table-wrap")) return;
+            const wrap = document.createElement("div");
+            wrap.className = "table-scroll-wrap";
+            table.parentNode?.insertBefore(wrap, table);
+            wrap.appendChild(table);
+        });
+
     // Inject a Copy button into every Shiki-rendered fence on the page so
     // markdown ```code blocks get the same copy UX as <CodeBlock> components
     // without each .mdx file having to opt in manually. Skips fences that

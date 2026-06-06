@@ -254,9 +254,6 @@
             <plugin>
                 <groupId>io.micronaut.maven</groupId>
                 <artifactId>micronaut-maven-plugin</artifactId>
-                <configuration>
-                    <aotDependencies>true</aotDependencies>
-                </configuration>
             </plugin>
 
             <plugin>
@@ -265,14 +262,6 @@
                 <configuration>
                     <buildArgs combine.children="append">
                         <buildArg>-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,io.example</buildArg>
-                        <!-- nativeTest only: the bundled graalvm-reachability-metadata
-                             doesn't tag newer JUnit Platform / Logback classes for build-time
-                             init. Without these, native-image trips on a Logger instance in the
-                             image heap because the type is run-time-init by default. -->
-                        <buildArg>--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory</buildArg>
-                        <buildArg>--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory$DelegatingLogger</buildArg>
-                        <buildArg>--initialize-at-build-time=ch.qos.logback</buildArg>
-                        <buildArg>--initialize-at-build-time=org.slf4j</buildArg>
                         <buildArg>-H:IncludeResources=db/migration/.*\.sql</buildArg>
                         <buildArg>-H:IncludeResources=mariadb_init\.sql</buildArg>
                     </buildArgs>
