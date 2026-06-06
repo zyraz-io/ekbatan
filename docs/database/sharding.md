@@ -304,7 +304,9 @@ executor.execute(principal, MyAction.class, params, config);
 
 When enabled, each involved shard gets its own transaction, and the action's row in `eventlog.events` is duplicated to every shard with the same UUID so each shard contains the full action context.
 
-This is **not 2PC**. Each shard commits independently — partial failures are possible. The cross-shard switch is opt-in for that reason; pick it consciously when the operation is genuinely cross-region/cross-tenant and you've designed your domain to be eventually consistent.
+This is **not 2PC**. Each shard commits independently — partial failures are possible. The cross-shard switch is opt-in for that reason; treat it as an escape hatch and pick it consciously only when the operation is genuinely cross-region/cross-tenant and you've designed your domain to be eventually consistent.
+
+Prefer the per-call override so the risk is visible at the call site. Use an executor default only for a dedicated executor whose actions are all designed for per-shard commits. If partial commits would require compensation, use a [saga](../concepts/sagas.md) instead of one cross-shard action.
 
 ## What sharding does not provide
 
@@ -316,5 +318,6 @@ This is **not 2PC**. Each shard commits independently — partial failures are p
 
 - [Repositories on JOOQ](repositories.md) — `db(id)` / `readonlyDb(id)` / `txDbElseDb(id)` are the shard-aware accessors
 - [Actions](../concepts/actions.md) — `allowCrossShard` is a per-call `ExecutionConfiguration` knob
+- [Sagas: chaining committed actions](../concepts/sagas.md) — the compensation pattern for workflows that cannot tolerate hidden partial commits
 - [The outbox: atomic state + events](../concepts/outbox.md) — how events are duplicated across shards in cross-shard mode
 - [Pessimistic locking via `KeyedLockProvider`](keyed-locks.md) — the canonical user of the user-defined `configs.<name>` slot

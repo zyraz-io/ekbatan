@@ -15,6 +15,13 @@ import java.time.Clock;
  * cross-shard execution via {@code ExecutionConfiguration.Builder.allowCrossShard(true)},
  * otherwise the framework throws {@code CrossShardException} from {@code ActionExecutor}.
  *
+ * <p><strong>Warning:</strong> this action demonstrates cross-shard execution mechanics. It is
+ * not the recommended production pattern for real money transfers. When shards differ, each
+ * shard commits independently; there is no distributed transaction and no two-phase commit.
+ * For production transfer workflows, prefer the saga example
+ * {@code spring-boot-wallet-saga-gradle-pg}, which splits the workflow into per-step actions
+ * and compensates failures explicitly.
+ *
  * <p>The action plans two updates: the source wallet (debit) and the destination wallet (credit).
  * Each plan entry resolves to a shard via the {@link WalletRepository}'s sharding strategy. When
  * those shards differ:

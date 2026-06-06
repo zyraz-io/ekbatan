@@ -258,7 +258,7 @@ var config = ExecutionConfiguration.Builder.executionConfiguration()
 executor.execute(principal, WalletTransferAction.class, params, config);
 ```
 
-**Watch the consistency model carefully**: per-shard atomicity, NOT global atomicity. The source-shard transaction can commit while the destination-shard one rolls back. For real transfers, use a [saga](/concepts/the-dual-write-trap/) — split into `InitiateTransferAction` (source only) + `CompleteTransferAction` (dest only), chained by `@EkbatanEventHandler`, with `RefundTransferAction` as compensation if the dest leg fails. The runnable example: [`ekbatan-examples/spring-boot-wallet-saga-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-saga-gradle-pg).
+**Watch the consistency model carefully**: per-shard atomicity, NOT global atomicity. The source-shard transaction can commit while the destination-shard one rolls back. For real transfers, use a [saga](/concepts/sagas/) — split into `InitiateTransferAction` (source only) + `CompleteTransferAction` (dest only), chained by `@EkbatanEventHandler`, with `RefundTransferAction` as compensation if the dest leg fails. The runnable example: [`ekbatan-examples/spring-boot-wallet-saga-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-saga-gradle-pg).
 
 ## What just happened
 

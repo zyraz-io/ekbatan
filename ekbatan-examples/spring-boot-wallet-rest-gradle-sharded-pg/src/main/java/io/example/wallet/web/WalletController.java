@@ -94,6 +94,10 @@ public class WalletController {
      * runs it as a regular single-shard action). For two wallets on different shards, the
      * executor opens two independent transactions and duplicates the {@code eventlog.events}
      * row to each shard.
+     *
+     * <p>This endpoint is a sharding mechanics demo, not the recommended production pattern for
+     * real money transfers. Use the saga example for transfer workflows that need explicit
+     * compensation when a later step fails.
      */
     @PostMapping("/transfers")
     public TransferResponse transfer(@RequestBody TransferRequest body) throws Exception {

@@ -59,7 +59,7 @@ The cost is that the ID is no longer self-describing. Any query that starts from
 
 By default, an action's staged changes must all route to a single shard. The framework opens one transaction on that shard, writes everything, commits. This is the only way to keep the outbox guarantee — state + events atomic — intact, because atomic-across-databases doesn't exist.
 
-When the effective `ExecutionConfiguration` has `allowCrossShard(true)`, the executor groups staged changes by shard and opens **one transaction per shard**, in deterministic order, rolling each back independently on failure. You opt in by setting the executor default configuration or by passing an explicit configuration to one `execute(...)` call:
+When the effective `ExecutionConfiguration` has `allowCrossShard(true)`, the executor groups staged changes by shard and opens **one transaction per shard**, in deterministic order, rolling each back independently on failure. Prefer opting in by passing an explicit configuration to one `execute(...)` call. Setting this as the executor default should be reserved for a dedicated executor whose actions are all designed for per-shard commits and eventual consistency:
 
 ```java
 var config = ExecutionConfiguration.Builder.executionConfiguration()
@@ -71,7 +71,7 @@ executor.execute(principal, WalletTransferAction.class, params, config);
 
 This buys you cross-shard workflows (e.g. a wallet-to-wallet transfer where source and destination live on different shards) at the price of:
 
-- **Per-shard atomicity, not global atomicity.** Shard A's commit can succeed while shard B's rolls back. You're back in dual-write territory for that specific action — except now the dual write is between two shards of your own database, not between a database and a broker. The mitigation pattern is the [saga](/concepts/the-dual-write-trap/) — split the cross-shard work into one action per shard, chained via outbox events, with a compensation action that runs if the destination action fails.
+- **Per-shard atomicity, not global atomicity.** Shard A's commit can succeed while shard B's rolls back. You're back in dual-write territory for that specific action — except now the dual write is between two shards of your own database, not between a database and a broker. The mitigation pattern is the [saga](/concepts/sagas/) — split the cross-shard work into one action per shard, chained via outbox events, with a compensation action that runs if the destination action fails.
 - **No cross-shard reads inside a single transaction.** Joins between rows on different shards happen in application code, after each shard's transaction commits.
 
 The good news: most actions don't need cross-shard at all. Routing customers to the same shard as their wallets, and orders to the same shard as their customer, eliminates most cross-shard pressure for free.
@@ -89,6 +89,7 @@ If you reach for sharding to solve a *read latency* problem, you're probably rea
 ## See also
 
 - [Reference → Sharding](/reference/sharding/) — APIs, configuration schema, `ShardedUUID` bit layout, `DatabaseRegistry.effectiveShard`, declarative `application.yml`
-- [Concepts → The dual-write trap](/concepts/the-dual-write-trap/) — why cross-shard actions are conceptually a dual write, and how sagas restore the guarantee
+- [Concepts → Sagas](/concepts/sagas/) — how to split multi-step workflows into committed actions and compensation steps
+- [Concepts → The dual-write trap](/concepts/the-dual-write-trap/) — why cross-shard actions are conceptually a dual write
 - [Concepts → Actions, ActionPlan, ActionExecutor](/concepts/actions/) — the per-shard transaction grouping happens inside Phase 2
 - [`ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) — a runnable two-shard wallet using `EmbeddedBitsShardingStrategy`

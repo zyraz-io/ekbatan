@@ -51,4 +51,5 @@ That's the whole pitch. The rest of the [Concepts](./README.md) section explains
 
 - [The outbox: atomic state + events](./outbox.md) — the schema and the persistence path
 - [Actions, ActionPlan, ActionExecutor](./actions.md) — the two-phase lifecycle that makes this automatic
+- [Sagas: chaining committed actions](./sagas.md) — how to coordinate multi-step workflows without pretending they are one transaction
 - [Learn → Consuming events](/learn/consuming-events/) — what to do with the outbox rows once they're there

@@ -246,7 +246,7 @@ After that deploy, old rows with `handler_name = 'wallet-money-deposited-notifie
 
 The [Local event handler reference](/reference/events/local-event-handler/) has an animated walkthrough that shows this rename mechanism: old rows routing through `aliases()`, and new rows routing through the current `name()`.
 
-Per the [listen-to-yourself pattern](/concepts/the-dual-write-trap/), the handler can dispatch its own actions via an injected `ActionExecutor` to record its work in the same outbox.
+Per the [listen-to-yourself pattern](/reference/events/local-event-handler/), the handler can dispatch its own actions via an injected `ActionExecutor` to record its work in the same outbox. That same shape is used for [sagas](/concepts/sagas/) when one committed action should trigger the next committed action.
 
 ### A.3 Run
 

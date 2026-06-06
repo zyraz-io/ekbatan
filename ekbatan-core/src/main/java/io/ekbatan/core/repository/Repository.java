@@ -15,7 +15,8 @@ import java.util.List;
  * findAllByIds, findOneWhere, findAllWhere, count, existsById, dbs/scatter-gather, etc.).
  * Implementing {@code Repository} directly is reserved for unusual storage backends.
  *
- * <p>All write operations are optimistic-locked via {@link Persistable#getVersion()} - see
+ * <p>Inserts rely on database constraints for identity and uniqueness. Updates are
+ * optimistic-locked via {@link Persistable#getVersion()} - see
  * {@link io.ekbatan.core.repository.exception.StaleRecordException}.
  *
  * @param <PERSISTABLE> the {@link io.ekbatan.core.domain.Model} or

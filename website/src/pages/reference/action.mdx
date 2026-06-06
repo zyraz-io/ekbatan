@@ -116,7 +116,7 @@ var config = ExecutionConfiguration.Builder.executionConfiguration()
 executor.execute(principal, WalletTransferAction.class, params, config);
 ```
 
-The executor then opens one transaction per shard, in deterministic order, and rolls each back independently on failure. You can also set this as the executor default, but there is no action-level `@EkbatanAction` switch. See [Sharding](/reference/sharding/) for the consistency caveats.
+The executor then opens one transaction per shard, in deterministic order, and rolls each back independently on failure. This is not a distributed transaction: one shard can commit while another fails. Treat `allowCrossShard(true)` as an escape hatch, prefer the per-call override, and use an executor default only for a dedicated executor whose actions are designed for per-shard commits and eventual consistency. There is no action-level `@EkbatanAction` switch. See [Sharding](/reference/sharding/) for the consistency caveats and [Sagas](/concepts/sagas/) for the compensation pattern.
 
 ## See also
 

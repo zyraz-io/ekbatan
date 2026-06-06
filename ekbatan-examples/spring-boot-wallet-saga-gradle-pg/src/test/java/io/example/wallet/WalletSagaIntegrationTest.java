@@ -4,6 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.ekbatan.core.action.ActionExecutor;
+import io.ekbatan.core.domain.Id;
+import io.example.wallet.action.CompleteTransferAction;
+import io.example.wallet.action.RefundTransferAction;
+import io.example.wallet.model.Wallet;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -12,19 +18,22 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
 /**
- * End-to-end integration test for the wallet transfer saga. Two scenarios:
+ * End-to-end integration test for the wallet transfer saga. The tests cover:
  *
  * <ol>
- *   <li><b>Happy path</b> - transfer 25 from A (balance 100) to B (balance 0). The saga's three
- *       steps (InitiateTransfer -> CompleteTransfer) run via the local-event-handler; both
+ *   <li><b>Happy path</b> - transfer 25 from A (balance 100) to B (balance 0). The saga's happy
+ *       path (InitiateTransfer -> CompleteTransfer) runs via the local-event-handler; both
  *       wallets converge to A = 75, B = 25.</li>
  *   <li><b>Compensation path</b> - transfer 25 from A to a <em>closed</em> wallet B. The saga
  *       reaches step 2, can't credit the closed destination, emits TransferFailed on the source,
  *       and the failed handler invokes RefundTransferAction. A returns to its original balance.</li>
+ *   <li><b>Replay safety</b> - re-running a completed follow-up action with the same transferId
+ *       is a no-op, so local-handler at-least-once delivery doesn't double-credit or double-refund.</li>
  * </ol>
  *
  * <p>The saga is asynchronous from the caller's perspective - the REST endpoint returns 202
@@ -54,6 +63,9 @@ class WalletSagaIntegrationTest {
     @LocalServerPort
     private int port;
 
+    @Autowired
+    private ActionExecutor executor;
+
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -73,11 +85,12 @@ class WalletSagaIntegrationTest {
 
         // THEN - synchronous step 1 already committed (debit + TransferInitiated)
         assertThat(transferResponse.statusCode()).isEqualTo(202);
-        assertThat(parse(transferResponse)).containsKey("transferId");
+        final var transferBody = parse(transferResponse);
+        assertThat(transferBody).containsKey("transferId");
+        final var transferId = UUID.fromString((String) transferBody.get("transferId"));
         // Source debited synchronously to 75
         @SuppressWarnings("unchecked")
-        final var fromWalletAfterDebit =
-                (Map<String, Object>) parse(transferResponse).get("fromWallet");
+        final var fromWalletAfterDebit = (Map<String, Object>) transferBody.get("fromWallet");
         assertThat(fromWalletAfterDebit).containsEntry("balance", 75.00);
 
         // AND - the local-event-handler chains step 2 (CompleteTransferAction) which credits B
@@ -87,6 +100,16 @@ class WalletSagaIntegrationTest {
                     assertThat(parse(get("/wallets/" + bId))).containsEntry("balance", 25.00);
                     assertThat(parse(get("/wallets/" + aId))).containsEntry("balance", 75.00);
                 });
+
+        // AND - replaying step 2 with the same transferId is a no-op, not a second credit.
+        executor.execute(
+                () -> "test",
+                CompleteTransferAction.class,
+                new CompleteTransferAction.Params(
+                        transferId, Id.of(Wallet.class, aId), Id.of(Wallet.class, bId), new BigDecimal("25.00")));
+
+        assertThat(parse(get("/wallets/" + bId))).containsEntry("balance", 25.00);
+        assertThat(parse(get("/wallets/" + aId))).containsEntry("balance", 75.00);
     }
 
     @Test
@@ -106,6 +129,7 @@ class WalletSagaIntegrationTest {
                         "toWalletId", bId.toString(),
                         "amount", "25.00"));
         assertThat(transferResponse.statusCode()).isEqualTo(202);
+        final var transferId = UUID.fromString((String) parse(transferResponse).get("transferId"));
         // Step 1 debited A synchronously to 75
         @SuppressWarnings("unchecked")
         final var fromWalletAfterDebit =
@@ -122,6 +146,14 @@ class WalletSagaIntegrationTest {
                     assertThat(parse(get("/wallets/" + bId))).containsEntry("balance", 0.00);
                     assertThat(parse(get("/wallets/" + bId))).containsEntry("state", "CLOSED");
                 });
+
+        // AND - replaying the compensation with the same transferId is a no-op, not a second refund.
+        executor.execute(
+                () -> "test",
+                RefundTransferAction.class,
+                new RefundTransferAction.Params(transferId, Id.of(Wallet.class, aId), new BigDecimal("25.00")));
+
+        assertThat(parse(get("/wallets/" + aId))).containsEntry("balance", 100.00);
     }
 
     @Test

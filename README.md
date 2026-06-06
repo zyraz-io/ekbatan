@@ -433,7 +433,7 @@ Ekbatan **is** a replacement for the persistence layer typically built with **Sp
 ## Non-goals
 
 - **Nested or composable actions.** The action boundary *is* the transaction boundary; cross-action orchestration belongs above the framework.
-- **Saga orchestration.** Cross-service workflows are the responsibility of the layer above this framework.
+- **Saga orchestration.** Cross-service workflows are the responsibility of the layer above this framework. Ekbatan can still be used to build [saga-style workflows](docs/concepts/sagas.md) from committed actions and outbox events.
 - **Reactive runtime.** Concurrency is handled by Java 25 virtual threads.
 - **Bridging to Spring's `@Transactional` / `PlatformTransactionManager`.** Ekbatan owns its own `TransactionManager`. Code outside an Action that needs database transactions should use the host framework's facilities directly on its own datasource.
 
@@ -472,7 +472,7 @@ Per-stack starting points (every one has 6 sibling DB / build-tool variants — 
 | [`spring-boot-wallet-rest-gradle-pg`](./ekbatan-examples/spring-boot-wallet-rest-gradle-pg) | Spring Boot wallet — REST + 4 Actions + listen-to-yourself handler + caller-side `KeyedLockProvider` + Testcontainers test, using `spring-boot-starter-flyway` |
 | [`quarkus-wallet-rest-gradle-pg`](./ekbatan-examples/quarkus-wallet-rest-gradle-pg) | Quarkus wallet — same surface, using `quarkus-flyway` + a CDI `FlywayConfigurationCustomizer` |
 | [`micronaut-wallet-rest-gradle-pg`](./ekbatan-examples/micronaut-wallet-rest-gradle-pg) | Micronaut wallet — same surface, using `micronaut-flyway` + a `@Named("default")` customizer and `micronaut-serde-jackson` |
-| [`spring-boot-wallet-rest-gradle-sharded-pg`](./ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) | Multi-shard Spring Boot wallet — 2 Postgres instances, `ShardedUUID`, `WalletTransferAction` with `allowCrossShard(true)`, programmatic Flyway loop with `spring.flyway.enabled: false` |
+| [`spring-boot-wallet-rest-gradle-sharded-pg`](./ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) | Multi-shard Spring Boot wallet — 2 Postgres instances, `ShardedUUID`, and `WalletTransferAction` as an `allowCrossShard(true)` mechanics demo with one independent transaction per shard; use the saga example for production transfer workflows |
 | [`spring-boot-wallet-saga-gradle-pg`](./ekbatan-examples/spring-boot-wallet-saga-gradle-pg) | Saga pattern — `InitiateTransferAction` → `CompleteTransferAction` → `RefundTransferAction` chained by `@EkbatanEventHandler`s, forward-only compensation |
 | [`spring-boot-job-worker-gradle-pg`](./ekbatan-examples/spring-boot-job-worker-gradle-pg) | `@EkbatanDistributedJob` as the primary feature — no HTTP, `spring.main.web-application-type=none`, two jobs running end-to-end |
 

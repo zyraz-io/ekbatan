@@ -9,12 +9,13 @@ No Kafka. No Debezium. No external messaging. The whole choreography happens ins
 | Surface | Class |
 |---|---|
 | `Model` | `Wallet` (with four new saga methods: `initiateTransferOut`, `completeTransferIn`, `markTransferFailed`, `refundTransfer`) |
+| `Entity` | `TransferStep` idempotency marker, keyed by `transferId + step` |
 | `Action` | `WalletCreateAction`, `WalletDepositMoneyAction`, `WalletCloseAction`, `InitiateTransferAction`, `CompleteTransferAction`, `RefundTransferAction` |
 | `EventHandler` (local) | `TransferInitiatedEventHandler`, `TransferFailedEventHandler` |
 | `ModelEvent`s | `TransferInitiatedEvent`, `TransferCompletedEvent`, `TransferFailedEvent`, `TransferRefundedEvent` |
-| `Repository` | `WalletRepository` |
+| `Repository` | `WalletRepository`, `TransferStepRepository` |
 | REST | `WalletController` (adds `POST /wallets/transfers`) |
-| Integration test | `WalletSagaIntegrationTest` — exercises happy path + two compensation paths |
+| Integration test | `WalletSagaIntegrationTest` — exercises happy path, compensation paths, and replay no-ops |
 
 ## The saga, in three steps
 
@@ -71,8 +72,9 @@ Three commits per transfer in the worst case (initiate, complete-but-failed, ref
 
 1. **Forward-only compensation.** `RefundTransferAction` isn't a "rollback" of step 1 — it's a *new* action that credits the source back. Step 1's debit transaction was committed long ago. The compensation has its own commit and its own outbox event. The outbox makes the compensation as durable as the original.
 2. **Choreography, not orchestration.** There is no central "saga state machine" class deciding what runs next. The state lives in the event log; each event handler knows only its own next step. New steps can be added by writing more events + handlers without touching existing ones.
-3. **Same `EventEnvelope<X>` API as `WalletMoneyDepositedEventHandler` in `spring-boot-wallet-rest-gradle-pg`.** Each handler reads its event's data via `envelope.event.someField`. The saga's events are self-describing (every event carries `transferId`, `fromWalletId`, `toWalletId`, `amount`) so handlers don't need to deserialize the producing action's params.
-4. **Failure on the source wallet's event trail.** When the destination wallet is closed or missing, `CompleteTransferAction` emits `TransferFailedEvent` on the **source** wallet (no balance change — `Wallet.markTransferFailed` attaches the event to a version-only update). The source's event history then reads `TransferInitiated → TransferFailed → TransferRefunded` — the full saga visible from a single aggregate's perspective.
+3. **Idempotent replay.** Local handlers are at-least-once. `CompleteTransferAction` and `RefundTransferAction` each stage a `TransferStep` marker before the wallet update. If the same event is consumed again, the marker already exists and the action returns without crediting/refunding twice.
+4. **Same `EventEnvelope<X>` API as `WalletMoneyDepositedEventHandler` in `spring-boot-wallet-rest-gradle-pg`.** Each handler reads its event's data via `envelope.event.someField`. The saga's events are self-describing (every event carries `transferId`, `fromWalletId`, `toWalletId`, `amount`) so handlers don't need to deserialize the producing action's params.
+5. **Failure on the source wallet's event trail.** When the destination wallet is closed or missing, `CompleteTransferAction` emits `TransferFailedEvent` on the **source** wallet (no balance change — `Wallet.markTransferFailed` attaches the event to a version-only update). The source's event history then reads `TransferInitiated → TransferFailed → TransferRefunded` — the full saga visible from a single aggregate's perspective.
 
 ## Why is the source wallet's event trail useful?
 
@@ -124,6 +126,8 @@ Three scenarios are exercised:
 1. **Happy path** — transfer 25 from A (100) to B (0). After the chain settles, A = 75, B = 25.
 2. **Compensation on closed destination** — close B first, transfer 25 from A. After the chain settles, A is back to 100, B is still CLOSED with balance 0.
 3. **Compensation on missing destination** — transfer 25 from A to a random non-existent UUID. After the chain settles, A is back to 100.
+
+The happy-path and compensation tests also replay the relevant follow-up action with the same `transferId` and assert balances don't change again. That covers the at-least-once handler case where the next action committed but the notification row was not yet marked `SUCCEEDED`.
 
 Each scenario uses Awaitility to wait for the saga's asynchronous steps to converge (up to 15 seconds; default poll intervals are tightened via `@SpringBootTest(properties=...)` so the local-event-handler converges quickly under test).
 

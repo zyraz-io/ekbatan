@@ -132,13 +132,13 @@ protected Order perform(Principal principal, Params params) throws Exception {
 
 For *reads*, prefer doing the parallel fan-out **before** calling `executor.execute(...)` — i.e. at the caller layer — so the parallel work uses connections from the regular pool rather than the action's transactional connection. Inside `perform()`, keep parallelism limited to work that doesn't need the action's transaction (external API calls, replica-only reads via fresh `DSLContext`s, computation).
 
-## No nested actions, no sagas
+## No nested actions inside `perform()`
 
 Actions must **not** invoke other actions inside `perform()`. The framework intentionally does not support nesting or composition — an action is a self-contained unit of business work that produces a single atomic transaction. Nesting blurs transaction boundaries, creates hidden coupling, and makes the execution flow hard to reason about.
 
 If two operations must happen together, they belong in a single action. If they are independent, execute them separately from the caller. If one must follow the other, orchestrate the sequence at the service / application layer above the framework.
 
-The exception is **listen-to-yourself**: an `EventHandler` running in the local-event-handler dispatch path *can* invoke an action via the injected `ActionExecutor`. That's a valid pattern because the handler runs **after** the source action has committed, in its own transaction context.
+The exception is post-commit chaining: a local-event-handler `EventHandler`, broker consumer, or worker can react after the source action has committed and start the next action or service step. This is the shape used by [sagas](sagas.md): one committed action emits an event, and a post-commit consumer starts the next step in its own transaction.
 
 ## Retries on optimistic-lock conflicts
 
@@ -170,6 +170,8 @@ executor.execute(principal, MyAction.class, params, config);
 
 When enabled, each involved shard gets its own transaction (commits independently — there is no 2PC), and the action's row in `eventlog.events` is duplicated to every shard with the same UUID so each shard contains the full action context.
 
+Treat `allowCrossShard(true)` as an escape hatch, not as a normal transfer primitive. The default rejection is intentional: once multiple shards are involved, Ekbatan cannot guarantee one all-or-nothing commit. Prefer the per-call override so the risk is visible at the call site. Use an executor default only for a dedicated executor whose actions are all designed for per-shard commits and eventual consistency. If partial commits would require compensation, model the workflow as a [saga](sagas.md) instead of one cross-shard action.
+
 See [Sharding](../database/sharding.md) for the full picture.
 
 ## See also
@@ -177,5 +179,6 @@ See [Sharding](../database/sharding.md) for the full picture.
 - [Models and Entities](models-and-entities.md) — what `plan().add(...)` and `plan().update(...)` consume
 - [Repositories on JOOQ](../database/repositories.md) — how reads inside `perform()` work
 - [The outbox: atomic state + events](outbox.md) — what Phase 2 writes
+- [Sagas: chaining committed actions](sagas.md) — multi-step workflows and compensation
 - [Sharding](../database/sharding.md) — cross-shard behavior
 - [OpenTelemetry tracing](../runtime/observability.md) — the spans the executor produces

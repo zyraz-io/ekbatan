@@ -3,8 +3,11 @@ package io.example.wallet.action;
 import io.ekbatan.core.action.Action;
 import io.ekbatan.core.domain.Id;
 import io.ekbatan.di.EkbatanAction;
+import io.example.wallet.model.TransferStep;
+import io.example.wallet.model.TransferStepName;
 import io.example.wallet.model.Wallet;
 import io.example.wallet.model.WalletState;
+import io.example.wallet.repository.TransferStepRepository;
 import io.example.wallet.repository.WalletRepository;
 import java.math.BigDecimal;
 import java.security.Principal;
@@ -31,14 +34,24 @@ public class CompleteTransferAction extends Action<CompleteTransferAction.Params
     public record Params(UUID transferId, Id<Wallet> fromWalletId, Id<Wallet> toWalletId, BigDecimal amount) {}
 
     private final WalletRepository walletRepository;
+    private final TransferStepRepository transferStepRepository;
 
-    public CompleteTransferAction(Clock clock, WalletRepository walletRepository) {
+    public CompleteTransferAction(
+            Clock clock, WalletRepository walletRepository, TransferStepRepository transferStepRepository) {
         super(clock);
         this.walletRepository = walletRepository;
+        this.transferStepRepository = transferStepRepository;
     }
 
     @Override
     protected Wallet perform(Principal principal, Params params) {
+        if (transferStepRepository.existsStep(params.transferId(), TransferStepName.COMPLETE_TRANSFER)) {
+            return walletRepository.getById(params.fromWalletId().getValue());
+        }
+
+        plan().add(TransferStep.create(params.transferId(), TransferStepName.COMPLETE_TRANSFER)
+                .build());
+
         final var maybeDestination =
                 walletRepository.findById(params.toWalletId().getValue());
 
