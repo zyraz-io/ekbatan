@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>micronaut-wallet-rest-maven-mysql</artifactId>
-    <version>0.1.1-SNAPSHOT</version>
+    <version>0.1.2-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>micronaut-wallet-rest-maven-mysql</name>
     <description>Micronaut + MySQL wallet example demonstrating Ekbatan with Maven (MySQL dialect of the Maven sibling triple).</description>
@@ -22,7 +22,7 @@
         <java.version>25</java.version>
         <maven.compiler.release>25</maven.compiler.release>
 
-        <ekbatan.version>0.1.1</ekbatan.version>
+        <ekbatan.version>0.1.2</ekbatan.version>
         <micronaut.runtime>netty</micronaut.runtime>
         <exec.mainClass>io.example.wallet.Application</exec.mainClass>
 

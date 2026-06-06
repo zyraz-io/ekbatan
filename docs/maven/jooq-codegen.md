@@ -69,7 +69,7 @@ The `flyway-maven-plugin` has the same shape: project-level `<dependencies>` for
 
 ## Why these three plugins, not [`testcontainers-jooq-codegen-maven-plugin`](https://github.com/testcontainers/testcontainers-jooq-codegen-maven-plugin)
 
-The testcontainers community plugin bundles all three concerns the same way the Gradle plugin does, and on the surface looks like a cleaner choice. As of May 2026 it's pre-1.0 (0.1.1 from April 2024) with no commits in two years. The three official plugins ship on a regular cadence (fabric8 0.48.1 in Feb 2026, flyway-maven-plugin tracks Flyway core, `jooq-codegen-maven` ships with every jOOQ release), are maintained by independent teams, and can be upgraded independently. The extra ~30 lines of POM is the entire trade-off.
+The testcontainers community plugin bundles all three concerns the same way the Gradle plugin does, and on the surface looks like a cleaner choice. As of May 2026 it's pre-1.0, with its last release from April 2024 and no commits in two years. The three official plugins ship on a regular cadence (fabric8 0.48.1 in Feb 2026, flyway-maven-plugin tracks Flyway core, `jooq-codegen-maven` ships with every jOOQ release), are maintained by independent teams, and can be upgraded independently. The extra ~30 lines of POM is the entire trade-off.
 
 ## PostgreSQL
 

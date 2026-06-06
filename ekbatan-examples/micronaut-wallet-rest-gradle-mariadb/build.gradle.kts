@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.example"
-version = "0.1.1-SNAPSHOT"
+version = "0.1.2-SNAPSHOT"
 
 java {
     toolchain {
