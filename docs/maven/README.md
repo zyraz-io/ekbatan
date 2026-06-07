@@ -9,30 +9,27 @@ For the Gradle equivalent, see [Gradle](../gradle/README.md). The framework itse
 
 For the framework-level concepts these pages assume you already know, see [docs/wiring/](../wiring/) (DI + auto-config) and [docs/database/](../database/README.md) (the canonical schema and dialect notes — build-tool agnostic).
 
-Twelve complete worked examples live under [`ekbatan-examples/`](../../ekbatan-examples/) — a 3×3 grid (Spring Boot × Quarkus × Micronaut, each in PG/MariaDB/MySQL), plus a fourth Micronaut row for **GraalVM native-image** in each dialect:
+Eighteen Maven wallet examples live under [`ekbatan-examples/`](../../ekbatan-examples/) — Spring Boot, Quarkus, and Micronaut across PostgreSQL/MariaDB/MySQL, with JVM and GraalVM native-image variants for each:
 
 **Spring Boot** (`spring-boot-starter-parent` + `spring-boot-maven-plugin`):
 
 - [`spring-boot-wallet-rest-maven-pg/`](../../ekbatan-examples/spring-boot-wallet-rest-maven-pg) — PostgreSQL (the canonical reference; every PG snippet on these pages traces back to it)
 - [`spring-boot-wallet-rest-maven-mariadb/`](../../ekbatan-examples/spring-boot-wallet-rest-maven-mariadb) — MariaDB (native `UUID`, `JSON`, `DATETIME(6)`, eventlog as a separate database)
 - [`spring-boot-wallet-rest-maven-mysql/`](../../ekbatan-examples/spring-boot-wallet-rest-maven-mysql) — MySQL (`CHAR(36)` UUID via `UuidStringConverter`, otherwise same shape as MariaDB)
+- [`spring-boot-wallet-rest-maven-native-pg/`](../../ekbatan-examples/spring-boot-wallet-rest-maven-native-pg) / [`-mariadb`](../../ekbatan-examples/spring-boot-wallet-rest-maven-native-mariadb) / [`-mysql`](../../ekbatan-examples/spring-boot-wallet-rest-maven-native-mysql) — GraalVM native-image variants
 
 **Quarkus** (`quarkus-bom` import, no parent POM; `quarkus-maven-plugin` with `<extensions>true</extensions>`):
 
 - [`quarkus-wallet-rest-maven-pg/`](../../ekbatan-examples/quarkus-wallet-rest-maven-pg) — PostgreSQL (JAX-RS `@Path` resources; `@QuarkusTest` + `@QuarkusTestResource(PostgresTestResource.class)`)
 - [`quarkus-wallet-rest-maven-mariadb/`](../../ekbatan-examples/quarkus-wallet-rest-maven-mariadb) — MariaDB
 - [`quarkus-wallet-rest-maven-mysql/`](../../ekbatan-examples/quarkus-wallet-rest-maven-mysql) — MySQL
+- [`quarkus-wallet-rest-maven-native-pg/`](../../ekbatan-examples/quarkus-wallet-rest-maven-native-pg) / [`-mariadb`](../../ekbatan-examples/quarkus-wallet-rest-maven-native-mariadb) / [`-mysql`](../../ekbatan-examples/quarkus-wallet-rest-maven-native-mysql) — GraalVM native-image variants
 
 **Micronaut** (`micronaut-parent` + `micronaut-maven-plugin`):
 
 - [`micronaut-wallet-rest-maven-pg/`](../../ekbatan-examples/micronaut-wallet-rest-maven-pg) — PostgreSQL (demonstrates `<annotationProcessorPaths combine.children="append">` to extend the Micronaut parent POM's AP list)
 - [`micronaut-wallet-rest-maven-mariadb/`](../../ekbatan-examples/micronaut-wallet-rest-maven-mariadb) — MariaDB
 - [`micronaut-wallet-rest-maven-mysql/`](../../ekbatan-examples/micronaut-wallet-rest-maven-mysql) — MySQL
-
-**Micronaut + GraalVM native-image** (adds `ekbatan-native`, swaps `FlywayHelper.migrate(...)` for raw Flyway, configures `native-maven-plugin`'s `<buildArgs combine.children="append">` with scan-packages + resource-includes; build via `./mvnw package -Dpackaging=native-image`):
-
-- [`micronaut-wallet-rest-maven-native-pg/`](../../ekbatan-examples/micronaut-wallet-rest-maven-native-pg) — PostgreSQL
-- [`micronaut-wallet-rest-maven-native-mariadb/`](../../ekbatan-examples/micronaut-wallet-rest-maven-native-mariadb) — MariaDB
-- [`micronaut-wallet-rest-maven-native-mysql/`](../../ekbatan-examples/micronaut-wallet-rest-maven-native-mysql) — MySQL
+- [`micronaut-wallet-rest-maven-native-pg/`](../../ekbatan-examples/micronaut-wallet-rest-maven-native-pg) / [`-mariadb`](../../ekbatan-examples/micronaut-wallet-rest-maven-native-mariadb) / [`-mysql`](../../ekbatan-examples/micronaut-wallet-rest-maven-native-mysql) — GraalVM native-image variants; build via `./mvnw package -Dpackaging=native-image`
 
 ← Back to [docs index](../README.md) · [Top README](../../README.md)

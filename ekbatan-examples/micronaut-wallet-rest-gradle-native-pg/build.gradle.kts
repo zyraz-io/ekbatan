@@ -57,7 +57,7 @@ dependencies {
 
     // Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
     // Flyway resource provider, etc.) that auto-apply when native-image runs. Also provides
-    // FlywayHelper — see FlywayConfiguration. Only needed because we want a native binary;
+    // FlywayHelper for the native-aware startup migrator. Only needed because we want a native binary;
     // the JVM-only sibling doesn't include it.
     implementation("io.github.zyraz-io:ekbatan-native:$ekbatanVersion")
 
@@ -152,7 +152,7 @@ sourceSets {
 // Use a Java 25 toolchain that can run native-image. Gradle's toolchain auto-detection picks up
 // SDKMAN / asdf / system installs without relying on one exact vendor label. Bundle Flyway
 // migration SQL files into the image (without this they're not on the runtime classpath and
-// FlywayHelper has nothing to migrate from). The reachability-metadata repo brings in published
+// FlywayHelper cannot discover them). The reachability-metadata repo brings in published
 // native hints for Postgres JDBC, HikariCP, Jackson, etc.
 graalvmNative {
     toolchainDetection.set(true)

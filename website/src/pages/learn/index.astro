@@ -2,7 +2,7 @@
 // /learn/ — step-by-step tutorial. One narrative per topic; per-stack
 // snippets driven by the global StackPicker. Source material is mostly
 // docs/gradle/getting-started.md + docs/maven/getting-started.md +
-// docs/wiring/*.md, plus the 24 runnable wallet projects in
+// docs/wiring/*.md, plus the runnable wallet examples in
 // ../../../../ekbatan-examples/ that back the code samples.
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import SectionCard from "../../components/SectionCard.astro";
@@ -39,7 +39,7 @@ const lessons = [
     {
         href: "/learn/native-image/",
         title: "Compiling to a native binary",
-        blurb: "Add the ekbatan-native dependency, declare your scan packages, run testNative or quarkusIntTest. The framework's substrate-VM bridges handle Flyway and Jackson for you.",
+        blurb: "Add the ekbatan-native dependency, declare your scan packages, include migration resources, and run the native build/test path for your stack.",
         status: "ready",
     },
 ] as const;

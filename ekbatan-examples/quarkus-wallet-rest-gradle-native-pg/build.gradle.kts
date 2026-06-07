@@ -43,9 +43,8 @@ dependencies {
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
-    // Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
-    // Flyway resource provider, etc.) that auto-apply when native-image runs. Also provides
-    // FlywayHelper — see FlywayConfiguration.
+    // Native-image extras: ships GraalVM Features (Jackson 3 records, builders, generated
+    // jOOQ classes, etc.) plus HikariCP reachability metadata.
     implementation("io.github.zyraz-io:ekbatan-native:$ekbatanVersion")
 
     // Used by the domain classes for Validate.notNull / Validate.isTrue style guards.
@@ -62,8 +61,8 @@ dependencies {
     jooqCodegen("org.postgresql:postgresql:$postgresqlVersion")
 
     // ── Flyway ──────────────────────────────────────────────────────────────
-    // Run programmatically via FlywayConfiguration so the same `ekbatan.sharding.*` block
-    // drives both migrations and Ekbatan's runtime pools.
+    // Dialect-specific Flyway support. quarkus-flyway runs startup migrations against
+    // the datasource overridden by EkbatanShardFlywayCustomizer.
     implementation("org.flywaydb:flyway-database-postgresql")
 
     // ── Tests ───────────────────────────────────────────────────────────────

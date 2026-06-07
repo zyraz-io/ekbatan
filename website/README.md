@@ -13,7 +13,7 @@ Four top-level sections, mapped to the [Diátaxis](https://diataxis.fr) quadrant
 | **Learn**        | `/learn/`     | Step-by-step tutorial with a stack picker                        | Hand-holding, narrative        |
 | **Reference**    | `/reference/` | API + conventions, exhaustively                                  | Dense, lookup-oriented         |
 
-The tutorial under `/learn/` uses a `<StackPicker />` component that swaps snippets per (stack × build tool × dialect) instead of forking the tutorial into 24 pages. The 24 runnable wallet projects live in [`../ekbatan-examples/`](../ekbatan-examples) and back the tutorial code samples.
+The tutorial under `/learn/` uses a `<StackPicker />` component that swaps snippets per (stack × build tool × dialect) instead of forking the tutorial into many pages. The framework wallet examples live in [`../ekbatan-examples/`](../ekbatan-examples) and back the tutorial code samples; plain Java selections point to manual wiring references.
 
 ## Local development
 

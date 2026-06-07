@@ -301,13 +301,13 @@ In `io.ekbatan.micronaut`:
 
 Skip the `micronaut-flyway` auto-wiring path. It works, but it forces you to declare a `flyway.datasources.default` block in `application.yml` with `${ekbatan.sharding...}` placeholder interpolation chasing back into Ekbatan's config — duplicating the source of truth and burying a `FlywayConfigurationCustomizer` override on top to fix it. Cleaner: construct `Flyway` directly from the typed `ShardingConfig` in a `@Context` bean.
 
-**Dependencies** — pull the Micronaut extension anyway (it brings the BOM-pinned flyway-core and ships substrate-VM Flyway scanning needed for native-image), but don't add a `flyway:` block in YAML.
+**Dependencies** — pull the Micronaut extension anyway (it brings the BOM-pinned flyway-core and native-image support), but don't add a `flyway:` block in YAML.
 
 ```kotlin
 // build.gradle.kts
 dependencies {
     // The Micronaut extension. Pulls flyway-core transitively at Micronaut's BOM-pinned
-    // version and ships substrate-VM hints for native-image. We don't use its auto-wired
+    // version and ships native-image support. We don't use its auto-wired
     // `Flyway` beans (no `flyway:` block in application.yml) — the @Context bean below
     // calls `Flyway.configure()...migrate()` itself.
     implementation("io.micronaut.flyway:micronaut-flyway")
@@ -346,7 +346,7 @@ public class EkbatanFlywayMigrator {
 Why this shape:
 - **`@Context` is eager.** Micronaut instantiates `@Context` beans during application startup, before lazy `@Singleton` beans (including Ekbatan's `DatabaseRegistry`). The constructor calls `.migrate()` synchronously — so by the time anything else touches the database, the schema is in place.
 - **Single source of truth.** Connection coordinates live only in `ekbatan.sharding.*`. No YAML `flyway:` block, no placeholder interpolation, no `FlywayConfigurationCustomizer` override to maintain.
-- **Native works.** Keeping `micronaut-flyway` on the classpath preserves its substrate-VM Flyway scanning hints — no `FlywayHelper` shim needed.
+- **Native works with one small change.** The JVM examples call `Flyway.configure()...migrate()` directly. The native-image examples keep the same eager `@Context` migrator shape, but the migrator delegates to `FlywayHelper.migrate(...)` so classpath migrations can be discovered inside the native image.
 
 If you'd rather use the auto-wired customizer path (`@Singleton @Named("default") FlywayConfigurationCustomizer` bound to a `flyway.datasources.default` YAML block), that still works — it's just more moving parts.
 

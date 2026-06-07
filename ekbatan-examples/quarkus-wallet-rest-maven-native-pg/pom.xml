@@ -125,9 +125,9 @@
              against the `quarkus.datasource.*` config (see application.properties). The
              extension carries native-image reachability metadata for Flyway 12.0.0 and
              handles the substrate-VM classpath scanning Flyway can't do on its own - no
-             FlywayHelper or NativeImageFlywayResourceProvider needed in user code.
-             Mirrors the Spring Boot starter / Micronaut Flyway pattern in the sibling
-             wallet examples - each framework owns its Flyway integration. -->
+             FlywayHelper or NativeImageFlywayResourceProvider is needed in user code.
+             Mirrors the Spring Boot starter pattern: the framework extension owns Flyway
+             startup, and Ekbatan only points it at the shard config. -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-flyway</artifactId>

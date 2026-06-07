@@ -83,9 +83,8 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
-             Flyway resource provider, etc.) that auto-apply when native-image runs. Also provides
-             FlywayHelper - see FlywayConfiguration. -->
+        <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, builders,
+             generated jOOQ classes, etc.) plus HikariCP reachability metadata. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-native</artifactId>
@@ -112,7 +111,7 @@
              against the `quarkus.datasource.*` config (see application.properties). The
              extension carries native-image reachability metadata for Flyway 12.0.0 and
              handles the substrate-VM classpath scanning Flyway can't do on its own - no
-             FlywayHelper or NativeImageFlywayResourceProvider needed in user code. -->
+             FlywayHelper or NativeImageFlywayResourceProvider is needed in user code. -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-flyway</artifactId>

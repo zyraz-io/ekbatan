@@ -60,9 +60,8 @@ dependencies {
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
-    // Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
-    // Flyway resource provider, etc.) that auto-apply when native-image runs. Also provides
-    // FlywayHelper — see FlywayConfiguration.
+    // Native-image extras: ships GraalVM Features (Jackson 3 records, builders, generated
+    // jOOQ classes, etc.) plus HikariCP reachability metadata.
     implementation("io.github.zyraz-io:ekbatan-native:$ekbatanVersion")
 
     implementation("org.apache.commons:commons-lang3:3.20.0")

@@ -62,9 +62,9 @@ dependencies {
 
     implementation("org.apache.commons:commons-lang3:3.20.0")
 
-    // Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
-    // Flyway resource provider, etc.) that auto-apply when native-image runs. Only needed
-    // because we want a native binary; the JVM-only sibling doesn't include it.
+    // Native-image extras: ships GraalVM Features (Jackson 3 records, builders, generated
+    // jOOQ classes, etc.) plus HikariCP reachability metadata. Only needed because we want
+    // a native binary; the JVM-only sibling doesn't include it.
     implementation("io.github.zyraz-io:ekbatan-native:$ekbatanVersion")
 
     // ── Quarkus REST ────────────────────────────────────────────────────────

@@ -105,7 +105,7 @@
 
         <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
              Flyway resource provider, etc.) that auto-apply when native-image runs. Also provides
-             FlywayHelper - see FlywayConfiguration. Only needed because we want a native binary;
+             FlywayHelper for the native-aware startup migrator. Only needed because we want a native binary;
              the JVM-only sibling doesn't include it. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
