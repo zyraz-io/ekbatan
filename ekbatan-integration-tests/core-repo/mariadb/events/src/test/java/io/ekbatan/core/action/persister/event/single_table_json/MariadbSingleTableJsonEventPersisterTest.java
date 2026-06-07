@@ -3,7 +3,7 @@ package io.ekbatan.core.action.persister.event.single_table_json;
 import io.ekbatan.core.config.DataSourceConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import io.ekbatan.testsupport.testcontainers.ClasspathTransferable;
 import org.jooq.SQLDialect;
 import org.testcontainers.junit.jupiter.Container;
@@ -42,7 +42,7 @@ class MariadbSingleTableJsonEventPersisterTest extends BaseSingleTableJsonEventP
         TRANSACTION_MANAGER =
                 new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider, SQLDialect.MARIADB);
 
-        FlywayHelper.migrate(jdbcUrl, username, password);
+        FlywayMigrator.migrate(jdbcUrl, username, password);
     }
 
     MariadbSingleTableJsonEventPersisterTest() {

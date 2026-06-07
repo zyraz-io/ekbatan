@@ -22,6 +22,7 @@ dependencies {
 
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
     testImplementation(project(":ekbatan-native"))
+    testImplementation(project(":ekbatan-flyway"))
     testImplementation(project(":ekbatan-test-support"))
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")

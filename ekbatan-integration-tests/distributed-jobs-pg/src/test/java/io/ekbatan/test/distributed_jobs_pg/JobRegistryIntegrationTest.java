@@ -10,7 +10,7 @@ import com.github.kagkarlsson.scheduler.task.schedule.FixedDelay;
 import com.github.kagkarlsson.scheduler.task.schedule.Schedule;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.distributedjobs.DistributedJob;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -47,7 +47,7 @@ class JobRegistryIntegrationTest {
                 .maximumPoolSize(8)
                 .build());
 
-        FlywayHelper.migrate(jdbcUrl, username, password);
+        FlywayMigrator.migrate(jdbcUrl, username, password);
     }
 
     @AfterEach

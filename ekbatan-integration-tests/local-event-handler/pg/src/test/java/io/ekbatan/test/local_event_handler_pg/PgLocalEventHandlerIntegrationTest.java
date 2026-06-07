@@ -8,7 +8,7 @@ import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import io.ekbatan.test.local_event_handler.BaseLocalEventHandlerIntegrationTest;
 import io.ekbatan.test.local_event_handler_pg.audit.repository.AuditEntryRepository;
 import io.ekbatan.test.local_event_handler_pg.note.repository.NoteRepository;
@@ -67,8 +67,8 @@ class PgLocalEventHandlerIntegrationTest extends BaseLocalEventHandlerIntegratio
                 .build());
         CONNECTION_PROVIDERS = Map.of(SHARD_0, shard0Cp, SHARD_1, shard1Cp);
 
-        FlywayHelper.migrate(shard0Url, DB.getUsername(), DB.getPassword());
-        FlywayHelper.migrate(shard1Url, DB.getUsername(), DB.getPassword());
+        FlywayMigrator.migrate(shard0Url, DB.getUsername(), DB.getPassword());
+        FlywayMigrator.migrate(shard1Url, DB.getUsername(), DB.getPassword());
 
         var shard0Tm = new TransactionManager(shard0Cp, shard0Cp, SQLDialect.POSTGRES, SHARD_0);
         var shard1Tm = new TransactionManager(shard1Cp, shard1Cp, SQLDialect.POSTGRES, SHARD_1);

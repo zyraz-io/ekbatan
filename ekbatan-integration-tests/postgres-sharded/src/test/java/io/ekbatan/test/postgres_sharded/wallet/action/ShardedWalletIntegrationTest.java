@@ -3,6 +3,9 @@ package io.ekbatan.test.postgres_sharded.wallet.action;
 import static io.ekbatan.core.action.ActionExecutor.Builder.actionExecutor;
 import static io.ekbatan.core.action.ActionRegistry.Builder.actionRegistry;
 import static io.ekbatan.core.action.ExecutionConfiguration.Builder.executionConfiguration;
+import static io.ekbatan.core.config.ShardGroupConfig.Builder.shardGroupConfig;
+import static io.ekbatan.core.config.ShardMemberConfig.Builder.shardMemberConfig;
+import static io.ekbatan.core.config.ShardingConfig.Builder.shardingConfig;
 import static io.ekbatan.core.repository.RepositoryRegistry.Builder.repositoryRegistry;
 import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -10,16 +13,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.config.DataSourceConfig;
-import io.ekbatan.core.persistence.ConnectionProvider;
-import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.CrossShardException;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import io.ekbatan.test.postgres_sharded.wallet.models.Wallet;
 import io.ekbatan.test.postgres_sharded.wallet.repository.WalletRepository;
 import java.time.Clock;
-import org.jooq.SQLDialect;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Container;
@@ -59,11 +59,6 @@ public class ShardedWalletIntegrationTest {
                 .password(globalDb.getPassword())
                 .maximumPoolSize(10)
                 .build();
-        var globalTm = new TransactionManager(
-                ConnectionProvider.hikariConnectionProvider(globalConfig),
-                ConnectionProvider.hikariConnectionProvider(globalConfig),
-                SQLDialect.POSTGRES,
-                GLOBAL_SHARD);
 
         var mexicoConfig = DataSourceConfig.Builder.dataSourceConfig()
                 .jdbcUrl(mexicoDb.getJdbcUrl())
@@ -71,20 +66,30 @@ public class ShardedWalletIntegrationTest {
                 .password(mexicoDb.getPassword())
                 .maximumPoolSize(10)
                 .build();
-        var mexicoTm = new TransactionManager(
-                ConnectionProvider.hikariConnectionProvider(mexicoConfig),
-                ConnectionProvider.hikariConnectionProvider(mexicoConfig),
-                SQLDialect.POSTGRES,
-                MEXICO_SHARD);
 
-        databaseRegistry = databaseRegistry()
-                .withDefaultDatabase(globalTm)
-                .withDatabase(mexicoTm)
+        var shardingConfig = shardingConfig()
+                .defaultShard(GLOBAL_SHARD)
+                .withGroup(shardGroupConfig()
+                        .group(GLOBAL_SHARD.group)
+                        .name("global")
+                        .withMember(shardMemberConfig()
+                                .member(GLOBAL_SHARD.member)
+                                .primaryConfig(globalConfig)
+                                .build())
+                        .build())
+                .withGroup(shardGroupConfig()
+                        .group(MEXICO_SHARD.group)
+                        .name("mexico")
+                        .withMember(shardMemberConfig()
+                                .member(MEXICO_SHARD.member)
+                                .primaryConfig(mexicoConfig)
+                                .build())
+                        .build())
                 .build();
 
-        FlywayHelper.migrate(globalDb.getJdbcUrl(), globalDb.getUsername(), globalDb.getPassword());
+        FlywayMigrator.migrate(shardingConfig);
 
-        FlywayHelper.migrate(mexicoDb.getJdbcUrl(), mexicoDb.getUsername(), mexicoDb.getPassword());
+        databaseRegistry = DatabaseRegistry.fromConfig(shardingConfig);
 
         walletRepo = new WalletRepository(databaseRegistry);
 

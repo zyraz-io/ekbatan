@@ -1,6 +1,6 @@
 # Gradle
 
-What you write in `build.gradle.kts` to consume Ekbatan, generate jOOQ classes from your Flyway migrations, and ship a runnable application. Gradle is the primary build tool used by every example in the repo — the framework's JARs work with any JVM build tool, but the codegen plugin ([`dev.monosoul.jooq-docker`](https://github.com/monosoul/jooq-gradle-plugin)) is the piece that's Gradle-specific.
+What you write in `build.gradle.kts` to consume Ekbatan, generate jOOQ classes from your Flyway migrations, and ship a runnable application. Many examples use Gradle, but the framework's JARs work with any JVM build tool; the codegen plugin ([`dev.monosoul.jooq-docker`](https://github.com/monosoul/jooq-gradle-plugin)) is the piece that's Gradle-specific.
 
 For the Maven equivalent, see [Maven](../maven/README.md). The framework itself is build-tool-agnostic — only the codegen tooling differs.
 
@@ -9,7 +9,7 @@ For the Maven equivalent, see [Maven](../maven/README.md). The framework itself 
 
 For the framework-level concepts these pages assume you already know, see [docs/wiring/](../wiring/) (DI + auto-config) and [docs/database/](../database/README.md) (the canonical schema and dialect notes — build-tool agnostic).
 
-Runnable references live across `ekbatan-examples/` — every example uses Gradle:
+Runnable Gradle references live across `ekbatan-examples/`:
 
 - [`spring-boot-wallet-rest-gradle-pg`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-pg) — Spring Boot + PostgreSQL
 - [`spring-boot-wallet-rest-gradle-mysql`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-mysql) — Spring Boot + MySQL (with `UuidStringConverter`)

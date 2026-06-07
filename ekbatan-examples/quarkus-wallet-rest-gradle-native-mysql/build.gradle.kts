@@ -57,6 +57,7 @@ dependencies {
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:$quarkusVersion"))
 
     implementation("io.github.zyraz-io:ekbatan-quarkus:$ekbatanVersion")
+    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
@@ -79,9 +80,8 @@ dependencies {
     // above; this Quarkus extension only adds the native-image hint plumbing (a build step
     // that calls RuntimeReflection.register on the driver) — no behavioural change in JVM.
     implementation("io.quarkus:quarkus-jdbc-mysql")
-    // Quarkus's official Flyway extension — runs migrations at app startup via
-    // `quarkus.flyway.migrate-at-start=true` against the datasource overridden by
-    // `EkbatanShardFlywayCustomizer` to point at the default shard's primaryConfig.
+    // EkbatanShardFlywayMigrator runs Flyway over every shard from ekbatan.sharding.*.
+    // quarkus-flyway stays on the classpath for Flyway/native-image integration.
     implementation("io.quarkus:quarkus-flyway")
     testImplementation("io.quarkus:quarkus-junit5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -144,6 +144,10 @@ tasks {
     withType<Test> {
         useJUnitPlatform()
         systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
+    }
+
+    named<Test>("test") {
+        failOnNoDiscoveredTests = false
     }
 }
 

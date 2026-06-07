@@ -1,7 +1,8 @@
 package io.example.wallet.web;
 
 import io.ekbatan.core.action.ActionExecutor;
-import io.ekbatan.core.domain.Id;
+import io.ekbatan.core.domain.ShardedId;
+import io.ekbatan.core.shard.ShardedUUID;
 import io.example.wallet.action.WalletCloseAction;
 import io.example.wallet.action.WalletCreateAction;
 import io.example.wallet.action.WalletDepositMoneyAction;
@@ -31,15 +32,30 @@ public class WalletResource {
     @Inject
     WalletRepository walletRepository;
 
-    public record CreateRequest(UUID ownerId, String currency, BigDecimal initialBalance) {}
+    public record CreateRequest(String countryCode, UUID ownerId, String currency, BigDecimal initialBalance) {}
 
     public record DepositRequest(BigDecimal amount, String recipient) {}
 
     public record WalletResponse(
-            UUID id, UUID ownerId, String currency, BigDecimal balance, String state, Long version) {
+            UUID id,
+            int shardGroup,
+            int shardMember,
+            UUID ownerId,
+            String currency,
+            BigDecimal balance,
+            String state,
+            Long version) {
         static WalletResponse from(Wallet w) {
+            final var shard = w.id.resolveShardIdentifier();
             return new WalletResponse(
-                    w.id.getValue(), w.ownerId, w.currency.getCurrencyCode(), w.balance, w.state.name(), w.version);
+                    w.id.getValue(),
+                    shard.group,
+                    shard.member,
+                    w.ownerId,
+                    w.currency.getCurrencyCode(),
+                    w.balance,
+                    w.state.name(),
+                    w.version);
         }
     }
 
@@ -49,7 +65,10 @@ public class WalletResource {
                 () -> "rest-user",
                 WalletCreateAction.class,
                 new WalletCreateAction.Params(
-                        body.ownerId(), Currency.getInstance(body.currency()), body.initialBalance()));
+                        body.countryCode(),
+                        body.ownerId(),
+                        Currency.getInstance(body.currency()),
+                        body.initialBalance()));
         return Response.status(Response.Status.CREATED)
                 .entity(WalletResponse.from(wallet))
                 .build();
@@ -61,7 +80,7 @@ public class WalletResource {
         final var updated = executor.execute(
                 () -> "rest-user",
                 WalletDepositMoneyAction.class,
-                new WalletDepositMoneyAction.Params(Id.of(Wallet.class, id), body.amount(), body.recipient()));
+                new WalletDepositMoneyAction.Params(toShardedId(id), body.amount(), body.recipient()));
         return WalletResponse.from(updated);
     }
 
@@ -69,7 +88,7 @@ public class WalletResource {
     @Path("/{id}/close")
     public WalletResponse close(@PathParam("id") UUID id) throws Exception {
         final var closed = executor.execute(
-                () -> "rest-user", WalletCloseAction.class, new WalletCloseAction.Params(Id.of(Wallet.class, id)));
+                () -> "rest-user", WalletCloseAction.class, new WalletCloseAction.Params(toShardedId(id)));
         return WalletResponse.from(closed);
     }
 
@@ -81,5 +100,9 @@ public class WalletResource {
                 .map(WalletResponse::from)
                 .map(view -> Response.ok(view).build())
                 .orElseGet(() -> Response.status(Response.Status.NOT_FOUND).build());
+    }
+
+    private static ShardedId<Wallet> toShardedId(UUID id) {
+        return ShardedId.of(Wallet.class, ShardedUUID.from(id));
     }
 }

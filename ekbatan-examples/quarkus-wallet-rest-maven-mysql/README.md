@@ -12,7 +12,7 @@ A standalone Quarkus example that uses Ekbatan from Maven Central, backed by **M
 | `EventHandler` | `WalletMoneyDepositedEventHandler` |
 | `Repository` | `WalletRepository`, `NotificationRepository` |
 | REST | `WalletResource` (JAX-RS `@Path`) |
-| Flyway migration | `FlywayConfiguration` — `@ApplicationScoped` + `@Observes StartupEvent` with `@Priority(LIBRARY_BEFORE)` |
+| Flyway migration | `EkbatanShardFlywayMigrator` — observes `StartupEvent` with `@Priority(Interceptor.Priority.PLATFORM_BEFORE)` and calls `FlywayMigrator.migrate(shardingConfig)` |
 | Integration test | `WalletResourceIntegrationTest` (`@QuarkusTest` + `@QuarkusTestResource(MySQLTestResource.class)` + RestAssured) |
 
 ## MySQL-specific bits

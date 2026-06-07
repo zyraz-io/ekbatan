@@ -7,9 +7,9 @@ How to actually run Ekbatan in an application. Start here:
 
 Then pick your DI framework:
 
-- **[Wiring with Spring Boot](spring.md)** — one starter dependency, an `application.yml`, plus Spring auto-config / AOT / native specifics.
-- **[Wiring with Quarkus](quarkus.md)** — extension dependency, `application.properties`, plus build-step / Jandex / classloader / HikariCP-on-native specifics.
-- **[Wiring with Micronaut](micronaut.md)** — integration jar + annotation processor, plus `EkbatanStereotypeVisitor` / transitive-jar processing specifics.
+- **[Wiring with Spring Boot](spring.md)** — starter dependency, `FlywayMigrator`, an `application.yml`, plus Spring auto-config / AOT / native specifics.
+- **[Wiring with Quarkus](quarkus.md)** — extension dependency, `FlywayMigrator`, `application.properties`, plus build-step / Jandex / classloader / HikariCP-on-native specifics.
+- **[Wiring with Micronaut](micronaut.md)** — integration jar + annotation processor, `FlywayMigrator`, plus `EkbatanStereotypeVisitor` / transitive-jar processing specifics.
 
 Read [annotations.md](annotations.md) and [without-di.md](without-di.md) first if you want to understand what the framework actually does. Read whichever framework page matches your stack when you want the shortest path to a running app.
 

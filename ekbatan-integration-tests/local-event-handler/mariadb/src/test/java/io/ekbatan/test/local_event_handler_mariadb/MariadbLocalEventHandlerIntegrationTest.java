@@ -8,7 +8,7 @@ import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import io.ekbatan.test.local_event_handler.BaseLocalEventHandlerIntegrationTest;
 import io.ekbatan.test.local_event_handler_mariadb.audit.repository.AuditEntryRepository;
 import io.ekbatan.test.local_event_handler_mariadb.note.repository.NoteRepository;
@@ -46,7 +46,7 @@ class MariadbLocalEventHandlerIntegrationTest extends BaseLocalEventHandlerInteg
                 .build();
         CONNECTION_PROVIDER = hikariConnectionProvider(config);
 
-        FlywayHelper.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
+        FlywayMigrator.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
 
         var tm = new TransactionManager(CONNECTION_PROVIDER, CONNECTION_PROVIDER, SQLDialect.MARIADB);
         DB_REGISTRY = databaseRegistry().withDatabase(tm).build();

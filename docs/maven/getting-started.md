@@ -43,6 +43,11 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
             <artifactId>ekbatan-spring-boot-starter</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-flyway</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
         <!-- (3) @AutoBuilder is compile-time only: provided lets javac see
              the annotation without packaging the processor at runtime. -->
         <dependency>
@@ -55,6 +60,16 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- Flyway stays on the classpath, but Spring Boot's single-datasource
+             auto-run is disabled; EkbatanShardFlywayMigrator calls FlywayMigrator. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
     </dependencies>
 
@@ -134,6 +149,11 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
             <artifactId>ekbatan-quarkus</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-flyway</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
         <!-- (3) @AutoBuilder is compile-time only. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
@@ -149,6 +169,21 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest-jackson</artifactId>
+        </dependency>
+        <!-- Quarkus datasource/Flyway startup config is not used here; the startup
+             bean calls FlywayMigrator from ekbatan.sharding.*. These dependencies
+             keep Flyway and the driver native-image integration available. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jdbc-mariadb</artifactId>
         </dependency>
     </dependencies>
 
@@ -229,6 +264,11 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
             <artifactId>ekbatan-micronaut</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-flyway</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
         <!-- (3) @AutoBuilder is compile-time only. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
@@ -244,6 +284,16 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
         <dependency>
             <groupId>io.micronaut.serde</groupId>
             <artifactId>micronaut-serde-jackson</artifactId>
+        </dependency>
+        <!-- micronaut-flyway stays on the classpath for Flyway/native support, but
+             the eager @Context bean calls FlywayMigrator itself. -->
+        <dependency>
+            <groupId>io.micronaut.flyway</groupId>
+            <artifactId>micronaut-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
     </dependencies>
 
@@ -316,6 +366,11 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
             <artifactId>ekbatan-core</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-flyway</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
 
         <!-- (3) @AutoBuilder is compile-time only. Skip if you'd rather write
              builders by hand; without it, drop the AP path below too. -->
@@ -340,6 +395,16 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-distributed-jobs</artifactId>
             <version>${ekbatan.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>12.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <version>12.0.0</version>
         </dependency>
     </dependencies>
 
@@ -463,6 +528,13 @@ Spring Boot and Quarkus don't need a separate AP-path entry for their integratio
 The integration jars (`ekbatan-spring-boot-starter` / `ekbatan-quarkus` / `ekbatan-micronaut`) pull the common runtime modules such as the local event handler and distributed jobs. `ekbatan-annotation-processor` stays explicit and compile-time only. The following are deliberately *not* pulled; add them only when you need them:
 
 ```xml
+<!-- Programmatic Flyway migration from one DataSource or every primary shard in ShardingConfig. -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>${ekbatan.version}</version>
+</dependency>
+
 <!-- Redis-backed distributed KeyedLockProvider (Redisson under the hood). -->
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
@@ -549,7 +621,7 @@ A few `<properties>` keys conflict with plugin behavior. None of them is Ekbatan
 
 ```xml
 <properties>
-    <flyway.maven.plugin.version>11.20.0</flyway.maven.plugin.version>
+    <flyway.maven.plugin.version>12.0.0</flyway.maven.plugin.version>
 </properties>
 ```
 
@@ -562,8 +634,8 @@ Unknown configuration property: flyway.maven.plugin.version
 Fix: use hyphenated names that don't start with `flyway.`:
 
 ```xml
-<flyway-version>11.20.0</flyway-version>
-<flyway-maven-plugin-version>11.20.0</flyway-maven-plugin-version>
+<flyway-version>12.0.0</flyway-version>
+<flyway-maven-plugin-version>12.0.0</flyway-maven-plugin-version>
 ```
 
 The same caution applies to `jooq.*` (the codegen plugin scans its own namespace), `quarkus.*`, and most plugin namespaces. Hyphenated property names are the safe default.

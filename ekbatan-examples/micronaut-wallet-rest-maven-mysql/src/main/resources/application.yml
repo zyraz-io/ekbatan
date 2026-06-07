@@ -2,48 +2,63 @@ micronaut:
   application:
     name: micronaut-wallet-rest-maven-mysql
 
-# Single source of truth for DB connection details — both Flyway (run on startup via
-# FlywayConfiguration) and Ekbatan's runtime pools read from this same block. Micronaut's
-# own datasource auto-config (micronaut-data, jdbc) is intentionally NOT used.
-#
-# Notes on the JDBC URLs:
-#   - `serverTimezone=UTC` keeps DATETIME round-tripping consistent with Ekbatan's
-#     always-UTC contract. The container is also pinned to TZ=UTC (see compose.yaml).
-#   - The main DB is `wallet`; eventlog is a separate database `eventlog`, created by the
-#     V0000 Flyway migration. The connecting user needs cross-database privileges — set up
-#     by `mysql_init.sql` mounted into /docker-entrypoint-initdb.d. See docs/database/mysql.md.
+# Two configured shards. The FlywayMigrator startup bean and Ekbatan's runtime pools
+# read from this same block. Each action execution touches one shard only.
 ekbatan:
-  namespace: example.wallet.maven-mysql-micronaut
+  namespace: example.wallet
   sharding:
     defaultShard:
       group: 0
       member: 0
     groups:
       - group: 0
-        name: default
+        name: global
         members:
           - member: 0
-            name: default
+            name: global
             configs:
               primaryConfig:
-                jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                jdbcUrl: jdbc:mysql://localhost:3306/wallet
                 username: wallet
                 password: wallet
                 driverClassName: com.mysql.cj.jdbc.Driver
                 maximumPoolSize: 20
               jobsConfig:
-                jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                jdbcUrl: jdbc:mysql://localhost:3306/wallet
                 username: wallet
                 password: wallet
                 driverClassName: com.mysql.cj.jdbc.Driver
                 maximumPoolSize: 5
               lockConfig:
-                jdbcUrl: jdbc:mysql://localhost:3306/wallet?serverTimezone=UTC
+                jdbcUrl: jdbc:mysql://localhost:3306/wallet
                 username: wallet
                 password: wallet
                 driverClassName: com.mysql.cj.jdbc.Driver
-                # Lock pool: sized for max concurrent held leases (each lease pins one connection
-                # until release). Leak detection off — locks may be legitimately held for a while.
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
+      - group: 1
+        name: mexico
+        members:
+          - member: 0
+            name: mexico
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:mysql://localhost:3307/wallet
+                username: wallet
+                password: wallet
+                driverClassName: com.mysql.cj.jdbc.Driver
+                maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:mysql://localhost:3307/wallet
+                username: wallet
+                password: wallet
+                driverClassName: com.mysql.cj.jdbc.Driver
+                maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:mysql://localhost:3307/wallet
+                username: wallet
+                password: wallet
+                driverClassName: com.mysql.cj.jdbc.Driver
                 maximumPoolSize: 30
                 leakDetectionThreshold: 0
   local-event-handler:

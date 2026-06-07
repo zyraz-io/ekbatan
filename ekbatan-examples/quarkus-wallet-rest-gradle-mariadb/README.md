@@ -18,7 +18,7 @@ test) — adapted to Quarkus's CDI + JAX-RS surface and MariaDB's SQL.
 | `EventHandler` | `WalletMoneyDepositedEventHandler` (listen-to-yourself; invokes `CreateNotificationAction`) |
 | `Repository` | `WalletRepository`, `NotificationRepository` |
 | REST (JAX-RS) | `WalletResource` |
-| Flyway migration (CDI) | `FlywayConfiguration` — observes `StartupEvent` with `@Priority(LIBRARY_BEFORE)` so it fires before `JobRegistry` starts |
+| Flyway migration (CDI) | `EkbatanShardFlywayMigrator` — observes `StartupEvent` with `@Priority(Interceptor.Priority.PLATFORM_BEFORE)` and calls `FlywayMigrator.migrate(shardingConfig)` |
 | Integration test | `WalletResourceIntegrationTest` (`@QuarkusTest` + `MariaDBTestResource`) |
 
 ## MariaDB specifics

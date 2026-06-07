@@ -12,7 +12,7 @@ A standalone Quarkus example that uses Ekbatan from Maven Central, backed by **P
 | `EventHandler` | `WalletMoneyDepositedEventHandler` |
 | `Repository` | `WalletRepository`, `NotificationRepository` |
 | REST | `WalletResource` (JAX-RS `@Path`) |
-| Flyway migration | `FlywayConfiguration` — `@ApplicationScoped` + `@Observes StartupEvent` with `@Priority(LIBRARY_BEFORE)` so it runs before `JobRegistry` polls |
+| Flyway migration | `EkbatanShardFlywayMigrator` — observes `StartupEvent` with `@Priority(Interceptor.Priority.PLATFORM_BEFORE)` and calls `FlywayMigrator.migrate(shardingConfig)` |
 | Integration test | `WalletResourceIntegrationTest` (`@QuarkusTest` + `@QuarkusTestResource(PostgresTestResource.class)` + RestAssured) |
 
 The framework wiring (the listen-to-yourself path, the outbox guarantees) is identical to the Gradle Quarkus sibling — see [`quarkus-wallet-rest-gradle-mariadb`](../quarkus-wallet-rest-gradle-mariadb) and the [Wiring with Quarkus](../../docs/wiring/quarkus.md) doc.

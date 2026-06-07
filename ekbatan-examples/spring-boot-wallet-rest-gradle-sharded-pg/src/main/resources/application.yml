@@ -1,22 +1,17 @@
 spring:
+  autoconfigure:
+    exclude: org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
   application:
     name: spring-boot-wallet-rest-gradle-sharded-pg
-  # Disable Spring Boot's FlywayAutoConfiguration — it can only attach Flyway to a
-  # single DataSource bean, but this wallet uses multiple shards. EkbatanShardFlywayMigrator
-  # (a @Bean) runs Flyway once per shard's primaryConfig from the same
-  # ekbatan.sharding.* tree the runtime pools read from.
   flyway:
+    # Migrations are run by io.example.wallet.startup.EkbatanShardFlywayMigrator
+    # so every configured shard is migrated from the same ekbatan.sharding.* tree.
     enabled: false
 
-# Two shards along the *group* axis (policy / regional residency):
-#   group=0, member=0 → global shard (the default; wallets with no country routing land here)
-#   group=1, member=0 → mexico shard (wallets created with countryCode=MX)
-#
-# The "default" shard is also the fallback when a wallet's ShardedUUID encodes a shard that
-# isn't currently registered (e.g. countryCode=AU encodes group=2, which has no DB here).
-# See docs/database/sharding.md for the group-vs-member framing.
+# Two configured shards. Each action execution in this example touches one shard only;
+# cross-shard actions are not enabled.
 ekbatan:
-  namespace: example.wallet.sharded
+  namespace: example.wallet
   sharding:
     defaultShard:
       group: 0
@@ -26,24 +21,55 @@ ekbatan:
         name: global
         members:
           - member: 0
-            name: global-eu-1
+            name: global
             configs:
               primaryConfig:
                 jdbcUrl: jdbc:postgresql://localhost:5432/wallet_global
                 username: wallet
                 password: wallet
+                driverClassName: org.postgresql.Driver
                 maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet_global
+                username: wallet
+                password: wallet
+                driverClassName: org.postgresql.Driver
+                maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet_global
+                username: wallet
+                password: wallet
+                driverClassName: org.postgresql.Driver
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
       - group: 1
         name: mexico
         members:
           - member: 0
-            name: mexico-cdmx-1
+            name: mexico
             configs:
               primaryConfig:
                 jdbcUrl: jdbc:postgresql://localhost:5433/wallet_mexico
                 username: wallet
                 password: wallet
+                driverClassName: org.postgresql.Driver
                 maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5433/wallet_mexico
+                username: wallet
+                password: wallet
+                driverClassName: org.postgresql.Driver
+                maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5433/wallet_mexico
+                username: wallet
+                password: wallet
+                driverClassName: org.postgresql.Driver
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
+  local-event-handler:
+    handling:
+      enabled: true
 
 logging:
   level:

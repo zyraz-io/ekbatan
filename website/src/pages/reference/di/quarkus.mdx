@@ -2,7 +2,7 @@
 layout: ../../../layouts/DocLayout.astro
 title: 'DI · Quarkus'
 activeSection: reference
-lead: 'What you write in a Quarkus app to use Ekbatan: the extension dependency, four <code>@Ekbatan*</code> annotations on your own classes, and an <code>application.properties</code> tree under <code>ekbatan.*</code>. The extension''s deployment-time build steps wire every framework bean, and <code>ActionExecutor</code> is injectable anywhere.'
+lead: 'What you write in a Quarkus app to use Ekbatan: the extension dependency, the Flyway migrator dependency, four <code>@Ekbatan*</code> annotations on your own classes, and an <code>application.properties</code> tree under <code>ekbatan.*</code>. The extension''s deployment-time build steps wire every framework bean, and <code>ActionExecutor</code> is injectable anywhere.'
 ---
 
 For the equivalent in plain Java with no DI container, see [wiring/without-di.md](/reference/di/without-di/). For Spring Boot and Micronaut, see [spring.md](/reference/di/spring-boot/) and [micronaut.md](/reference/di/micronaut/).
@@ -20,7 +20,7 @@ dependencies {
 
 (Published on Maven Central under groupId `io.github.zyraz-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
 
-That one runtime artifact transitively pulls in `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, and the `@Ekbatan*` annotation jar. Quarkus resolves the matching deployment module automatically at build time. Add `ekbatan-keyed-lock-redis` separately if you want the Redis-backed lock provider.
+That one runtime artifact transitively pulls in `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, and the `@Ekbatan*` annotation jar. Quarkus resolves the matching deployment module automatically at build time. Add `ekbatan-flyway` for `FlywayMigrator`, and add `ekbatan-keyed-lock-redis` separately if you want the Redis-backed lock provider.
 
 ### 2. Your domain classes — annotated
 
@@ -296,34 +296,37 @@ Without this, the deployment processor's scan returns nothing for that jar and A
 
 This matches Spring's `@ConditionalOnProperty(havingValue="true")` "default-off" semantic. The reason it's build-time-only on Quarkus is so the `EventHandlingJob` bean simply doesn't exist in the closed-world image — useful for native builds where every bean adds reflection metadata.
 
-### Flyway — use `quarkus-flyway` + a `FlywayConfigurationCustomizer`
+### Flyway — use `ekbatan-flyway` + a startup migrator
 
-Don't run Flyway by hand from a `@Observes StartupEvent` (that's what the framework's own tests at `ekbatan-integration-tests/di/quarkus/PostgresTestResource` do via `FlywayHelper`, because they use raw Flyway with no framework extension wrapping it — see [GraalVM native-image § two patterns](/reference/runtime/native-image/#flyway-on-native--two-patterns)). For a real Quarkus app, **use `quarkus-flyway`** and let an `EkbatanShardFlywayCustomizer` (a CDI bean) override the dataSource from `ekbatan.sharding.*`.
+Ekbatan's Quarkus examples do not use a Quarkus-managed datasource for migrations. Ekbatan already has the database coordinates under `ekbatan.sharding.*`, and `FlywayMigrator.migrate(shardingConfig)` can run the same migration set against one shard or many shards.
 
-**Dependencies** — pull the Quarkus extension, NOT raw `flyway-core`:
+Keep `quarkus-flyway` on the classpath for Flyway/Quarkus/native-image integration, and keep the matching `quarkus-jdbc-*` extension for driver registration. Do **not** add `quarkus.datasource.*` or `quarkus.flyway.*` properties for this setup; the Quarkus Flyway startup runner is not the migration owner.
+
+**Dependencies** — pull `ekbatan-flyway`, the Quarkus Flyway extension, and the dialect pieces:
 
 ```kotlin
 // build.gradle.kts
 dependencies {
-    // ✅ The Quarkus extension. Pulls flyway-core transitively at Quarkus's BOM-pinned version,
-    //    ships substrate-VM Flyway resource scanning for native, integrates with @ConfigMapping.
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
+
+    // Quarkus integration for Flyway and native-image support.
     implementation("io.quarkus:quarkus-flyway")
 
-    // ✅ Database-specific Flyway plugin (also BOM-managed; no version needed).
+    // Database-specific Flyway plugin.
     implementation("org.flywaydb:flyway-database-postgresql")   // or flyway-mysql for MariaDB/MySQL
 
-    // ✅ Matching JDBC driver extension — registers the driver class for native automatically.
+    // Matching JDBC driver extension. This registers the driver class for native-image.
     implementation("io.quarkus:quarkus-jdbc-postgresql")        // or quarkus-jdbc-mariadb / quarkus-jdbc-mysql
-
-    // ❌ Don't add `org.flywaydb:flyway-core` directly. quarkus-flyway brings the right version
-    //    and configures the CDI bean for you; pulling flyway-core independently can pin a
-    //    version that doesn't match what Quarkus's @ConfigMapping expects, and even when it
-    //    does, the native build won't find migrations at runtime (no substrate-VM scanner).
 }
 ```
 
 ```xml
 <!-- pom.xml -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>0.1.2</version>
+</dependency>
 <dependency>
     <groupId>io.quarkus</groupId>
     <artifactId>quarkus-flyway</artifactId>
@@ -338,37 +341,46 @@ dependencies {
 </dependency>
 ```
 
+No Quarkus datasource block is required:
+
 ```properties
-# application.properties — minimum needed for FlywayAutoConfiguration to wake up.
-# We don't set quarkus.datasource.url/username/password — the customizer below overrides it.
-quarkus.datasource.db-kind=postgresql
-quarkus.flyway.migrate-at-start=true
+# No Quarkus datasource properties
+# No Quarkus Flyway startup properties
 ```
 
+Startup migrator:
+
 ```java
+import io.ekbatan.core.config.ShardingConfig;
+import io.ekbatan.flyway.FlywayMigrator;
+import io.quarkus.runtime.StartupEvent;
+import jakarta.annotation.Priority;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+import jakarta.interceptor.Interceptor;
+
 @ApplicationScoped
-public class EkbatanShardFlywayCustomizer implements FlywayConfigurationCustomizer {
+public class EkbatanShardFlywayMigrator {
 
     private final ShardingConfig shardingConfig;
 
-    public EkbatanShardFlywayCustomizer(ShardingConfig shardingConfig) {
+    public EkbatanShardFlywayMigrator(ShardingConfig shardingConfig) {
         this.shardingConfig = shardingConfig;
     }
 
-    @Override
-    public void customize(FluentConfiguration configuration) {
-        var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
-        configuration.dataSource(primary.jdbcUrl, primary.username, primary.password);
+    void migrate(@Observes @Priority(Interceptor.Priority.PLATFORM_BEFORE) StartupEvent event) {
+        FlywayMigrator.migrate(shardingConfig);
     }
 }
 ```
 
 Why this shape:
-- **Single source of truth.** Connection coordinates live under `ekbatan.sharding.*`; no parallel `quarkus.datasource.url/username/password` tree to keep in sync.
-- **Native works out of the box.** `quarkus-flyway` ships substrate-VM-aware Flyway resource scanning; no need for `FlywayHelper`.
-- **Migrations run before the StartupEvent fires**, so `ekbatan-jobs`' `scheduled_tasks` table polling sees the schema already in place.
+- **Single source of truth.** Connection coordinates live under `ekbatan.sharding.*`; there is no parallel `quarkus.datasource.*` tree to keep in sync.
+- **Same code for one shard or many.** `FlywayMigrator.migrate(shardingConfig)` iterates every configured shard member's `primaryConfig`.
+- **Quarkus still helps native-image.** `quarkus-jdbc-*` contributes driver metadata, and `quarkus-flyway` keeps Flyway aligned with the Quarkus platform.
+- **Do not turn on Quarkus Flyway startup migration for this pattern.** If Quarkus runs its own Flyway startup path, it uses datasource-based configuration that is separate from Ekbatan's sharding config.
 
-See [`ekbatan-examples/quarkus-wallet-rest-gradle-pg`](../../ekbatan-examples/quarkus-wallet-rest-gradle-pg) for the full runnable shape (and its `-mariadb`/`-mysql`/`-native-*`/`-maven-*` variants for the other dialects, build tools, and native).
+See [`ekbatan-examples/quarkus-wallet-rest-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/quarkus-wallet-rest-gradle-pg) for the full runnable shape (and its `-mariadb`/`-mysql`/`-native-*`/`-maven-*` variants for the other dialects, build tools, and native).
 
 ### Jackson — use `quarkus-rest-jackson` (which pulls `quarkus-jackson`)
 

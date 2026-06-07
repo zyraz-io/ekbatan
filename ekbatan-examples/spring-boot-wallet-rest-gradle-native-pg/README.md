@@ -12,7 +12,7 @@ The GraalVM native-image variant of [`spring-boot-wallet-rest-gradle-pg`](../spr
 | `EventHandler` | `WalletMoneyDepositedEventHandler` (listen-to-yourself; invokes `CreateNotificationAction`) |
 | `Repository` | `WalletRepository`, `NotificationRepository` |
 | REST | `WalletController` |
-| Flyway migration | `EkbatanShardFlywayDataSource` — `spring-boot-starter-flyway` runs migrations against a `@FlywayDataSource` built from `ekbatan.sharding.*` |
+| Flyway migration | `EkbatanShardFlywayMigrator` — `runs `FlywayMigrator.migrate(shardingConfig)` against every configured shard |
 | Integration test (JVM) | `./gradlew test` |
 | Integration test (native) | `./gradlew nativeTest` |
 

@@ -6,13 +6,13 @@ A GraalVM native-image variant of [`micronaut-wallet-rest-maven-pg`](../micronau
 
 | Concern | JVM sibling | This module |
 |---|---|---|
-| Dependencies | core + flyway + jdbc | + `io.github.zyraz-io:ekbatan-native` for `FlywayHelper`, `Jackson3RecordsFeature`, jOOQ array-type fix, etc. |
-| `FlywayConfiguration` | `Flyway.configure()...migrate()` | `FlywayHelper.migrate(...)` — substrate-VM aware |
+| Dependencies | core + `ekbatan-flyway` + flyway + jdbc | + `io.github.zyraz-io:ekbatan-native` for Jackson3RecordsFeature, HikariCP metadata, jOOQ native support, etc. |
+| `Flyway migrator` | `FlywayMigrator.migrate(shardingConfig)` | same call; native runtime gets substrate-VM-aware classpath scanning |
 | `native-maven-plugin` build args | n/a | adds `-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,io.example` and `-H:IncludeResources=db/migration/.*\.sql` |
 | `micronaut-maven-plugin` | disables JVM AOT executions | leaves the native packaging flow to run Micronaut's native/AOT steps |
 | Packaging | `jar` (default) | `${packaging}` — defaults to `jar`; flip to `native-image` for the native build via `-Dpackaging=native-image` |
 
-### Why `FlywayHelper`, not `Flyway.configure()`
+### Why `FlywayMigrator`, not `Flyway.configure()`
 
 Raw `Flyway.configure().locations("classpath:db/migration").load().migrate()` works on the JVM because the classloader can walk the JAR's classpath: URLs. Inside a GraalVM native image the substrate-VM filesystem can't enumerate `classpath:` directories that way and Flyway aborts with:
 
@@ -20,7 +20,7 @@ Raw `Flyway.configure().locations("classpath:db/migration").load().migrate()` wo
 Unknown prefix for location: classpath:db/migration
 ```
 
-`FlywayHelper` (from `ekbatan-native`) installs a substrate-VM-aware `ResourceProvider` when running native; on the JVM it's a no-op pass-through. Same code, both binaries.
+`FlywayMigrator` (from `ekbatan-flyway`) installs a substrate-VM-aware resource scanner when running native; on the JVM it behaves like normal Flyway configuration. Same code, both binaries.
 
 ### Why `-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,io.example`
 
@@ -35,7 +35,7 @@ The Gradle equivalent in `micronaut-wallet-rest-gradle-native-pg` is `graalvmNat
 
 ### Why `-H:IncludeResources=db/migration/.*\.sql`
 
-native-image's default resource inclusion rules skip arbitrary classpath SQL files. Without this pattern, the migrations don't end up in the image and `FlywayHelper` finds nothing to apply at startup. The Gradle equivalent is `graalvmNative.binaries.all { resources.includedPatterns.add("db/migration/.*\\.sql") }`.
+native-image's default resource inclusion rules skip arbitrary classpath SQL files. Without this pattern, the migrations don't end up in the image and `FlywayMigrator` finds nothing to apply at startup. The Gradle equivalent is `graalvmNative.binaries.all { resources.includedPatterns.add("db/migration/.*\\.sql") }`.
 
 ### Why `combine.children="append"` on the `native-maven-plugin` `<buildArgs>`
 

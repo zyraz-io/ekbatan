@@ -40,6 +40,7 @@ dependencies {
 
     // ── Ekbatan ─────────────────────────────────────────────────────────────
     implementation("io.github.zyraz-io:ekbatan-quarkus:$ekbatanVersion")
+    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
@@ -57,12 +58,9 @@ dependencies {
     jooqCodegen("org.postgresql:postgresql:$postgresqlVersion")
 
     // ── Flyway ──────────────────────────────────────────────────────────────
-    // Run programmatically via FlywayConfiguration so the same `ekbatan.sharding.*` block
-    // drives both migrations and Ekbatan's runtime pools.
-    // Quarkus's official Flyway extension — runs migrations at app startup via
-    // `quarkus.flyway.migrate-at-start=true` against the datasource overridden by
-    // `EkbatanShardFlywayCustomizer` to point at the default shard's primaryConfig. The
-    // extension transitively brings flyway-core at Quarkus's BOM-pinned version (12.0.0).
+    // Run migrations via EkbatanShardFlywayMigrator so the same `ekbatan.sharding.*` block
+    // drives both migrations and Ekbatan's runtime pools. quarkus-flyway stays on the
+    // classpath for Flyway/native-image integration.
     implementation("io.quarkus:quarkus-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     // JDBC driver: quarkus-jdbc-postgresql pulls the driver JAR + registers the class

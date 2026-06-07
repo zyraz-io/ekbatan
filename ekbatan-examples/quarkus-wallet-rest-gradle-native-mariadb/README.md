@@ -15,15 +15,15 @@ want a native binary.
 | `EventHandler` | `WalletMoneyDepositedEventHandler` (listen-to-yourself; invokes `CreateNotificationAction`) |
 | `Repository` | `WalletRepository`, `NotificationRepository` |
 | REST (JAX-RS) | `WalletResource` |
-| Flyway migration (CDI) | `FlywayConfiguration` |
+| Flyway migration (CDI) | `EkbatanShardFlywayMigrator` — observes `StartupEvent` with `@Priority(Interceptor.Priority.PLATFORM_BEFORE)` and calls `FlywayMigrator.migrate(shardingConfig)` |
 | Integration test (JVM) | `WalletResourceIntegrationTest` — `./gradlew test` |
 | Integration test (jar / native) | `WalletResourceNativeIT` — `./gradlew quarkusIntTest` |
 
 ## What this project adds on top of the JVM sibling
 
-- **`io.github.zyraz-io:ekbatan-native` dependency** — ships GraalVM Features (Jackson 3 record
-  reflection, jOOQ array-type fix, Flyway resource provider for substrate-VM classpaths, etc.)
-  that auto-apply when native-image runs.
+- **`io.github.zyraz-io:ekbatan-native` dependency** — ships GraalVM Features for Ekbatan runtime
+  metadata (Jackson 3 record reflection, jOOQ array-type fix, HikariCP/JDBC metadata, etc.) that
+  auto-apply when native-image runs.
 - **`src/integrationTest/java` source set with `WalletResourceNativeIT`** — `@QuarkusIntegrationTest`
   drives the packaged binary out-of-process via REST-assured (the native binary runs in its own
   process, so `@Inject` can't bridge the test JVM to the app).

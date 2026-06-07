@@ -1,13 +1,10 @@
 services:
-  # Global shard — ShardIdentifier(group=0, member=0). The example's default shard.
   postgres-global:
     image: postgres:17
     environment:
       POSTGRES_USER: wallet
       POSTGRES_PASSWORD: wallet
       POSTGRES_DB: wallet_global
-      # Pin the server TZ to UTC — the Ekbatan framework writes/reads TIMESTAMP
-      # (without time zone) and assumes UTC at the DB layer.
       TZ: UTC
     ports:
       - "5432:5432"
@@ -17,7 +14,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # Mexico shard — ShardIdentifier(group=1, member=0). A second policy axis (regional residency).
   postgres-mexico:
     image: postgres:17
     environment:

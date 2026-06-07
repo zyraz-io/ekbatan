@@ -1,7 +1,7 @@
 package io.example.wallet.action;
 
 import io.ekbatan.core.action.Action;
-import io.ekbatan.core.domain.Id;
+import io.ekbatan.core.domain.ShardedId;
 import io.ekbatan.di.EkbatanAction;
 import io.example.wallet.model.Wallet;
 import io.example.wallet.repository.WalletRepository;
@@ -11,7 +11,7 @@ import java.time.Clock;
 @EkbatanAction
 public class WalletCloseAction extends Action<WalletCloseAction.Params, Wallet> {
 
-    public record Params(Id<Wallet> walletId) {}
+    public record Params(ShardedId<Wallet> walletId) {}
 
     private final WalletRepository walletRepository;
 

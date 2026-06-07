@@ -1,13 +1,11 @@
 package io.example.wallet.web;
 
 import io.ekbatan.core.action.ActionExecutor;
-import io.ekbatan.core.action.ExecutionConfiguration;
 import io.ekbatan.core.domain.ShardedId;
 import io.ekbatan.core.shard.ShardedUUID;
 import io.example.wallet.action.WalletCloseAction;
 import io.example.wallet.action.WalletCreateAction;
 import io.example.wallet.action.WalletDepositMoneyAction;
-import io.example.wallet.action.WalletTransferAction;
 import io.example.wallet.model.Wallet;
 import io.example.wallet.repository.WalletRepository;
 import java.math.BigDecimal;
@@ -34,12 +32,9 @@ public class WalletController {
         this.walletRepository = walletRepository;
     }
 
-    /** Country code maps to a shard inside {@code WalletCreateAction.resolveShard(...)}. */
     public record CreateRequest(String countryCode, UUID ownerId, String currency, BigDecimal initialBalance) {}
 
-    public record DepositRequest(BigDecimal amount) {}
-
-    public record TransferRequest(UUID fromWalletId, UUID toWalletId, BigDecimal amount) {}
+    public record DepositRequest(BigDecimal amount, String recipient) {}
 
     public record WalletResponse(
             UUID id,
@@ -51,8 +46,6 @@ public class WalletController {
             String state,
             Long version) {
         static WalletResponse from(Wallet w) {
-            // Decode the shard from the wallet's id - useful for the example so callers can see
-            // which physical database the wallet lives on without poking at the DatabaseRegistry.
             final var shard = w.id.resolveShardIdentifier();
             return new WalletResponse(
                     w.id.getValue(),
@@ -84,36 +77,9 @@ public class WalletController {
         final var updated = executor.execute(
                 () -> "rest-user",
                 WalletDepositMoneyAction.class,
-                new WalletDepositMoneyAction.Params(toShardedId(id), body.amount()));
+                new WalletDepositMoneyAction.Params(toShardedId(id), body.amount(), body.recipient()));
         return WalletResponse.from(updated);
     }
-
-    /**
-     * Cross-shard transfer. Opts into {@code allowCrossShard(true)} unconditionally - for two
-     * wallets on the same shard this is a no-op (the executor sees one shard in the plan and
-     * runs it as a regular single-shard action). For two wallets on different shards, the
-     * executor opens two independent transactions and duplicates the {@code eventlog.events}
-     * row to each shard.
-     *
-     * <p>This endpoint is a sharding mechanics demo, not the recommended production pattern for
-     * real money transfers. Use the saga example for transfer workflows that need explicit
-     * compensation when a later step fails.
-     */
-    @PostMapping("/transfers")
-    public TransferResponse transfer(@RequestBody TransferRequest body) throws Exception {
-        final var config = ExecutionConfiguration.Builder.executionConfiguration()
-                .allowCrossShard(true)
-                .build();
-        final var result = executor.execute(
-                () -> "rest-user",
-                WalletTransferAction.class,
-                new WalletTransferAction.Params(
-                        toShardedId(body.fromWalletId()), toShardedId(body.toWalletId()), body.amount()),
-                config);
-        return new TransferResponse(WalletResponse.from(result.fromWallet()), WalletResponse.from(result.toWallet()));
-    }
-
-    public record TransferResponse(WalletResponse from, WalletResponse to) {}
 
     @PostMapping("/{id}/close")
     public WalletResponse close(@PathVariable UUID id) throws Exception {
@@ -131,7 +97,6 @@ public class WalletController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    /** REST callers pass raw UUIDs; the action layer expects type-safe shard-aware ids. */
     private static ShardedId<Wallet> toShardedId(UUID id) {
         return ShardedId.of(Wallet.class, ShardedUUID.from(id));
     }

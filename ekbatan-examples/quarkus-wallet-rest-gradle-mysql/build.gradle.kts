@@ -57,6 +57,7 @@ dependencies {
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:$quarkusVersion"))
 
     implementation("io.github.zyraz-io:ekbatan-quarkus:$ekbatanVersion")
+    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
@@ -68,10 +69,8 @@ dependencies {
     implementation("com.mysql:mysql-connector-j:$mysqlConnectorVersion")
     jooqCodegen("com.mysql:mysql-connector-j:$mysqlConnectorVersion")
 
-    // Quarkus's official Flyway extension — runs migrations at app startup via
-    // `quarkus.flyway.migrate-at-start=true` against the datasource overridden by
-    // `EkbatanShardFlywayCustomizer` to point at the default shard's primaryConfig. The
-    // extension transitively brings flyway-core at Quarkus's BOM-pinned version (12.0.0).
+    // EkbatanShardFlywayMigrator runs Flyway over every shard from ekbatan.sharding.*.
+    // quarkus-flyway stays on the classpath for Flyway/native-image integration.
     implementation("io.quarkus:quarkus-flyway")
     implementation("org.flywaydb:flyway-mysql")
     // JDBC driver: quarkus-jdbc-mysql pulls the driver JAR + registers the class

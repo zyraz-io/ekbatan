@@ -17,7 +17,7 @@ This is the only example currently using MySQL. The other dialects:
 | `EventHandler` | `WalletMoneyDepositedEventHandler` |
 | `Repository` | `WalletRepository`, `NotificationRepository` |
 | REST | `WalletController` |
-| Flyway migration | `FlywayConfiguration` — same `Flyway.configure(...)` call as the Postgres sibling; Flyway picks the dialect from the JDBC URL |
+| Flyway migration | `EkbatanShardFlywayMigrator` — runs `FlywayMigrator.migrate(shardingConfig)` over every configured shard |
 | Integration test | `WalletControllerIntegrationTest` (Testcontainers + Awaitility) |
 
 The framework abstracts the dialect — every Java file is byte-identical to the Postgres sibling. Only the SQL and the build descriptor change.

@@ -1,28 +1,33 @@
 services:
-  mariadb:
+  mariadb-global:
     image: mariadb:11.8
     environment:
-      # MARIADB_USER / MARIADB_PASSWORD create a non-root user with rights ONLY on
-      # MARIADB_DATABASE. The framework's eventlog lives in a separate database, so the
-      # connecting user needs cross-database GRANTs — set up by mariadb_init.sql below,
-      # which runs as root before the container becomes ready.
       MARIADB_ROOT_PASSWORD: root
       MARIADB_USER: wallet
       MARIADB_PASSWORD: wallet
       MARIADB_DATABASE: wallet
       TZ: UTC
     ports:
-      # Fixed mapping so the hard-coded jdbc:mariadb://localhost:3306/... in
-      # application.yml matches. Micronaut has no docker-compose auto-startup integration
-      # (unlike Spring Boot's spring-boot-docker-compose), so the container is started
-      # manually before `./mvnw mn:run`.
       - "3306:3306"
     volumes:
-      # Mount the init script into the container's first-time-init directory. The official
-      # MariaDB image runs every *.sql in /docker-entrypoint-initdb.d AS ROOT before the
-      # server becomes ready — so this is where the GRANT statement lives. The script runs
-      # once per data volume; `docker compose down -v` removes the volume if you need to
-      # re-grant.
+      - "./src/main/resources/mariadb_init.sql:/docker-entrypoint-initdb.d/mariadb_init.sql:ro"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+
+  mariadb-mexico:
+    image: mariadb:11.8
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_USER: wallet
+      MARIADB_PASSWORD: wallet
+      MARIADB_DATABASE: wallet
+      TZ: UTC
+    ports:
+      - "3307:3306"
+    volumes:
       - "./src/main/resources/mariadb_init.sql:/docker-entrypoint-initdb.d/mariadb_init.sql:ro"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]

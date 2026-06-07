@@ -40,6 +40,7 @@ dependencies {
 
     // ── Ekbatan ─────────────────────────────────────────────────────────────
     implementation("io.github.zyraz-io:ekbatan-quarkus:$ekbatanVersion")
+    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
@@ -61,8 +62,7 @@ dependencies {
     jooqCodegen("org.postgresql:postgresql:$postgresqlVersion")
 
     // ── Flyway ──────────────────────────────────────────────────────────────
-    // Dialect-specific Flyway support. quarkus-flyway runs startup migrations against
-    // the datasource overridden by EkbatanShardFlywayCustomizer.
+    // Dialect-specific Flyway support used by EkbatanShardFlywayMigrator.
     implementation("org.flywaydb:flyway-database-postgresql")
 
     // ── Tests ───────────────────────────────────────────────────────────────
@@ -71,9 +71,8 @@ dependencies {
     // above; this Quarkus extension only adds the native-image hint plumbing (a build step
     // that calls RuntimeReflection.register on the driver) — no behavioural change in JVM.
     implementation("io.quarkus:quarkus-jdbc-postgresql")
-    // Quarkus's official Flyway extension — runs migrations at app startup via
-    // `quarkus.flyway.migrate-at-start=true` against the datasource overridden by
-    // `EkbatanShardFlywayCustomizer` to point at the default shard's primaryConfig.
+    // EkbatanShardFlywayMigrator runs Flyway over every shard from ekbatan.sharding.*.
+    // quarkus-flyway stays on the classpath for Flyway/native-image integration.
     implementation("io.quarkus:quarkus-flyway")
     testImplementation("io.quarkus:quarkus-junit5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -132,6 +131,10 @@ tasks {
         useJUnitPlatform()
         // Quarkus uses jboss-logmanager — telling JUL to delegate to it keeps test logs sane.
         systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
+    }
+
+    named<Test>("test") {
+        failOnNoDiscoveredTests = false
     }
 }
 

@@ -1,15 +1,14 @@
 package io.example.wallet.web;
 
 import io.ekbatan.core.action.ActionExecutor;
-import io.ekbatan.core.concurrent.KeyedLockProvider;
-import io.ekbatan.core.domain.Id;
+import io.ekbatan.core.domain.ShardedId;
+import io.ekbatan.core.shard.ShardedUUID;
 import io.example.wallet.action.WalletCloseAction;
 import io.example.wallet.action.WalletCreateAction;
 import io.example.wallet.action.WalletDepositMoneyAction;
 import io.example.wallet.model.Wallet;
 import io.example.wallet.repository.WalletRepository;
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.util.Currency;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -25,29 +24,38 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/wallets")
 public class WalletController {
 
-    /** Auto-release safety net for held leases. Real workloads pick this from the SLA they want. */
-    private static final Duration LOCK_MAX_HOLD = Duration.ofSeconds(10);
-
     private final ActionExecutor executor;
     private final WalletRepository walletRepository;
-    private final KeyedLockProvider lockProvider;
 
-    public WalletController(
-            ActionExecutor executor, WalletRepository walletRepository, KeyedLockProvider lockProvider) {
+    public WalletController(ActionExecutor executor, WalletRepository walletRepository) {
         this.executor = executor;
         this.walletRepository = walletRepository;
-        this.lockProvider = lockProvider;
     }
 
-    public record CreateRequest(UUID ownerId, String currency, BigDecimal initialBalance) {}
+    public record CreateRequest(String countryCode, UUID ownerId, String currency, BigDecimal initialBalance) {}
 
     public record DepositRequest(BigDecimal amount, String recipient) {}
 
     public record WalletResponse(
-            UUID id, UUID ownerId, String currency, BigDecimal balance, String state, Long version) {
+            UUID id,
+            int shardGroup,
+            int shardMember,
+            UUID ownerId,
+            String currency,
+            BigDecimal balance,
+            String state,
+            Long version) {
         static WalletResponse from(Wallet w) {
+            final var shard = w.id.resolveShardIdentifier();
             return new WalletResponse(
-                    w.id.getValue(), w.ownerId, w.currency.getCurrencyCode(), w.balance, w.state.name(), w.version);
+                    w.id.getValue(),
+                    shard.group,
+                    shard.member,
+                    w.ownerId,
+                    w.currency.getCurrencyCode(),
+                    w.balance,
+                    w.state.name(),
+                    w.version);
         }
     }
 
@@ -57,7 +65,10 @@ public class WalletController {
                 () -> "rest-user",
                 WalletCreateAction.class,
                 new WalletCreateAction.Params(
-                        body.ownerId(), Currency.getInstance(body.currency()), body.initialBalance()));
+                        body.countryCode(),
+                        body.ownerId(),
+                        Currency.getInstance(body.currency()),
+                        body.initialBalance()));
         return ResponseEntity.status(HttpStatus.CREATED).body(WalletResponse.from(wallet));
     }
 
@@ -66,14 +77,14 @@ public class WalletController {
         final var updated = executor.execute(
                 () -> "rest-user",
                 WalletDepositMoneyAction.class,
-                new WalletDepositMoneyAction.Params(Id.of(Wallet.class, id), body.amount(), body.recipient()));
+                new WalletDepositMoneyAction.Params(toShardedId(id), body.amount(), body.recipient()));
         return WalletResponse.from(updated);
     }
 
     @PostMapping("/{id}/close")
     public WalletResponse close(@PathVariable UUID id) throws Exception {
         final var closed = executor.execute(
-                () -> "rest-user", WalletCloseAction.class, new WalletCloseAction.Params(Id.of(Wallet.class, id)));
+                () -> "rest-user", WalletCloseAction.class, new WalletCloseAction.Params(toShardedId(id)));
         return WalletResponse.from(closed);
     }
 
@@ -84,5 +95,9 @@ public class WalletController {
                 .map(WalletResponse::from)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    private static ShardedId<Wallet> toShardedId(UUID id) {
+        return ShardedId.of(Wallet.class, ShardedUUID.from(id));
     }
 }

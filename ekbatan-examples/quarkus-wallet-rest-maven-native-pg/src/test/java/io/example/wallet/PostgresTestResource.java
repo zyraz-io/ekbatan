@@ -5,73 +5,97 @@ import java.util.HashMap;
 import java.util.Map;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-/**
- * Brings up a Testcontainers Postgres for the Quarkus integration test and publishes the
- * connection coordinates as runtime SmallRye Config properties. Two parallel coordinate
- * sets are exported:
- *
- * <ul>
- *   <li>{@code ekbatan.sharding.*} - consumed by Ekbatan's producer to build its
- *       sharding-aware {@code ConnectionProvider} used for runtime queries.</li>
- *   <li>{@code quarkus.datasource.*} - consumed by the {@code quarkus-flyway} extension
- *       (and its short-lived migration-time Hikari pool). The extension runs Flyway
- *       migrations against this datasource at app startup. Ekbatan never reads from it.</li>
- * </ul>
- *
- * <p>The two pools point at the same Postgres testcontainer; quarkus-flyway closes its
- * pool after migrations finish, leaving ekbatan's pool as the only one in use at runtime.
- *
- * <p>{@link QuarkusTestResourceLifecycleManager#start()} fires before the Quarkus app
- * context is built, so by the time {@code quarkus-flyway} runs migrations at app startup,
- * the testcontainer is up and the properties published below are visible to SmallRye Config.
- */
+/** Starts two database containers and publishes Ekbatan sharding properties for tests. */
 public class PostgresTestResource implements QuarkusTestResourceLifecycleManager {
 
-    private final PostgreSQLContainer container = new PostgreSQLContainer("postgres:17")
-            .withDatabaseName("wallet")
+    private final PostgreSQLContainer global = new PostgreSQLContainer("postgres:17")
+            .withDatabaseName("wallet_global")
+            .withUsername("wallet")
+            .withPassword("wallet")
+            .withEnv("TZ", "UTC");
+
+    private final PostgreSQLContainer mexico = new PostgreSQLContainer("postgres:17")
+            .withDatabaseName("wallet_mexico")
             .withUsername("wallet")
             .withPassword("wallet")
             .withEnv("TZ", "UTC");
 
     @Override
     public Map<String, String> start() {
-        container.start();
+        global.start();
+        mexico.start();
+
+        System.setProperty("wallet.test.notification.jdbc-url", global.getJdbcUrl());
+        System.setProperty("wallet.test.notification.username", global.getUsername());
+        System.setProperty("wallet.test.notification.password", global.getPassword());
 
         var props = new HashMap<String, String>();
         props.put("ekbatan.namespace", "test.wallet");
-
-        // Sharding - single shard pointing at the Testcontainers Postgres.
         props.put("ekbatan.sharding.defaultShard.group", "0");
         props.put("ekbatan.sharding.defaultShard.member", "0");
         props.put("ekbatan.sharding.groups[0].group", "0");
-        props.put("ekbatan.sharding.groups[0].name", "default");
+        props.put("ekbatan.sharding.groups[0].name", "global");
         props.put("ekbatan.sharding.groups[0].members[0].member", "0");
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl", container.getJdbcUrl());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username", container.getUsername());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password", container.getPassword());
-        props.put(
-                "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.driverClassName", "org.postgresql.Driver");
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize", "5");
-
-        // jobsConfig - scheduler shares the same DB for this example.
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl", container.getJdbcUrl());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username", container.getUsername());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password", container.getPassword());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.driverClassName", "org.postgresql.Driver");
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize", "4");
-
-        // Tighten poll intervals so the test doesn't sit idle waiting for the listen-to-yourself
-        // dispatch to drain.
+        props.put("ekbatan.sharding.groups[0].members[0].name", "global");
+        registerShard(
+                props,
+                "ekbatan.sharding.groups[0].members[0]",
+                global.getJdbcUrl(),
+                global.getUsername(),
+                global.getPassword(),
+                "org.postgresql.Driver");
+        props.put("ekbatan.sharding.groups[1].group", "1");
+        props.put("ekbatan.sharding.groups[1].name", "mexico");
+        props.put("ekbatan.sharding.groups[1].members[0].member", "0");
+        props.put("ekbatan.sharding.groups[1].members[0].name", "mexico");
+        registerShard(
+                props,
+                "ekbatan.sharding.groups[1].members[0]",
+                mexico.getJdbcUrl(),
+                mexico.getUsername(),
+                mexico.getPassword(),
+                "org.postgresql.Driver");
         props.put("ekbatan.local-event-handler.fanout-poll-delay", "PT0.2S");
         props.put("ekbatan.local-event-handler.handling-poll-delay", "PT0.2S");
         props.put("ekbatan.jobs.polling-interval", "PT1S");
         props.put("ekbatan.jobs.shutdown-max-wait", "PT5S");
-
         return props;
     }
 
     @Override
     public void stop() {
-        container.stop();
+        System.clearProperty("wallet.test.notification.jdbc-url");
+        System.clearProperty("wallet.test.notification.username");
+        System.clearProperty("wallet.test.notification.password");
+        mexico.stop();
+        global.stop();
+    }
+
+    private static void registerShard(
+            Map<String, String> props,
+            String prefix,
+            String jdbcUrl,
+            String username,
+            String password,
+            String driverClassName) {
+        addDataSource(props, prefix + ".configs.primaryConfig", jdbcUrl, username, password, driverClassName, "5");
+        addDataSource(props, prefix + ".configs.jobsConfig", jdbcUrl, username, password, driverClassName, "4");
+        addDataSource(props, prefix + ".configs.lockConfig", jdbcUrl, username, password, driverClassName, "15");
+        props.put(prefix + ".configs.lockConfig.leakDetectionThreshold", "0");
+    }
+
+    private static void addDataSource(
+            Map<String, String> props,
+            String prefix,
+            String jdbcUrl,
+            String username,
+            String password,
+            String driverClassName,
+            String maximumPoolSize) {
+        props.put(prefix + ".jdbcUrl", jdbcUrl);
+        props.put(prefix + ".username", username);
+        props.put(prefix + ".password", password);
+        props.put(prefix + ".driverClassName", driverClassName);
+        props.put(prefix + ".maximumPoolSize", maximumPoolSize);
     }
 }

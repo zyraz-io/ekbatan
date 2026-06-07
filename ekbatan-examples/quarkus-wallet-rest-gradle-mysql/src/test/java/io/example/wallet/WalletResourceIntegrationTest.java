@@ -6,8 +6,10 @@ import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 
+import io.ekbatan.core.shard.ShardIdentifier;
 import io.example.wallet.model.NotificationKind;
 import io.example.wallet.repository.NotificationRepository;
+import io.example.wallet.repository.WalletRepository;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -16,48 +18,50 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/**
- * In-process integration test for the wallet REST endpoints.
- *
- * <p>{@link MySQLTestResource} brings up the MySQL testcontainer and publishes
- * connection coordinates as runtime SmallRye Config properties before the Quarkus app boots;
- * the {@code quarkus-flyway} extension then runs migrations at app startup against the
- * datasource overridden by {@code EkbatanShardFlywayCustomizer} (which points at the
- * default shard's {@code primaryConfig} - single source of truth for connection coordinates).
- *
- * <p>Companion to {@code WalletResourceNativeIT} in {@code src/integrationTest}, which
- * runs the same REST flow against the packaged JAR (or native binary), out-of-process.
- * This test additionally asserts internal state via {@code @Inject NotificationRepository}
- * to verify the listen-to-yourself fan-out wrote a notification row - something the
- * out-of-process IT can't see.
- */
 @QuarkusTest
 @QuarkusTestResource(value = MySQLTestResource.class, restrictToAnnotatedClass = true)
 class WalletResourceIntegrationTest {
+
+    private static final ShardIdentifier GLOBAL_SHARD = ShardIdentifier.of(0, 0);
+    private static final ShardIdentifier MEXICO_SHARD = ShardIdentifier.of(1, 0);
+
+    @Inject
+    WalletRepository walletRepository;
 
     @Inject
     NotificationRepository notificationRepository;
 
     @Test
-    void deposit_emits_event_and_handler_creates_notification() {
-        // GIVEN - a freshly created wallet
-        final var ownerId = UUID.randomUUID();
-        final var walletId = UUID.fromString(given().contentType("application/json")
-                .body(Map.of(
-                        "ownerId", ownerId.toString(),
-                        "currency", "USD",
-                        "initialBalance", "0.00"))
-                .when()
-                .post("/wallets")
-                .then()
-                .statusCode(201)
-                .body("ownerId", equalTo(ownerId.toString()))
-                .body("state", equalTo("OPENED"))
-                .body("id", notNullValue())
-                .extract()
-                .path("id"));
+    void separate_wallets_route_to_their_own_shards() {
+        final var globalId = createWallet("US", "USD", "10.00", 0);
+        final var mexicoId = createWallet("MX", "MXN", "20.00", 1);
 
-        // WHEN - deposit $100 with a notification recipient
+        given().contentType("application/json")
+                .body(Map.of("amount", "5.00", "recipient", "global@example.com"))
+                .when()
+                .post("/wallets/" + globalId + "/deposits")
+                .then()
+                .statusCode(200)
+                .body("balance", equalTo(15.00f));
+
+        given().contentType("application/json")
+                .body(Map.of("amount", "7.00", "recipient", "mexico@example.com"))
+                .when()
+                .post("/wallets/" + mexicoId + "/deposits")
+                .then()
+                .statusCode(200)
+                .body("balance", equalTo(27.00f));
+
+        assertThat(walletRepository.existsOnShard(GLOBAL_SHARD, globalId)).isTrue();
+        assertThat(walletRepository.existsOnShard(MEXICO_SHARD, globalId)).isFalse();
+        assertThat(walletRepository.existsOnShard(MEXICO_SHARD, mexicoId)).isTrue();
+        assertThat(walletRepository.existsOnShard(GLOBAL_SHARD, mexicoId)).isFalse();
+    }
+
+    @Test
+    void deposit_emits_event_and_handler_creates_notification() {
+        final var walletId = createWallet("US", "USD", "0.00", 0);
+
         given().contentType("application/json")
                 .body(Map.of("amount", "100.00", "recipient", "alice@example.com"))
                 .when()
@@ -66,11 +70,6 @@ class WalletResourceIntegrationTest {
                 .statusCode(200)
                 .body("balance", equalTo(100.00f));
 
-        // THEN - GET returns the updated balance
-        given().when().get("/wallets/" + walletId).then().statusCode(200).body("balance", equalTo(100.00f));
-
-        // AND - the listen-to-yourself handler eventually creates the Notification row.
-        // The fan-out + handling jobs poll asynchronously, so we wait until the row appears.
         await().atMost(Duration.ofSeconds(15))
                 .pollInterval(Duration.ofMillis(200))
                 .untilAsserted(() -> {
@@ -84,28 +83,33 @@ class WalletResourceIntegrationTest {
 
     @Test
     void close_transitions_wallet_to_closed_state() {
-        // GIVEN - a freshly created wallet
-        final var ownerId = UUID.randomUUID();
-        final var walletId = UUID.fromString(given().contentType("application/json")
-                .body(Map.of(
-                        "ownerId", ownerId.toString(),
-                        "currency", "EUR",
-                        "initialBalance", "0.00"))
-                .when()
-                .post("/wallets")
-                .then()
-                .statusCode(201)
-                .extract()
-                .path("id"));
+        final var walletId = createWallet("US", "EUR", "0.00", 0);
 
-        // WHEN
         given().contentType("application/json")
                 .when()
                 .post("/wallets/" + walletId + "/close")
                 .then()
                 .statusCode(200);
 
-        // THEN
         given().when().get("/wallets/" + walletId).then().statusCode(200).body("state", equalTo("CLOSED"));
+    }
+
+    private static UUID createWallet(String countryCode, String currency, String initialBalance, int expectedGroup) {
+        return UUID.fromString(given().contentType("application/json")
+                .body(Map.of(
+                        "countryCode", countryCode,
+                        "ownerId", UUID.randomUUID().toString(),
+                        "currency", currency,
+                        "initialBalance", initialBalance))
+                .when()
+                .post("/wallets")
+                .then()
+                .statusCode(201)
+                .body("state", equalTo("OPENED"))
+                .body("id", notNullValue())
+                .body("shardGroup", equalTo(expectedGroup))
+                .body("shardMember", equalTo(0))
+                .extract()
+                .path("id"));
     }
 }

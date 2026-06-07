@@ -118,7 +118,7 @@ Drop a `compose.yaml` in the project root. `docker compose up -d wallet-db` and 
 </div>
 ## 3. Add dependencies
 
-Add the framework, your JDBC driver, and the framework-native Flyway extension.
+Add Ekbatan, `ekbatan-flyway`, your JDBC driver, and your stack's Flyway integration.
 
 <div data-stack="spring" data-build="gradle" data-db="pg">
 
@@ -127,6 +127,7 @@ extra["jooq.version"] = "3.20.10"
 
 dependencies {
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
 
@@ -145,6 +146,7 @@ extra["jooq.version"] = "3.20.10"
 
 dependencies {
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
 
@@ -153,7 +155,7 @@ dependencies {
     implementation("org.mariadb.jdbc:mariadb-java-client")
 
     jooqCodegen("org.mariadb.jdbc:mariadb-java-client")  // see "(6) jOOQ codegen needs its own classpath" below
-    jooqCodegen("org.flywaydb:flyway-mysql:11.20.0")     // (6) flyway-mysql also covers MariaDB
+    jooqCodegen("org.flywaydb:flyway-mysql:12.0.0")      // (6) flyway-mysql also covers MariaDB
 }`} />
 
 </div>
@@ -164,6 +166,7 @@ extra["jooq.version"] = "3.20.10"
 
 dependencies {
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
 
@@ -172,7 +175,7 @@ dependencies {
     implementation("com.mysql:mysql-connector-j")
 
     jooqCodegen("com.mysql:mysql-connector-j")           // see "(6) jOOQ codegen needs its own classpath" below
-    jooqCodegen("org.flywaydb:flyway-mysql:11.20.0")     // (6) flyway-mysql is required for MySQL too
+    jooqCodegen("org.flywaydb:flyway-mysql:12.0.0")      // (6) flyway-mysql is required for MySQL too
 }`} />
 
 </div>
@@ -185,6 +188,11 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-spring-boot-starter</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
     <version>0.1.2</version>
 </dependency>
 <dependency>
@@ -221,6 +229,11 @@ dependencies {
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.1.2</version>
     <scope>provided</scope>
@@ -253,6 +266,11 @@ dependencies {
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.1.2</version>
     <scope>provided</scope>
@@ -279,6 +297,7 @@ extra["jooq.version"] = "3.20.10"
 
 dependencies {
     implementation("io.github.zyraz-io:ekbatan-quarkus:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
 
@@ -297,6 +316,7 @@ extra["jooq.version"] = "3.20.10"
 
 dependencies {
     implementation("io.github.zyraz-io:ekbatan-quarkus:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
 
@@ -305,7 +325,7 @@ dependencies {
     implementation("org.flywaydb:flyway-mysql")          // (7) Flyway 10+ needs the dialect module; flyway-mysql also covers MariaDB
 
     jooqCodegen("org.mariadb.jdbc:mariadb-java-client")  // see "(6) jOOQ codegen needs its own classpath" below
-    jooqCodegen("org.flywaydb:flyway-mysql:11.20.0")     // (6) flyway-mysql also covers MariaDB
+    jooqCodegen("org.flywaydb:flyway-mysql:12.0.0")      // (6) flyway-mysql also covers MariaDB
 }`} />
 
 </div>
@@ -316,6 +336,7 @@ extra["jooq.version"] = "3.20.10"
 
 dependencies {
     implementation("io.github.zyraz-io:ekbatan-quarkus:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
 
@@ -324,7 +345,7 @@ dependencies {
     implementation("org.flywaydb:flyway-mysql")          // (7) Flyway 10+ needs the dialect module
 
     jooqCodegen("com.mysql:mysql-connector-j")           // see "(6) jOOQ codegen needs its own classpath" below
-    jooqCodegen("org.flywaydb:flyway-mysql:11.20.0")     // (6) flyway-mysql is required for MySQL too
+    jooqCodegen("org.flywaydb:flyway-mysql:12.0.0")      // (6) flyway-mysql is required for MySQL too
 }`} />
 
 </div>
@@ -337,6 +358,11 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-quarkus</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
     <version>0.1.2</version>
 </dependency>
 <dependency>
@@ -373,6 +399,11 @@ dependencies {
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.1.2</version>
     <scope>provided</scope>
@@ -405,6 +436,11 @@ dependencies {
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.1.2</version>
     <scope>provided</scope>
@@ -428,6 +464,7 @@ dependencies {
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-micronaut:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.1.2")  // CRITICAL — see "(5) Micronaut needs the AP line"
@@ -445,6 +482,7 @@ dependencies {
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-micronaut:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.1.2")  // CRITICAL — see "(5) Micronaut needs the AP line"
@@ -455,7 +493,7 @@ dependencies {
     runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
 
     jooqCodegen("org.mariadb.jdbc:mariadb-java-client")  // see "(6) jOOQ codegen needs its own classpath" below
-    jooqCodegen("org.flywaydb:flyway-mysql:11.20.0")     // (6) flyway-mysql also covers MariaDB
+    jooqCodegen("org.flywaydb:flyway-mysql:12.0.0")      // (6) flyway-mysql also covers MariaDB
 }`} />
 
 </div>
@@ -463,6 +501,7 @@ dependencies {
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-micronaut:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.1.2")  // CRITICAL — see "(5) Micronaut needs the AP line"
@@ -473,7 +512,7 @@ dependencies {
     runtimeOnly("com.mysql:mysql-connector-j")
 
     jooqCodegen("com.mysql:mysql-connector-j")           // see "(6) jOOQ codegen needs its own classpath" below
-    jooqCodegen("org.flywaydb:flyway-mysql:11.20.0")     // (6) flyway-mysql is required for MySQL too
+    jooqCodegen("org.flywaydb:flyway-mysql:12.0.0")      // (6) flyway-mysql is required for MySQL too
 }`} />
 
 </div>
@@ -483,6 +522,11 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-micronaut</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
     <version>0.1.2</version>
 </dependency>
 <dependency>
@@ -521,6 +565,11 @@ dependencies {
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.1.2</version>
     <scope>provided</scope>
@@ -555,6 +604,11 @@ dependencies {
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.1.2</version>
     <scope>provided</scope>
@@ -583,11 +637,12 @@ dependencies {
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-core:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
 
-    implementation("org.flywaydb:flyway-core:11.0.0")
-    implementation("org.flywaydb:flyway-database-postgresql:11.0.0")  // (7) Flyway 10+ needs the per-dialect module
+    implementation("org.flywaydb:flyway-core:12.0.0")
+    implementation("org.flywaydb:flyway-database-postgresql:12.0.0")  // (7) Flyway 10+ needs the per-dialect module
     implementation("org.postgresql:postgresql:42.7.4")
 
     jooqCodegen("org.postgresql:postgresql:42.7.4")  // see "(6) jOOQ codegen needs its own classpath" below
@@ -598,15 +653,16 @@ dependencies {
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-core:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
 
-    implementation("org.flywaydb:flyway-core:11.0.0")
-    implementation("org.flywaydb:flyway-mysql:11.0.0")  // (7) Flyway 10+ needs the dialect module; flyway-mysql also covers MariaDB
+    implementation("org.flywaydb:flyway-core:12.0.0")
+    implementation("org.flywaydb:flyway-mysql:12.0.0")  // (7) Flyway 10+ needs the dialect module; flyway-mysql also covers MariaDB
     implementation("org.mariadb.jdbc:mariadb-java-client:3.4.1")
 
     jooqCodegen("org.mariadb.jdbc:mariadb-java-client:3.4.1")  // see "(6) jOOQ codegen needs its own classpath" below
-    jooqCodegen("org.flywaydb:flyway-mysql:11.20.0")           // (6) flyway-mysql also covers MariaDB
+    jooqCodegen("org.flywaydb:flyway-mysql:12.0.0")            // (6) flyway-mysql also covers MariaDB
 }`} />
 
 </div>
@@ -614,15 +670,16 @@ dependencies {
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
     implementation("io.github.zyraz-io:ekbatan-core:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
 
-    implementation("org.flywaydb:flyway-core:11.0.0")
-    implementation("org.flywaydb:flyway-mysql:11.0.0")  // (7) Flyway 10+ needs the dialect module
+    implementation("org.flywaydb:flyway-core:12.0.0")
+    implementation("org.flywaydb:flyway-mysql:12.0.0")  // (7) Flyway 10+ needs the dialect module
     implementation("com.mysql:mysql-connector-j:9.1.0")
 
     jooqCodegen("com.mysql:mysql-connector-j:9.1.0")  // see "(6) jOOQ codegen needs its own classpath" below
-    jooqCodegen("org.flywaydb:flyway-mysql:11.20.0")  // (6) flyway-mysql is required for MySQL too
+    jooqCodegen("org.flywaydb:flyway-mysql:12.0.0")   // (6) flyway-mysql is required for MySQL too
 }`} />
 
 </div>
@@ -636,6 +693,11 @@ dependencies {
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.1.2</version>
     <scope>provided</scope>
@@ -643,13 +705,13 @@ dependencies {
 <dependency>
     <groupId>org.flywaydb</groupId>
     <artifactId>flyway-core</artifactId>
-    <version>11.0.0</version>
+    <version>12.0.0</version>
 </dependency>
 <!-- (7) Flyway 10+ needs the per-dialect module on the runtime classpath. -->
 <dependency>
     <groupId>org.flywaydb</groupId>
     <artifactId>flyway-database-postgresql</artifactId>
-    <version>11.0.0</version>
+    <version>12.0.0</version>
 </dependency>
 <dependency>
     <groupId>org.postgresql</groupId>
@@ -668,6 +730,11 @@ dependencies {
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.1.2</version>
     <scope>provided</scope>
@@ -675,13 +742,13 @@ dependencies {
 <dependency>
     <groupId>org.flywaydb</groupId>
     <artifactId>flyway-core</artifactId>
-    <version>11.0.0</version>
+    <version>12.0.0</version>
 </dependency>
 <!-- (7) Flyway 10+ needs the dialect module; flyway-mysql also covers MariaDB. -->
 <dependency>
     <groupId>org.flywaydb</groupId>
     <artifactId>flyway-mysql</artifactId>
-    <version>11.0.0</version>
+    <version>12.0.0</version>
 </dependency>
 <dependency>
     <groupId>org.mariadb.jdbc</groupId>
@@ -700,6 +767,11 @@ dependencies {
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>0.1.2</version>
+</dependency>
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
     <version>0.1.2</version>
     <scope>provided</scope>
@@ -707,13 +779,13 @@ dependencies {
 <dependency>
     <groupId>org.flywaydb</groupId>
     <artifactId>flyway-core</artifactId>
-    <version>11.0.0</version>
+    <version>12.0.0</version>
 </dependency>
 <!-- (7) Flyway 10+ needs the dialect module. -->
 <dependency>
     <groupId>org.flywaydb</groupId>
     <artifactId>flyway-mysql</artifactId>
-    <version>11.0.0</version>
+    <version>12.0.0</version>
 </dependency>
 <dependency>
     <groupId>com.mysql</groupId>
@@ -759,7 +831,7 @@ dependencies {
 
 </div>
 
-**(7) Flyway needs the per-dialect module at runtime.** Flyway 10+ split dialect support out of `flyway-core` into separate modules. `spring-boot-starter-flyway`, `quarkus-flyway`, `micronaut-flyway`, and `flyway-core` itself bring the core engine, but the engine cannot recognize any concrete database without an explicit dialect module on the classpath. For PostgreSQL that module is `flyway-database-postgresql`. For MariaDB and MySQL it is `flyway-mysql` (the artifact name is historical — it covers both dialects). Without it, the app starts up successfully through Hikari pool initialization and then dies with `FlywayException: Unsupported Database: PostgreSQL <version>` (or the corresponding MariaDB / MySQL message) when `FlywayInitializer` tries to migrate. The error surfaces at the first boot, not at compile.
+**(7) Flyway needs the per-dialect module at runtime.** Flyway 10+ split dialect support out of `flyway-core` into separate modules. `spring-boot-starter-flyway`, `quarkus-flyway`, `micronaut-flyway`, and `flyway-core` itself bring the core engine, but the engine cannot recognize any concrete database without an explicit dialect module on the classpath. For PostgreSQL that module is `flyway-database-postgresql`. For MariaDB and MySQL it is `flyway-mysql` (the artifact name is historical — it covers both dialects). Without it, the app starts up successfully through Hikari pool initialization and then dies with `FlywayException: Unsupported Database: PostgreSQL <version>` (or the corresponding MariaDB / MySQL message) when the startup migrator calls Flyway. The error surfaces at the first boot, not at compile.
 
 ## 4. Sneak peek — a Model and a Repository
 
@@ -1023,7 +1095,7 @@ The repository references `WALLETS`, `Wallets`, and `WalletsRecord` — jOOQ-gen
 
 ## 5. Add a Flyway migration
 
-Flyway runs every `V*.sql` in `src/main/resources/db/migration/` on first boot — in numeric order — and the jOOQ codegen plugin (step 6) replays them against a throwaway container to discover the schema. **Ekbatan does NOT bundle V0001/V0002 inside its jars** — you write them, or copy verbatim from any `ekbatan-examples/*-{pg,mariadb,mysql}/src/main/resources/db/migration/`.
+At startup, the small migrator class later in this guide calls Flyway for every `V*.sql` in `src/main/resources/db/migration/` — in numeric order — and the jOOQ codegen plugin (step 6) replays the same migrations against a throwaway container to discover the schema. **Ekbatan does NOT bundle V0001/V0002 inside its jars** — you write them, or copy verbatim from any `ekbatan-examples/*-{pg,mariadb,mysql}/src/main/resources/db/migration/`.
 
 Where the framework's outbox tables live differs by dialect. **PostgreSQL** has true schemas inside a database, so V0001 just does `CREATE SCHEMA eventlog` at the top — no separate database-creation migration is needed. **MariaDB and MySQL** treat "schema" and "database" as synonyms, so the `eventlog` namespace must be its own database, created by `V0000__create_eventlog_database.sql` *before* V0001 writes into it.
 
@@ -1383,7 +1455,7 @@ CREATE INDEX wallets_owner_id ON wallets (owner_id);`} />
 
 </div>
 
-On first boot Flyway runs them in order: V0000 (MariaDB/MySQL only) → V0001 (eventlog) → V0002 (scheduled_tasks) → V0003 (wallets). The same set is what jOOQ codegen (step 6) reads against its throwaway container — so what your code references and what the database has are guaranteed to match.
+At startup, the migrator calls Flyway and runs them in order: V0000 (MariaDB/MySQL only) → V0001 (eventlog) → V0002 (scheduled_tasks) → V0003 (wallets). The same set is what jOOQ codegen (step 6) reads against its throwaway container — so what your code references and what the database has are guaranteed to match.
 ## 6. Wire jOOQ codegen
 
 Every repository references generated classes (the `WALLETS` constant, the `WalletsRecord` POJO, the `Wallets` table type). jOOQ generates them at build time by reading a real DB schema.
@@ -2152,11 +2224,17 @@ The framework reads connection coordinates from `ekbatan.sharding.*`. Each shard
 
 > **Casing.** The snippets below use **kebab-case** -- the canonical convention for Spring, Quarkus, and Micronaut. Ekbatan also accepts **camelCase** (`jdbc-url` / `jdbcUrl`, `default-shard` / `defaultShard`, `primary-config` / `primaryConfig`, `jobs-config` / `jobsConfig`, `lock-config` / `lockConfig`) and you can mix the two within a single file; keys are normalised to a canonical form before binding. Whichever style you write, the Java code that reads user-defined datasource slots uses the camelCase form internally: `member.configFor("jobsConfig")` and `member.configFor("lockConfig")`, not `jobs-config` or `lock-config`. The local-event-handler config follows the same rule: `local-event-handler` / `localEventHandler`, `fanout-poll-delay` / `fanoutPollDelay`, `handling-poll-delay` / `handlingPollDelay`, etc.
 
-Note what's **NOT** here: no `spring.datasource.*`, no `datasources.default`, no `quarkus.datasource.jdbc.url`. The framework owns its pools directly; your stack's datasource auto-config is intentionally **not used** -- so Flyway and Ekbatan don't argue over connection coords. Step 10 bridges Flyway to the same `ekbatan.sharding.*` block.
+Note what's **NOT** here: no `spring.datasource.*`, no `datasources.default`, no `quarkus.datasource.*`. The framework owns its pools directly; your stack's datasource auto-config is intentionally **not used** -- so Flyway and Ekbatan don't argue over connection coords. Step 9 runs Flyway from the same `ekbatan.sharding.*` block.
 
 <div data-stack="spring" data-db="pg">
 
-<CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="orange" code={`ekbatan:
+<CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="orange" code={`spring:
+  autoconfigure:
+    exclude: org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+  flyway:
+    enabled: false
+
+ekbatan:
     namespace: example.wallet
     sharding:
       default-shard:
@@ -2197,6 +2275,12 @@ Note what's **NOT** here: no `spring.datasource.*`, no `datasources.default`, no
 <div data-stack="spring" data-db="mariadb">
 
 <CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="yellow" code={`
+  spring:
+    autoconfigure:
+      exclude: org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+    flyway:
+      enabled: false
+
   ekbatan:
     namespace: example.wallet
     sharding:
@@ -2238,6 +2322,12 @@ Note what's **NOT** here: no `spring.datasource.*`, no `datasources.default`, no
 <div data-stack="spring" data-db="mysql">
 
 <CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="orange" code={`
+  spring:
+    autoconfigure:
+      exclude: org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+    flyway:
+      enabled: false
+
   ekbatan:
     namespace: example.wallet
     sharding:
@@ -2309,10 +2399,7 @@ ekbatan.sharding.groups[0].members[0].configs.lock-config.driver-class-name=org.
 ekbatan.sharding.groups[0].members[0].configs.lock-config.maximum-pool-size=30
 ekbatan.sharding.groups[0].members[0].configs.lock-config.leak-detection-threshold=0
 
-# Quarkus needs db-kind to bind a Flyway bean. URL/user/pass are intentionally NOT set —
-# EkbatanShardFlywayCustomizer (step 9) overrides them from ekbatan.sharding.* at startup.
-quarkus.datasource.db-kind=postgresql
-quarkus.flyway.migrate-at-start=true`} />
+`} />
 
 </div>
 <div data-stack="quarkus" data-db="mariadb">
@@ -2346,10 +2433,7 @@ ekbatan.sharding.groups[0].members[0].configs.lock-config.driver-class-name=org.
 ekbatan.sharding.groups[0].members[0].configs.lock-config.maximum-pool-size=30
 ekbatan.sharding.groups[0].members[0].configs.lock-config.leak-detection-threshold=0
 
-# Quarkus needs db-kind to bind a Flyway bean. URL/user/pass are intentionally NOT set —
-# EkbatanShardFlywayCustomizer (step 9) overrides them from ekbatan.sharding.* at startup.
-quarkus.datasource.db-kind=mariadb
-quarkus.flyway.migrate-at-start=true`} />
+`} />
 
 </div>
 <div data-stack="quarkus" data-db="mysql">
@@ -2385,10 +2469,7 @@ ekbatan.sharding.groups[0].members[0].configs.lock-config.driver-class-name=com.
 ekbatan.sharding.groups[0].members[0].configs.lock-config.maximum-pool-size=30
 ekbatan.sharding.groups[0].members[0].configs.lock-config.leak-detection-threshold=0
 
-# Quarkus needs db-kind to bind a Flyway bean. URL/user/pass are intentionally NOT set —
-# EkbatanShardFlywayCustomizer (step 9) overrides them from ekbatan.sharding.* at startup.
-quarkus.datasource.db-kind=mysql
-quarkus.flyway.migrate-at-start=true`} />
+`} />
 
 </div>
 <div data-stack="micronaut" data-db="pg">
@@ -2526,64 +2607,78 @@ quarkus.flyway.migrate-at-start=true`} />
 Configure the `DatabaseRegistry` programmatically — there's no DI container to read application config from. See [Plain Java wiring](/reference/di/without-di/) for the full builder.
 
 </div>
-## 9. Wire Flyway to the Ekbatan sharding config
+## 9. Run Flyway from the Ekbatan sharding config
 
-The framework reads connection coordinates from <code class="font-mono text-xs bg-yellow px-1">ekbatan.sharding.*</code>. Flyway, when auto-configured by your stack, would otherwise read them from its own keys (`spring.datasource.*`, `quarkus.datasource.*`, `flyway.datasources.default.*`). Without a bridge, you'd duplicate the connection coords in two places. Each stack has its own way to point Flyway at the shard config Ekbatan already owns — a typed bean (Spring/Micronaut) or a CDI customizer (Quarkus).
+Ekbatan already has the database connection coordinates under <code class="font-mono text-xs bg-yellow px-1">ekbatan.sharding.*</code>. Use `FlywayMigrator` from `ekbatan-flyway` to run migrations from that same config instead of copying the same JDBC URL, username, and password into a second framework-specific datasource block.
 
-> **Single-shard only.** The pattern below works for a single-database setup (one group, one member) and migrates `groups.getFirst().members.getFirst().primaryConfig()`. It does not cover a sharded configuration with multiple groups or members — each shard would need its own migration run and a `dependsOn` edge into the framework's job registry so db-scheduler does not start before every shard's schema is in place. A dedicated page for the sharded-migration pattern is coming soon.
+This is the same shape for one database or many databases. In this getting-started page there is one configured shard, so `FlywayMigrator.migrate(shardingConfig)` runs Flyway once. In a sharded app, the same call runs the same migrations against every configured shard member's `primary-config`, sequentially and fail-fast. By default it uses `classpath:db/migration`; pass locations explicitly if you keep migrations elsewhere.
+
+Spring Boot, Quarkus, and Micronaut still keep their Flyway integration dependencies from step 3. Those dependencies provide Flyway itself, the database-specific Flyway module, and native-image/framework integration where the stack needs it. The actual target selection is done by the small startup class below, using Ekbatan's typed `ShardingConfig`.
 
 <div data-stack="spring">
 
-Spring Boot's `FlywayAutoConfiguration` is gated on `@ConditionalOnBean(DataSource.class)`. Produce the `DataSource` programmatically from `ShardingConfig` AND scope it to Flyway only via `@FlywayDataSource` — Spring won't pick it up as your app's main DataSource (Ekbatan keeps owning that), and you don't write a separate customizer (the bean IS the customization).
+Because step 8 sets `spring.flyway.enabled=false`, Spring Boot will not run its single-datasource Flyway initializer. This bean runs Flyway against every Ekbatan shard first, then adds an explicit dependency so Ekbatan's distributed job registry cannot start before migrations complete.
 
-<CodeBlock filename="src/main/java/io/example/wallet/startup/EkbatanShardFlywayDataSource.java" language="java" shadow="yellow" code={`import com.zaxxer.hikari.HikariDataSource;
-import io.ekbatan.core.config.ShardingConfig;
-import javax.sql.DataSource;
-import org.springframework.boot.flyway.autoconfigure.FlywayDataSource;
+<CodeBlock filename="src/main/java/io/example/wallet/startup/EkbatanShardFlywayMigrator.java" language="java" shadow="yellow" code={`import io.ekbatan.core.config.ShardingConfig;
+import io.ekbatan.flyway.FlywayMigrator;
+import java.util.Arrays;
+import java.util.stream.Stream;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class EkbatanShardFlywayDataSource {
+public class EkbatanShardFlywayMigrator {
 
     @Bean
-    @FlywayDataSource
-    public DataSource flywayDataSource(ShardingConfig shardingConfig) {
-        var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
-        var ds = new HikariDataSource();
-        ds.setJdbcUrl(primary.jdbcUrl);
-        ds.setUsername(primary.username);
-        ds.setPassword(primary.password);
-        ds.setMaximumPoolSize(2);
-        ds.setPoolName("flyway-migrations");
-        return ds;
+    public FlywayMigration flywayMigration(ShardingConfig shardingConfig) {
+        FlywayMigrator.migrate(shardingConfig);
+        return new FlywayMigration();
     }
+
+    @Bean
+    public static BeanFactoryPostProcessor jobRegistryDependsOnFlyway() {
+        return beanFactory -> {
+            if (!beanFactory.containsBeanDefinition("ekbatanJobRegistry")) {
+                return;
+            }
+            var bd = beanFactory.getBeanDefinition("ekbatanJobRegistry");
+            var existing = bd.getDependsOn();
+            bd.setDependsOn(existing == null
+                    ? new String[] {"flywayMigration"}
+                    : Stream.concat(Arrays.stream(existing), Stream.of("flywayMigration"))
+                            .toArray(String[]::new));
+        };
+    }
+
+    public static final class FlywayMigration {}
 }`} />
 
 </div>
 
 <div data-stack="quarkus">
 
-Quarkus discovers any CDI bean implementing `FlywayConfigurationCustomizer` and calls `customize(...)` after applying `quarkus.flyway.*` / `quarkus.datasource.*` but before building the `Flyway` instance. The customizer overrides whatever datasource Quarkus prepared.
+Quarkus's own Flyway startup runner is not the migration owner in this setup. The observer below owns migration startup and runs Flyway against every Ekbatan shard before the rest of the application starts.
 
-<CodeBlock filename="src/main/java/io/example/wallet/startup/EkbatanShardFlywayCustomizer.java" language="java" shadow="orange" code={`import io.ekbatan.core.config.ShardingConfig;
-import io.quarkus.flyway.FlywayConfigurationCustomizer;
+<CodeBlock filename="src/main/java/io/example/wallet/startup/EkbatanShardFlywayMigrator.java" language="java" shadow="orange" code={`import io.ekbatan.core.config.ShardingConfig;
+import io.ekbatan.flyway.FlywayMigrator;
+import io.quarkus.runtime.StartupEvent;
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.flywaydb.core.api.configuration.FluentConfiguration;
+import jakarta.enterprise.event.Observes;
+import jakarta.interceptor.Interceptor;
 
 @ApplicationScoped
-public class EkbatanShardFlywayCustomizer implements FlywayConfigurationCustomizer {
+public class EkbatanShardFlywayMigrator {
 
     private final ShardingConfig shardingConfig;
 
-    public EkbatanShardFlywayCustomizer(ShardingConfig shardingConfig) {
+    public EkbatanShardFlywayMigrator(ShardingConfig shardingConfig) {
         this.shardingConfig = shardingConfig;
     }
 
-    @Override
-    public void customize(FluentConfiguration configuration) {
-        var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
-        configuration.dataSource(primary.jdbcUrl, primary.username, primary.password);
+    void migrate(@Observes @Priority(Interceptor.Priority.PLATFORM_BEFORE) StartupEvent event) {
+        FlywayMigrator.migrate(shardingConfig);
     }
 }`} />
 
@@ -2591,23 +2686,17 @@ public class EkbatanShardFlywayCustomizer implements FlywayConfigurationCustomiz
 
 <div data-stack="micronaut">
 
-The path via `micronaut-flyway`'s `FlywayConfigurationCustomizer` works but requires a `flyway.datasources.default` block in `application.yml` with `${ekbatan.sharding...}` placeholder interpolation — duplicating the source of truth. A cleaner option: skip the YAML block entirely and construct `Flyway` directly from the typed `ShardingConfig` in a `@Context` bean.
-
-`@Context` makes Micronaut instantiate it eagerly at startup — before lazy `@Singleton` beans (like Ekbatan's `DatabaseRegistry`) ever touch the database. The constructor calls `.migrate()` synchronously, guaranteeing migrations are applied first.
+`@Context` makes Micronaut instantiate this bean eagerly at startup, before lazy `@Singleton` beans such as Ekbatan's `DatabaseRegistry` touch the database. The constructor runs migrations synchronously from `ShardingConfig`.
 
 <CodeBlock filename="src/main/java/io/example/wallet/startup/EkbatanFlywayMigrator.java" language="java" shadow="yellow" code={`import io.ekbatan.core.config.ShardingConfig;
+import io.ekbatan.flyway.FlywayMigrator;
 import io.micronaut.context.annotation.Context;
-import org.flywaydb.core.Flyway;
 
 @Context
 public class EkbatanFlywayMigrator {
 
     public EkbatanFlywayMigrator(ShardingConfig shardingConfig) {
-        var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
-        Flyway.configure()
-                .dataSource(primary.jdbcUrl, primary.username, primary.password)
-                .load()
-                .migrate();
+        FlywayMigrator.migrate(shardingConfig);
     }
 }`} />
 
@@ -2615,7 +2704,7 @@ public class EkbatanFlywayMigrator {
 
 <div data-stack="plain">
 
-No DI container, no customizer hook. Configure Flyway programmatically with the same `ShardingConfig` primary you'll hand to `DatabaseRegistry`. See [Plain Java wiring](/reference/di/without-di/) for the full bootstrap.
+No DI container, no startup hook. Call `FlywayMigrator.migrate(shardingConfig)` before you build the `DatabaseRegistry` and repositories. See [Plain Java wiring](/reference/di/without-di/) for the full bootstrap.
 
 </div>
 
@@ -2907,16 +2996,17 @@ docker compose exec wallet-db mysql -uwallet -pwallet -e "SHOW TABLES IN eventlo
 
 </div>
 
-If you see the eventlog tables, Flyway ran the framework's bundled migrations and Ekbatan is fully wired.
+If you see the eventlog tables, Flyway ran the migration files in `src/main/resources/db/migration`, including the Ekbatan eventlog schema, and the app is fully wired.
 
 ## 14. Use the example projects as your reference
 
-Every snippet on this page came from [`ekbatan-examples/`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples) — 36 runnable wallet REST projects covering Spring Boot, Quarkus, and Micronaut, each on PostgreSQL/MariaDB/MySQL, in Gradle and Maven, with native-image siblings. The picker's **EXAMPLE** row links straight to the matching framework example; plain Java points to the manual wiring reference.
+Every snippet on this page came from [`ekbatan-examples/`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples) — 38 runnable wallet REST projects covering Spring Boot, Quarkus, and Micronaut, each on PostgreSQL/MariaDB/MySQL, in Gradle and Maven, with native-image siblings and sharded Spring Boot variants. The picker's **EXAMPLE** row links straight to the matching framework example; plain Java points to the manual wiring reference.
 
 A few sibling projects show patterns this tutorial doesn't:
 
 - `spring-boot-wallet-saga-gradle-pg` — multi-Action coordinated flow
 - `spring-boot-wallet-rest-gradle-sharded-pg` — two physical databases under one logical app
+- `spring-boot-wallet-rest-gradle-native-sharded-pg` — the same sharded app compiled and tested as a native image
 - `spring-boot-job-worker-gradle-pg` — job-only process (no HTTP), for scaling jobs separately
 
 AI assistants benefit from the same matrix — point them at `ekbatan-examples/` so they pattern-match against verified code instead of guessing from training data.
@@ -2929,4 +3019,4 @@ AI assistants benefit from the same matrix — point them at `ekbatan-examples/`
 
 - [Concepts → The dual-write trap](/concepts/the-dual-write-trap/) — why the eventlog table exists
 - [Reference → DI integration](/reference/) — exhaustive per-stack wiring
-- [`ekbatan-examples/`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples) — 36 runnable framework wallet REST projects, plus focused sharding, saga, and job-worker examples
+- [`ekbatan-examples/`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples) — 38 runnable framework wallet REST projects, plus saga and job-worker examples

@@ -82,6 +82,7 @@ dependencies {
     // Test
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation(project(":ekbatan-native"))
+    testImplementation(project(":ekbatan-flyway"))
     testImplementation("io.quarkus:quarkus-test-common")
     testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
     testImplementation("org.testcontainers:testcontainers:${project.property("testcontainersVersion")}")

@@ -1,25 +1,33 @@
 services:
-  mariadb:
+  mariadb-global:
     image: mariadb:11.8
     environment:
-      # MARIADB_USER / MARIADB_PASSWORD create the named user with rights ONLY on MARIADB_DATABASE.
-      # Cross-database access (needed to CREATE DATABASE eventlog from a V0000 migration) comes
-      # from `mariadb_init.sql` below, which runs as root before the container becomes ready.
       MARIADB_ROOT_PASSWORD: root
       MARIADB_USER: wallet
       MARIADB_PASSWORD: wallet
       MARIADB_DATABASE: wallet
       TZ: UTC
     ports:
-      # Fixed mapping so the hard-coded jdbc:mariadb://localhost:3306/... in application.yml
-      # matches. Spring Boot's docker-compose integration tracks the container by service name
-      # and waits for the healthcheck below before bootstrapping the app.
       - "3306:3306"
     volumes:
-      # Mount the init script into the container's first-time-init directory. The official MariaDB
-      # image runs every *.sql in /docker-entrypoint-initdb.d AS ROOT before the server becomes
-      # ready — so this is where the GRANT statement lives. It runs once per data volume; if you
-      # need to re-grant on a re-created volume, `docker compose down -v` removes the volume.
+      - "./src/main/resources/mariadb_init.sql:/docker-entrypoint-initdb.d/mariadb_init.sql:ro"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+
+  mariadb-mexico:
+    image: mariadb:11.8
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_USER: wallet
+      MARIADB_PASSWORD: wallet
+      MARIADB_DATABASE: wallet
+      TZ: UTC
+    ports:
+      - "3307:3306"
+    volumes:
       - "./src/main/resources/mariadb_init.sql:/docker-entrypoint-initdb.d/mariadb_init.sql:ro"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]

@@ -1,6 +1,6 @@
 package io.ekbatan.test.di;
 
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
 import java.util.HashMap;
 import java.util.Map;
@@ -38,7 +38,7 @@ public class PostgresTestResource implements QuarkusTestResourceLifecycleManager
     public Map<String, String> start() {
         container.start();
 
-        FlywayHelper.migrate(container.getJdbcUrl(), container.getUsername(), container.getPassword());
+        FlywayMigrator.migrate(container.getJdbcUrl(), container.getUsername(), container.getPassword());
 
         var props = new HashMap<String, String>();
         props.put("ekbatan.namespace", "test.quarkus");

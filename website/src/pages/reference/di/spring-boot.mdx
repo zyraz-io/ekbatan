@@ -2,7 +2,7 @@
 layout: ../../../layouts/DocLayout.astro
 title: 'DI · Spring Boot'
 activeSection: reference
-lead: 'What you write in a Spring Boot app to use Ekbatan: one starter dependency, four <code>@Ekbatan*</code> annotations on your own classes, and a property tree under <code>ekbatan.*</code>. The auto-config produces every framework bean for you and exposes <code>ActionExecutor</code> for injection.'
+lead: 'What you write in a Spring Boot app to use Ekbatan: the Spring Boot starter, the Flyway migrator dependency, four <code>@Ekbatan*</code> annotations on your own classes, and a property tree under <code>ekbatan.*</code>. The auto-config produces every framework bean for you and exposes <code>ActionExecutor</code> for injection.'
 ---
 
 For the equivalent in plain Java with no DI container, see [wiring/without-di.md](/reference/di/without-di/). For Quarkus and Micronaut, see [quarkus.md](/reference/di/quarkus/) and [micronaut.md](/reference/di/micronaut/).
@@ -20,7 +20,7 @@ dependencies {
 
 (Published on Maven Central under groupId `io.github.zyraz-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
 
-That single dependency transitively pulls in `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, and the `@Ekbatan*` annotation jar. Add `ekbatan-keyed-lock-redis` separately if you want the Redis-backed lock provider.
+That starter transitively pulls in `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, and the `@Ekbatan*` annotation jar. Add `ekbatan-flyway` for `FlywayMigrator`, and add `ekbatan-keyed-lock-redis` separately if you want the Redis-backed lock provider.
 
 > **Custom `EventPersister`** — apps that need to swap the default outbox writer (encrypt payloads, write to a different table, ship to an external sink) can declare their own `EventPersister` `@Bean`; the auto-config picks it up via `ObjectProvider<EventPersister>` and uses it instead of `SingleTableJsonEventPersister`.
 
@@ -324,32 +324,34 @@ To customize the `ObjectMapper`, declare a `@Bean Jackson2ObjectMapperBuilderCus
 
 > **Ekbatan internals use Jackson 3** (`tools.jackson.databind.*`) for event serialization, not Jackson 2. That dependency is pulled transitively by `ekbatan-core` and is unrelated to your HTTP-layer Jackson 2 setup; the two coexist. `ekbatan-native`'s `Jackson3RecordsFeature` registers your records under Jackson 3 — see [docs/runtime/native-image.md](/reference/runtime/native-image/).
 
-### Flyway — use `spring-boot-starter-flyway` + a `@FlywayDataSource @Bean`
+### Flyway — use `ekbatan-flyway` + Spring Boot's Flyway dependencies
 
-Don't run Flyway by hand from an `@PostConstruct` bean (that's what the framework's own tests at `ekbatan-integration-tests/di/spring-boot-starter/TestcontainersConfiguration` do via `FlywayHelper`, because they use raw Flyway with no framework extension wrapping it — see [GraalVM native-image § two patterns](/reference/runtime/native-image/#flyway-on-native--two-patterns)). For a real Spring Boot app, **use `spring-boot-starter-flyway`** and supply a `@FlywayDataSource`-scoped `DataSource` bean built from `ekbatan.sharding.*`.
+Ekbatan's Spring Boot examples do not let Spring Boot's single-datasource Flyway initializer choose the migration target. Ekbatan already owns the runtime database coordinates under `ekbatan.sharding.*`, so the examples use the same migration path for one shard and many shards: keep Spring Boot's Flyway dependencies on the classpath, disable Boot's automatic Flyway run, and call `FlywayMigrator.migrate(shardingConfig)` from a startup bean.
 
 **Dependencies** — pull the Spring Boot starter, NOT raw `flyway-core`:
 
 ```kotlin
 // build.gradle.kts
 dependencies {
-    // ✅ The Spring Boot starter. Pulls flyway-core + spring-boot-flyway (which contains
-    //    FlywayAutoConfiguration) transitively at the BOM-pinned version. Spring Boot 4
-    //    modularized FlywayAutoConfiguration into its own artifact; the starter brings the
-    //    right combination automatically.
+    // Ekbatan's migrator reads ekbatan.sharding.* and runs Flyway on every primary shard.
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
+
+    // Spring Boot's starter keeps Flyway and Spring Boot's Flyway/native integration
+    // on the classpath, but Boot's auto-run is disabled in application.yml below.
     implementation("org.springframework.boot:spring-boot-starter-flyway")
 
-    // ✅ Database-specific Flyway plugin (BOM-managed; no version needed).
+    // Database-specific Flyway plugin (BOM-managed; no version needed).
     implementation("org.flywaydb:flyway-database-postgresql")   // or flyway-mysql for MariaDB/MySQL
-
-    // ❌ Don't add `org.flywaydb:flyway-core` directly. The starter brings the right version
-    //    AND the autoconfig that creates the Flyway bean. Pulling flyway-core alone skips
-    //    the autoconfig, leaving you to wire everything by hand.
 }
 ```
 
 ```xml
 <!-- pom.xml -->
+<dependency>
+    <groupId>io.github.zyraz-io</groupId>
+    <artifactId>ekbatan-flyway</artifactId>
+    <version>0.1.2</version>
+</dependency>
 <dependency>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-flyway</artifactId>
@@ -360,84 +362,58 @@ dependencies {
 </dependency>
 ```
 
-Bean wiring (the `DataSource` is the part that's framework-specific to Spring Boot):
-
-```java
-@Configuration
-public class EkbatanShardFlywayDataSource {
-
-    @Bean
-    @FlywayDataSource    // org.springframework.boot.flyway.autoconfigure.FlywayDataSource (Spring Boot 4)
-    public DataSource flywayDataSource(ShardingConfig shardingConfig) {
-        var primary = shardingConfig.groups.getFirst().members.getFirst().primaryConfig();
-        var ds = new HikariDataSource();
-        ds.setJdbcUrl(primary.jdbcUrl);
-        ds.setUsername(primary.username);
-        ds.setPassword(primary.password);
-        ds.setMaximumPoolSize(2);                      // small pool — only Flyway migration uses it
-        ds.setPoolName("flyway-migrations");
-        return ds;
-    }
-}
-```
-
-Why a `@Bean` (Spring) rather than a `FlywayConfigurationCustomizer` (Quarkus/Micronaut pattern): Spring Boot's `FlywayAutoConfiguration` is gated on `@ConditionalOnBean(DataSource.class)` — without a `DataSource` bean, it never creates the Flyway instance and a customizer would never fire. Producing the `DataSource` programmatically from `ShardingConfig` satisfies the gate AND provides the right coordinates in one step. The `@FlywayDataSource` annotation scopes the bean to Flyway only — Spring Boot won't pick it up as the application's main `DataSource`. Ekbatan keeps owning the application's runtime pools (sharding-aware `ConnectionProvider`); this small pool exists solely for the Flyway migration burst on startup.
-
-The `flywayInitializer` bean (Spring Boot's migration runner) is created during context refresh, before `ekbatanJobRegistry` starts polling — so the schema exists by the time db-scheduler reads `scheduled_tasks`. If you want an explicit happens-before edge anyway:
-
-```java
-@Configuration
-public class JobRegistryDependsOnFlywayPostProcessor {
-    @Bean
-    public static BeanFactoryPostProcessor jobRegistryDependsOnFlyway() {
-        return beanFactory -> {
-            if (!beanFactory.containsBeanDefinition("ekbatanJobRegistry")) return;
-            var bd = beanFactory.getBeanDefinition("ekbatanJobRegistry");
-            var existing = bd.getDependsOn();
-            bd.setDependsOn(existing == null
-                    ? new String[]{"flywayInitializer"}
-                    : Stream.concat(Arrays.stream(existing), Stream.of("flywayInitializer"))
-                            .toArray(String[]::new));
-        };
-    }
-}
-```
-
-This is what the wallet examples do as belt-and-braces.
-
-#### Multi-shard: `spring.flyway.enabled=false` + programmatic loop
-
-Spring Boot's auto-config can only attach Flyway to one `DataSource` bean. For multi-shard wallets, disable the auto-config and run the loop yourself:
+Disable Spring Boot's single-datasource Flyway run:
 
 ```yaml
-# application.yml
 spring:
   flyway:
     enabled: false
 ```
 
+Then run migrations from the typed Ekbatan shard config:
+
 ```java
+import io.ekbatan.core.config.ShardingConfig;
+import io.ekbatan.flyway.FlywayMigrator;
+import java.util.Arrays;
+import java.util.stream.Stream;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
 @Configuration
 public class EkbatanShardFlywayMigrator {
+
     @Bean
     public FlywayMigration flywayMigration(ShardingConfig shardingConfig) {
-        for (var group : shardingConfig.groups) {
-            for (var member : group.members) {
-                var primary = member.primaryConfig();
-                Flyway.configure()
-                        .dataSource(primary.jdbcUrl, primary.username, primary.password)
-                        .locations("classpath:db/migration")
-                        .load()
-                        .migrate();
-            }
-        }
+        FlywayMigrator.migrate(shardingConfig);
         return new FlywayMigration();
     }
+
+    @Bean
+    public static BeanFactoryPostProcessor jobRegistryDependsOnFlyway() {
+        return beanFactory -> {
+            if (!beanFactory.containsBeanDefinition("ekbatanJobRegistry")) {
+                return;
+            }
+            var bd = beanFactory.getBeanDefinition("ekbatanJobRegistry");
+            var existing = bd.getDependsOn();
+            bd.setDependsOn(existing == null
+                    ? new String[]{"flywayMigration"}
+                    : Stream.concat(Arrays.stream(existing), Stream.of("flywayMigration"))
+                            .toArray(String[]::new));
+        };
+    }
+
     public static final class FlywayMigration {}
 }
 ```
 
-See [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-pg) for the single-shard shape and [`spring-boot-wallet-rest-gradle-sharded-pg`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) for the multi-shard one.
+`FlywayMigrator.migrate(shardingConfig)` runs against every configured shard member's `primaryConfig`, sequentially and fail-fast. With a single configured member, it is just one Flyway run. By default it uses `classpath:db/migration`; pass locations explicitly if your migrations live elsewhere.
+
+The `flywayMigration` marker bean gives the distributed job registry an explicit happens-before edge: `ekbatanJobRegistry` will not start polling until migrations have completed.
+
+See [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) for the single-shard shape, [`spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) for the multi-shard one, and [`spring-boot-wallet-rest-gradle-native-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg) for the same sharded shape under `nativeTest`.
 
 ### Optional knobs
 
@@ -465,4 +441,4 @@ All rows above also accept camelCase aliases: `ekbatan.localEventHandler.*`, `fa
 - [GraalVM native-image](/reference/runtime/native-image/) — Spring AOT specifics
 - Runnable references:
   - [`ekbatan-integration-tests/di/spring-boot-starter`](../../ekbatan-integration-tests/di/spring-boot-starter) — the framework's own smoke test for the Spring Boot integration.
-  - [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](../../ekbatan-examples/spring-boot-wallet-rest-gradle-pg) — a standalone Spring Boot app that uses Ekbatan as a Maven Central dependency, with a Wallet `Model`, a Notification `Entity`, three Actions, an `EventHandler` that runs listen-to-yourself, REST endpoints, and a Testcontainers integration test. Closer to what you'd actually write in your own service.
+  - [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) — a standalone Spring Boot app that uses Ekbatan as a Maven Central dependency, with a Wallet `Model`, a Notification `Entity`, three Actions, an `EventHandler` that runs listen-to-yourself, REST endpoints, and a Testcontainers integration test. Closer to what you'd actually write in your own service.

@@ -6,89 +6,75 @@ import java.util.Map;
 import org.testcontainers.mariadb.MariaDBContainer;
 import org.testcontainers.utility.MountableFile;
 
-/**
- * Brings up a Testcontainers MariaDB for the Quarkus integration test and publishes the
- * connection coordinates as runtime SmallRye Config properties. Two parallel coordinate
- * sets are exported:
- *
- * <ul>
- *   <li>{@code ekbatan.sharding.*} - consumed by Ekbatan's producer to build its
- *       sharding-aware {@code ConnectionProvider} used for runtime queries.</li>
- *   <li>{@code quarkus.datasource.*} - consumed by the {@code quarkus-flyway} extension
- *       (and its short-lived migration-time Hikari pool). The extension runs Flyway
- *       migrations against this datasource at app startup. Ekbatan never reads from it.</li>
- * </ul>
- *
- * <p>The two pools point at the same MariaDB testcontainer; quarkus-flyway closes its
- * pool after migrations finish, leaving ekbatan's pool as the only one in use at runtime.
- *
- * <p>{@link QuarkusTestResourceLifecycleManager#start()} fires before the Quarkus app
- * context is built, so by the time {@code quarkus-flyway} runs migrations at app startup,
- * the testcontainer is up and the properties published below are visible to SmallRye Config.
- */
+/** Starts two database containers and publishes Ekbatan sharding properties for tests. */
 public class MariaDBTestResource implements QuarkusTestResourceLifecycleManager {
 
-    private final MariaDBContainer container = new MariaDBContainer("mariadb:11.8")
+    private final MariaDBContainer global = new MariaDBContainer("mariadb:11.8")
             .withDatabaseName("wallet")
             .withUsername("wallet")
             .withPassword("wallet")
             .withEnv("TZ", "UTC")
-            // Grants the 'wallet' user cross-database privileges so the first Flyway migration
-            // can CREATE DATABASE eventlog and write tables into it. Runs as root before the
-            // container becomes ready.
             .withCopyFileToContainer(
-                    MountableFile.forClasspathResource("mariadb_init.sql"),
-                    "/docker-entrypoint-initdb.d/mariadb_init.sql");
+                    MountableFile.forClasspathResource("mariadb_init.sql"), "/docker-entrypoint-initdb.d/mariadb_init.sql");
+
+    private final MariaDBContainer mexico = new MariaDBContainer("mariadb:11.8")
+            .withDatabaseName("wallet")
+            .withUsername("wallet")
+            .withPassword("wallet")
+            .withEnv("TZ", "UTC")
+            .withCopyFileToContainer(
+                    MountableFile.forClasspathResource("mariadb_init.sql"), "/docker-entrypoint-initdb.d/mariadb_init.sql");
 
     @Override
     public Map<String, String> start() {
-        container.start();
+        global.start();
+        mexico.start();
 
         var props = new HashMap<String, String>();
         props.put("ekbatan.namespace", "test.wallet");
-
-        // Sharding - single shard pointing at the Testcontainers MariaDB.
         props.put("ekbatan.sharding.defaultShard.group", "0");
         props.put("ekbatan.sharding.defaultShard.member", "0");
         props.put("ekbatan.sharding.groups[0].group", "0");
-        props.put("ekbatan.sharding.groups[0].name", "default");
+        props.put("ekbatan.sharding.groups[0].name", "global");
         props.put("ekbatan.sharding.groups[0].members[0].member", "0");
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl", container.getJdbcUrl());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username", container.getUsername());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password", container.getPassword());
-        props.put(
-                "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.driverClassName",
-                "org.mariadb.jdbc.Driver");
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize", "5");
-
-        // jobsConfig - scheduler shares the same DB for this example.
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl", container.getJdbcUrl());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username", container.getUsername());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password", container.getPassword());
-        props.put(
-                "ekbatan.sharding.groups[0].members[0].configs.jobsConfig.driverClassName", "org.mariadb.jdbc.Driver");
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize", "4");
-        // Lock pool - backs the KeyedLockProvider.
-        props.put("ekbatan.sharding.groups[0].members[0].configs.lockConfig.jdbcUrl", container.getJdbcUrl());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.lockConfig.username", container.getUsername());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.lockConfig.password", container.getPassword());
-        props.put(
-                "ekbatan.sharding.groups[0].members[0].configs.lockConfig.driverClassName", "org.mariadb.jdbc.Driver");
-        props.put("ekbatan.sharding.groups[0].members[0].configs.lockConfig.maximumPoolSize", "15");
-        props.put("ekbatan.sharding.groups[0].members[0].configs.lockConfig.leakDetectionThreshold", "0");
-
-        // Tighten poll intervals so the test doesn't sit idle waiting for the listen-to-yourself
-        // dispatch to drain.
+        props.put("ekbatan.sharding.groups[0].members[0].name", "global");
+        registerShard(props, "ekbatan.sharding.groups[0].members[0]", global.getJdbcUrl(), global.getUsername(),
+                global.getPassword(), "org.mariadb.jdbc.Driver");
+        props.put("ekbatan.sharding.groups[1].group", "1");
+        props.put("ekbatan.sharding.groups[1].name", "mexico");
+        props.put("ekbatan.sharding.groups[1].members[0].member", "0");
+        props.put("ekbatan.sharding.groups[1].members[0].name", "mexico");
+        registerShard(props, "ekbatan.sharding.groups[1].members[0]", mexico.getJdbcUrl(), mexico.getUsername(),
+                mexico.getPassword(), "org.mariadb.jdbc.Driver");
         props.put("ekbatan.local-event-handler.fanout-poll-delay", "PT0.2S");
         props.put("ekbatan.local-event-handler.handling-poll-delay", "PT0.2S");
         props.put("ekbatan.jobs.polling-interval", "PT1S");
         props.put("ekbatan.jobs.shutdown-max-wait", "PT5S");
-
         return props;
     }
 
     @Override
     public void stop() {
-        container.stop();
+        mexico.stop();
+        global.stop();
+    }
+
+    private static void registerShard(
+            Map<String, String> props, String prefix, String jdbcUrl, String username, String password,
+            String driverClassName) {
+        addDataSource(props, prefix + ".configs.primaryConfig", jdbcUrl, username, password, driverClassName, "5");
+        addDataSource(props, prefix + ".configs.jobsConfig", jdbcUrl, username, password, driverClassName, "4");
+        addDataSource(props, prefix + ".configs.lockConfig", jdbcUrl, username, password, driverClassName, "15");
+        props.put(prefix + ".configs.lockConfig.leakDetectionThreshold", "0");
+    }
+
+    private static void addDataSource(
+            Map<String, String> props, String prefix, String jdbcUrl, String username, String password,
+            String driverClassName, String maximumPoolSize) {
+        props.put(prefix + ".jdbcUrl", jdbcUrl);
+        props.put(prefix + ".username", username);
+        props.put(prefix + ".password", password);
+        props.put(prefix + ".driverClassName", driverClassName);
+        props.put(prefix + ".maximumPoolSize", maximumPoolSize);
     }
 }

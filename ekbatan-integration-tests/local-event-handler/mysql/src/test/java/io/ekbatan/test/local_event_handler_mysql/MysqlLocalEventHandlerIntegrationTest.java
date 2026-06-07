@@ -8,7 +8,7 @@ import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import io.ekbatan.test.local_event_handler.BaseLocalEventHandlerIntegrationTest;
 import io.ekbatan.test.local_event_handler_mysql.audit.repository.AuditEntryRepository;
 import io.ekbatan.test.local_event_handler_mysql.note.repository.NoteRepository;
@@ -46,7 +46,7 @@ class MysqlLocalEventHandlerIntegrationTest extends BaseLocalEventHandlerIntegra
                 .build();
         CONNECTION_PROVIDER = hikariConnectionProvider(config);
 
-        FlywayHelper.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
+        FlywayMigrator.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
 
         var tm = new TransactionManager(CONNECTION_PROVIDER, CONNECTION_PROVIDER, SQLDialect.MYSQL);
         DB_REGISTRY = databaseRegistry().withDatabase(tm).build();

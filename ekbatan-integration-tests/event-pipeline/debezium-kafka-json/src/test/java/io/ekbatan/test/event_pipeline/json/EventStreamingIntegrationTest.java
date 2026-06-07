@@ -12,7 +12,7 @@ import io.debezium.testing.testcontainers.ConnectorConfiguration;
 import io.debezium.testing.testcontainers.DebeziumContainer;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.persistence.TransactionManager;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import io.ekbatan.test.event_pipeline.common.router.EventRoute;
 import io.ekbatan.test.event_pipeline.common.wallet.action.WalletCreateAction;
 import io.ekbatan.test.event_pipeline.common.wallet.action.WalletDepositMoneyAction;
@@ -89,7 +89,7 @@ class EventStreamingIntegrationTest {
         var secondaryProvider = hikariConnectionProvider(dataSourceConfig);
         var transactionManager = new TransactionManager(primaryProvider, secondaryProvider, SQLDialect.POSTGRES);
 
-        FlywayHelper.migrate(PG.getJdbcUrl(), PG.getUsername(), PG.getPassword());
+        FlywayMigrator.migrate(PG.getJdbcUrl(), PG.getUsername(), PG.getPassword());
 
         var databaseRegistry =
                 databaseRegistry().withDatabase(transactionManager).build();

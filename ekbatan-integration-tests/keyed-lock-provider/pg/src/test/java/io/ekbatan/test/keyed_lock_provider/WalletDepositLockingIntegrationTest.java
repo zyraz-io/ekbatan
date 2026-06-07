@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.concurrent.KeyedLockProvider;
 import io.ekbatan.core.persistence.TransactionManager;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import io.ekbatan.test.keyed_lock_provider.wallet.action.WalletCreateAction;
 import io.ekbatan.test.keyed_lock_provider.wallet.action.WalletDepositAction;
 import io.ekbatan.test.keyed_lock_provider.wallet.models.Wallet;
@@ -70,7 +70,7 @@ public class WalletDepositLockingIntegrationTest {
 
         var tm = new TransactionManager(primary, secondary, SQLDialect.POSTGRES);
 
-        FlywayHelper.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
+        FlywayMigrator.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
 
         var databases = databaseRegistry().withDatabase(tm).build();
 

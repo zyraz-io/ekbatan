@@ -78,6 +78,11 @@
             <artifactId>ekbatan-spring-boot-starter</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-flyway</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
         <!-- @AutoBuilder is compile-time only: provided lets javac see the annotation;
              annotationProcessorPaths runs the processor below. -->
         <dependency>
@@ -123,7 +128,7 @@
 
         <!-- ── Flyway via Spring Boot's official starter ───────────────────────── -->
         <!-- spring-boot-starter-flyway brings FlywayAutoConfiguration plus flyway-core.
-             EkbatanShardFlywayCustomizer (@Component) overrides the dataSource from
+             EkbatanShardFlywayMigrator (@Component) overrides the dataSource from
              ekbatan.sharding.* so connection coords live in one place. flyway-core version
              is BOM-managed by Spring Boot. -->
         <dependency>

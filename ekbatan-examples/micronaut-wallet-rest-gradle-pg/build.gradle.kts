@@ -50,6 +50,7 @@ dependencies {
     // ekbatan-micronaut pulls ekbatan-core, the local-event-handler,
     // and distributed-jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-micronaut:$ekbatanVersion")
+    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
     // Required on the AP path: EkbatanStereotypeVisitor needs to be visible to micronaut-inject-java
     // when this module's @EkbatanAction / @EkbatanRepository / @EkbatanEventHandler classes are
     // compiled. Without this, those annotations don't lift to @Singleton and Micronaut treats the
@@ -79,10 +80,9 @@ dependencies {
     // *.yml is shipped, even though our config keys live under ekbatan.* not micronaut.*.
     runtimeOnly("org.yaml:snakeyaml")
 
-    // ── Flyway via Micronaut's official extension ────────────────────────────
-    // micronaut-flyway picks up `flyway.datasources.{name}.enabled=true` blocks and runs
-    // Flyway on startup; `EkbatanShardFlywayCustomizer` overrides the dataSource from
-    // `ekbatan.sharding.*`. Version of flyway-core is BOM-managed by Micronaut.
+    // ── Flyway support ───────────────────────────────────────────────────────
+    // ekbatan-flyway runs migrations from an eager startup bean using typed ShardingConfig.
+    // micronaut-flyway stays on the classpath for Flyway and native-image support.
     implementation("io.micronaut.flyway:micronaut-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
 

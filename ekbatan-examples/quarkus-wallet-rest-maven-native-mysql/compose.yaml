@@ -1,11 +1,7 @@
 services:
-  mysql:
+  mysql-global:
     image: mysql:9.4.0
     environment:
-      # MYSQL_USER / MYSQL_PASSWORD create a non-root user with rights ONLY on
-      # MYSQL_DATABASE. The framework's eventlog lives in a separate database, so the
-      # connecting user needs cross-database GRANTs — set up by mysql_init.sql below,
-      # which runs as root before the container becomes ready.
       MYSQL_ROOT_PASSWORD: root
       MYSQL_USER: wallet
       MYSQL_PASSWORD: wallet
@@ -13,6 +9,24 @@ services:
       TZ: UTC
     ports:
       - "3306:3306"
+    volumes:
+      - "./src/main/resources/mysql_init.sql:/docker-entrypoint-initdb.d/mysql_init.sql:ro"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+
+  mysql-mexico:
+    image: mysql:9.4.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: wallet
+      MYSQL_PASSWORD: wallet
+      MYSQL_DATABASE: wallet
+      TZ: UTC
+    ports:
+      - "3307:3306"
     volumes:
       - "./src/main/resources/mysql_init.sql:/docker-entrypoint-initdb.d/mysql_init.sql:ro"
     healthcheck:

@@ -3,8 +3,10 @@ package io.example.wallet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import io.ekbatan.core.shard.ShardIdentifier;
 import io.example.wallet.model.NotificationKind;
 import io.example.wallet.repository.NotificationRepository;
+import io.example.wallet.repository.WalletRepository;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -22,19 +24,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-/**
- * End-to-end integration test for the wallet REST endpoints under Micronaut.
- *
- * <p>{@link TestPropertyProvider#getProperties()} runs <em>before</em> the Micronaut application
- * context is built, so the testcontainer is up by the time {@code EkbatanCoreConfiguration} resolves
- * {@code ekbatan.sharding.*}. {@code micronaut-flyway} then runs migrations on startup against
- * {@code flyway.datasources.default} - {@code EkbatanShardFlywayCustomizer} overrides the dataSource
- * from the same {@code ekbatan.sharding.*} block, so connection coordinates have a single source
- * of truth. Works identically on JVM and under substrate-VM (no FlywayHelper needed).
- *
- * <p>{@link TestInstance.Lifecycle#PER_CLASS} keeps one container alive across all tests in the
- * class so we don't pay container startup twice.
- */
 @MicronautTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Property(name = "ekbatan.namespace", value = "test.wallet")
@@ -45,8 +34,17 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Property(name = "ekbatan.jobs.shutdown-max-wait", value = "PT5S")
 class WalletControllerIntegrationTest implements TestPropertyProvider {
 
-    private final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17")
-            .withDatabaseName("wallet")
+    private static final ShardIdentifier GLOBAL_SHARD = ShardIdentifier.of(0, 0);
+    private static final ShardIdentifier MEXICO_SHARD = ShardIdentifier.of(1, 0);
+
+    private final PostgreSQLContainer global = new PostgreSQLContainer("postgres:17")
+            .withDatabaseName("wallet_global")
+            .withUsername("wallet")
+            .withPassword("wallet")
+            .withEnv("TZ", "UTC");
+
+    private final PostgreSQLContainer mexico = new PostgreSQLContainer("postgres:17")
+            .withDatabaseName("wallet_mexico")
             .withUsername("wallet")
             .withPassword("wallet")
             .withEnv("TZ", "UTC");
@@ -59,61 +57,71 @@ class WalletControllerIntegrationTest implements TestPropertyProvider {
     HttpClient httpClient;
 
     @Inject
+    WalletRepository walletRepository;
+
+    @Inject
     NotificationRepository notificationRepository;
 
     @Override
     public Map<String, String> getProperties() {
-        postgres.start();
+        global.start();
+        mexico.start();
         var props = new HashMap<String, String>();
         props.put("ekbatan.sharding.defaultShard.group", "0");
         props.put("ekbatan.sharding.defaultShard.member", "0");
         props.put("ekbatan.sharding.groups[0].group", "0");
-        props.put("ekbatan.sharding.groups[0].name", "default");
+        props.put("ekbatan.sharding.groups[0].name", "global");
         props.put("ekbatan.sharding.groups[0].members[0].member", "0");
-        // Primary pool - the one Ekbatan uses for application traffic.
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl", postgres.getJdbcUrl());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username", postgres.getUsername());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password", postgres.getPassword());
-        props.put(
-                "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.driverClassName", "org.postgresql.Driver");
-        props.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize", "5");
-        // Jobs pool - isolated from primary so polling load can't starve app traffic.
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl", postgres.getJdbcUrl());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username", postgres.getUsername());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password", postgres.getPassword());
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.driverClassName", "org.postgresql.Driver");
-        props.put("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize", "4");
+        props.put("ekbatan.sharding.groups[0].members[0].name", "global");
+        registerShard(
+                props,
+                "ekbatan.sharding.groups[0].members[0]",
+                global.getJdbcUrl(),
+                global.getUsername(),
+                global.getPassword(),
+                "org.postgresql.Driver");
+        props.put("ekbatan.sharding.groups[1].group", "1");
+        props.put("ekbatan.sharding.groups[1].name", "mexico");
+        props.put("ekbatan.sharding.groups[1].members[0].member", "0");
+        props.put("ekbatan.sharding.groups[1].members[0].name", "mexico");
+        registerShard(
+                props,
+                "ekbatan.sharding.groups[1].members[0]",
+                mexico.getJdbcUrl(),
+                mexico.getUsername(),
+                mexico.getPassword(),
+                "org.postgresql.Driver");
         return props;
     }
 
     @Test
+    void separate_wallets_route_to_their_own_shards() {
+        final var globalWallet = createWallet("US", "USD", "10.00");
+        final var mexicoWallet = createWallet("MX", "MXN", "20.00");
+        final var globalId = UUID.fromString((String) globalWallet.body().get("id"));
+        final var mexicoId = UUID.fromString((String) mexicoWallet.body().get("id"));
+
+        assertThat(globalWallet.body()).containsEntry("shardGroup", 0).containsEntry("shardMember", 0);
+        assertThat(mexicoWallet.body()).containsEntry("shardGroup", 1).containsEntry("shardMember", 0);
+
+        deposit(globalId, "5.00", "global@example.com");
+        deposit(mexicoId, "7.00", "mexico@example.com");
+
+        assertThat(walletRepository.existsOnShard(GLOBAL_SHARD, globalId)).isTrue();
+        assertThat(walletRepository.existsOnShard(MEXICO_SHARD, globalId)).isFalse();
+        assertThat(walletRepository.existsOnShard(MEXICO_SHARD, mexicoId)).isTrue();
+        assertThat(walletRepository.existsOnShard(GLOBAL_SHARD, mexicoId)).isFalse();
+    }
+
+    @Test
     void deposit_emits_event_and_handler_creates_notification() {
-        // GIVEN - a freshly created wallet
-        final var ownerId = UUID.randomUUID();
-        final HttpResponse<Map> createResponse = httpClient
-                .toBlocking()
-                .exchange(
-                        HttpRequest.POST(
-                                "/wallets",
-                                Map.of("ownerId", ownerId.toString(), "currency", "USD", "initialBalance", "0.00")),
-                        Map.class);
-        assertThat(createResponse.code()).isEqualTo(201);
-        final var walletId = UUID.fromString((String) createResponse.body().get("id"));
+        final var wallet = createWallet("US", "USD", "0.00");
+        final var walletId = UUID.fromString((String) wallet.body().get("id"));
 
-        // WHEN - deposit $100 with a notification recipient
-        final HttpResponse<Map> depositResponse = httpClient
-                .toBlocking()
-                .exchange(
-                        HttpRequest.POST(
-                                "/wallets/" + walletId + "/deposits",
-                                Map.of("amount", "100.00", "recipient", "alice@example.com")),
-                        Map.class);
-
-        // THEN - the synchronous response reflects the new balance
+        final var depositResponse = deposit(walletId, "100.00", "alice@example.com");
         assertThat(depositResponse.code()).isEqualTo(200);
         assertThat(depositResponse.body()).containsEntry("balance", 100.00);
 
-        // AND - the listen-to-yourself handler eventually creates the Notification row.
         await().atMost(Duration.ofSeconds(15))
                 .pollInterval(Duration.ofMillis(200))
                 .untilAsserted(() -> {
@@ -127,27 +135,67 @@ class WalletControllerIntegrationTest implements TestPropertyProvider {
 
     @Test
     void close_transitions_wallet_to_closed_state() {
-        // GIVEN - a freshly created wallet
-        final var ownerId = UUID.randomUUID();
-        final HttpResponse<Map> createResponse = httpClient
+        final var wallet = createWallet("US", "EUR", "0.00");
+        final var walletId = UUID.fromString((String) wallet.body().get("id"));
+
+        final HttpResponse<Map> closeResponse = httpClient
+                .toBlocking()
+                .exchange(HttpRequest.POST("/wallets/" + walletId + "/close", Map.of()), Map.class);
+        assertThat(closeResponse.code()).isEqualTo(200);
+
+        final HttpResponse<Map> getResponse =
+                httpClient.toBlocking().exchange(HttpRequest.GET("/wallets/" + walletId), Map.class);
+        assertThat(getResponse.body()).containsEntry("state", "CLOSED");
+    }
+
+    private HttpResponse<Map> createWallet(String countryCode, String currency, String initialBalance) {
+        return httpClient
                 .toBlocking()
                 .exchange(
                         HttpRequest.POST(
                                 "/wallets",
-                                Map.of("ownerId", ownerId.toString(), "currency", "EUR", "initialBalance", "0.00")),
+                                Map.of(
+                                        "countryCode", countryCode,
+                                        "ownerId", UUID.randomUUID().toString(),
+                                        "currency", currency,
+                                        "initialBalance", initialBalance)),
                         Map.class);
-        final var walletId = UUID.fromString((String) createResponse.body().get("id"));
+    }
 
-        // WHEN
-        final HttpResponse<Map> closeResponse = httpClient
+    private HttpResponse<Map> deposit(UUID walletId, String amount, String recipient) {
+        return httpClient
                 .toBlocking()
-                .exchange(HttpRequest.POST("/wallets/" + walletId + "/close", Map.of()), Map.class);
+                .exchange(
+                        HttpRequest.POST(
+                                "/wallets/" + walletId + "/deposits", Map.of("amount", amount, "recipient", recipient)),
+                        Map.class);
+    }
 
-        // THEN
-        assertThat(closeResponse.code()).isEqualTo(200);
-        // AND
-        final HttpResponse<Map> getResponse =
-                httpClient.toBlocking().exchange(HttpRequest.GET("/wallets/" + walletId), Map.class);
-        assertThat(getResponse.body()).containsEntry("state", "CLOSED");
+    private static void registerShard(
+            Map<String, String> props,
+            String prefix,
+            String jdbcUrl,
+            String username,
+            String password,
+            String driverClassName) {
+        addDataSource(props, prefix + ".configs.primaryConfig", jdbcUrl, username, password, driverClassName, "5");
+        addDataSource(props, prefix + ".configs.jobsConfig", jdbcUrl, username, password, driverClassName, "4");
+        addDataSource(props, prefix + ".configs.lockConfig", jdbcUrl, username, password, driverClassName, "15");
+        props.put(prefix + ".configs.lockConfig.leakDetectionThreshold", "0");
+    }
+
+    private static void addDataSource(
+            Map<String, String> props,
+            String prefix,
+            String jdbcUrl,
+            String username,
+            String password,
+            String driverClassName,
+            String maximumPoolSize) {
+        props.put(prefix + ".jdbcUrl", jdbcUrl);
+        props.put(prefix + ".username", username);
+        props.put(prefix + ".password", password);
+        props.put(prefix + ".driverClassName", driverClassName);
+        props.put(prefix + ".maximumPoolSize", maximumPoolSize);
     }
 }

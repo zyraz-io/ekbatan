@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.persistence.TransactionManager;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import io.ekbatan.test.postgres_simple.wallet.models.Wallet;
 import io.ekbatan.test.postgres_simple.wallet.models.WalletState;
 import io.ekbatan.test.postgres_simple.wallet.repository.WalletRepository;
@@ -53,7 +53,7 @@ public class SimpleWalletIntegrationTest {
         var tm = new TransactionManager(
                 hikariConnectionProvider(config), hikariConnectionProvider(config), SQLDialect.POSTGRES);
 
-        FlywayHelper.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
+        FlywayMigrator.migrate(DB.getJdbcUrl(), DB.getUsername(), DB.getPassword());
 
         var databaseRegistry = databaseRegistry().withDatabase(tm).build();
 

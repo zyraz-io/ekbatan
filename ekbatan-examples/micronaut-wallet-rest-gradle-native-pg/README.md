@@ -7,11 +7,11 @@ A GraalVM native-image variant of [`micronaut-wallet-rest-gradle-pg`](../microna
 | Concern | JVM sibling | This module |
 |---|---|---|
 | Build plugins | `io.micronaut.application` | same — the plugin auto-applies `org.graalvm.buildtools.native` |
-| Dependencies | core + flyway + jdbc | + `io.github.zyraz-io:ekbatan-native` for `FlywayHelper`, `Jackson3RecordsFeature`, jOOQ array-type fix, etc. |
-| `FlywayConfiguration` | `Flyway.configure()...migrate()` | `FlywayHelper.migrate(...)` — substrate-VM aware |
+| Dependencies | core + `ekbatan-flyway` + flyway + jdbc | + `io.github.zyraz-io:ekbatan-native` for Jackson3RecordsFeature, HikariCP metadata, jOOQ native support, etc. |
+| `Flyway migrator` | `FlywayMigrator.migrate(shardingConfig)` | same call; native runtime gets substrate-VM-aware classpath scanning |
 | `graalvmNative {}` block | n/a | requires a Java 25 `native-image`-capable launcher, bundles `db/migration/*.sql` into the image, points Jackson3RecordsFeature at `io.example.*` |
 
-### Why `FlywayHelper`, not `Flyway.configure()`
+### Why `FlywayMigrator`, not `Flyway.configure()`
 
 Raw `Flyway.configure().locations("classpath:db/migration").load().migrate()` works on the JVM because the classloader can walk the JAR's classpath: URLs. Inside a GraalVM native image the substrate-VM filesystem can't enumerate `classpath:` directories that way and Flyway aborts with:
 
@@ -19,7 +19,7 @@ Raw `Flyway.configure().locations("classpath:db/migration").load().migrate()` wo
 Unknown prefix for location: classpath:db/migration
 ```
 
-`FlywayHelper` (from `ekbatan-native`) installs a substrate-VM-aware `ResourceProvider` when running native; on the JVM it's a no-op pass-through. Same code, both binaries.
+`FlywayMigrator` (from `ekbatan-flyway`) installs a substrate-VM-aware resource scanner when running native; on the JVM it behaves like normal Flyway configuration. Same code, both binaries.
 
 ### Why `buildArgs.add("-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,io.example")`
 
@@ -34,7 +34,7 @@ The same trick is documented in [`spring-boot-wallet-rest-gradle-native-pg`](../
 
 ### Why `resources.includedPatterns.add("db/migration/.*\\.sql")`
 
-native-image's default resource inclusion rules skip arbitrary classpath SQL files. Without this pattern, the migrations don't end up in the image and `FlywayHelper` finds nothing to apply at startup.
+native-image's default resource inclusion rules skip arbitrary classpath SQL files. Without this pattern, the migrations don't end up in the image and `FlywayMigrator` finds nothing to apply at startup.
 
 ## Build & run
 

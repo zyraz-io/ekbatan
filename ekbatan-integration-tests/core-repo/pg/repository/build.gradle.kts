@@ -57,6 +57,7 @@ dependencies {
 
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
     testImplementation(project(":ekbatan-native"))
+    testImplementation(project(":ekbatan-flyway"))
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")

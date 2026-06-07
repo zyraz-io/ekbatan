@@ -1,28 +1,27 @@
 spring:
+  autoconfigure:
+    exclude: org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
   application:
     name: spring-boot-wallet-rest-gradle-native-mariadb
+  flyway:
+    # Migrations are run by io.example.wallet.startup.EkbatanShardFlywayMigrator
+    # so every configured shard is migrated from the same ekbatan.sharding.* tree.
+    enabled: false
 
-
-# Single source of truth for DB connection details — both Flyway (run on startup via
-# FlywayConfiguration) and Ekbatan's runtime pools read from this same block. Spring Boot's
-# own DataSource/Flyway auto-config is intentionally NOT used.
-#
-# Notes on the JDBC URLs:
-#   - The main DB is `wallet`; eventlog is a separate database `eventlog`, created by the V0000
-#     Flyway migration. The connecting user needs cross-database privileges — set up by
-#     `mariadb_init.sql` mounted into /docker-entrypoint-initdb.d. See docs/database/mariadb.md.
+# Two configured shards. Each action execution in this example touches one shard only;
+# cross-shard actions are not enabled.
 ekbatan:
-  namespace: example.wallet.gradle-native-mariadb
+  namespace: example.wallet
   sharding:
     defaultShard:
       group: 0
       member: 0
     groups:
       - group: 0
-        name: default
+        name: global
         members:
           - member: 0
-            name: default
+            name: global
             configs:
               primaryConfig:
                 jdbcUrl: jdbc:mariadb://localhost:3306/wallet
@@ -36,6 +35,38 @@ ekbatan:
                 password: wallet
                 driverClassName: org.mariadb.jdbc.Driver
                 maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
+      - group: 1
+        name: mexico
+        members:
+          - member: 0
+            name: mexico
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3307/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3307/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3307/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
   local-event-handler:
     handling:
       enabled: true
@@ -44,4 +75,3 @@ logging:
   level:
     io.ekbatan: INFO
     io.example.wallet: DEBUG
-

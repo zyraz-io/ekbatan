@@ -16,6 +16,7 @@ include(
     "ekbatan-core",
     "ekbatan-test-support",
     "ekbatan-native",
+    "ekbatan-flyway",
     "ekbatan-events-streaming",
     "ekbatan-events-streaming-action-event-json",
     "ekbatan-events-streaming-action-event-avro",

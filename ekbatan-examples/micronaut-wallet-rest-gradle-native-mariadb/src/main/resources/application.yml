@@ -2,18 +2,20 @@ micronaut:
   application:
     name: micronaut-wallet-rest-gradle-native-mariadb
 
+# Two configured shards. The FlywayMigrator startup bean and Ekbatan's runtime pools
+# read from this same block. Each action execution touches one shard only.
 ekbatan:
-  namespace: example.wallet.gradle-native-mariadb-micronaut
+  namespace: example.wallet
   sharding:
     defaultShard:
       group: 0
       member: 0
     groups:
       - group: 0
-        name: default
+        name: global
         members:
           - member: 0
-            name: default
+            name: global
             configs:
               primaryConfig:
                 jdbcUrl: jdbc:mariadb://localhost:3306/wallet
@@ -27,6 +29,38 @@ ekbatan:
                 password: wallet
                 driverClassName: org.mariadb.jdbc.Driver
                 maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3306/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
+      - group: 1
+        name: mexico
+        members:
+          - member: 0
+            name: mexico
+            configs:
+              primaryConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3307/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 20
+              jobsConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3307/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:mariadb://localhost:3307/wallet
+                username: wallet
+                password: wallet
+                driverClassName: org.mariadb.jdbc.Driver
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
   local-event-handler:
     handling:
       enabled: true

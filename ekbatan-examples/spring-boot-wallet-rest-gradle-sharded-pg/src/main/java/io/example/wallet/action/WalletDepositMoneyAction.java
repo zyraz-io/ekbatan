@@ -10,14 +10,16 @@ import java.security.Principal;
 import java.time.Clock;
 
 /**
- * Single-shard deposit. The wallet's {@link ShardedId} encodes the shard bits, so
- * {@code walletRepository.getById} routes to the correct database automatically - and the
- * subsequent {@code plan().update(...)} commits on the same shard. No cross-shard semantics here.
+ * Updates the wallet's balance and emits a {@code WalletMoneyDepositedEvent}.
+ *
+ * <p>The wallet id is shard-aware, so {@code walletRepository.getById(...)} and
+ * {@code plan().update(...)} both route to the wallet's physical shard. This remains a
+ * single-shard action even when the application has multiple shards configured.
  */
 @EkbatanAction
 public class WalletDepositMoneyAction extends Action<WalletDepositMoneyAction.Params, Wallet> {
 
-    public record Params(ShardedId<Wallet> walletId, BigDecimal amount) {}
+    public record Params(ShardedId<Wallet> walletId, BigDecimal amount, String recipient) {}
 
     private final WalletRepository walletRepository;
 

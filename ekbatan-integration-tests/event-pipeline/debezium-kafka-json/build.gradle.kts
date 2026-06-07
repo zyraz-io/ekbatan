@@ -15,6 +15,7 @@ dependencies {
     testImplementation(project(":ekbatan-integration-tests-event-pipeline-common"))
 
     testImplementation(project(":ekbatan-native"))
+    testImplementation(project(":ekbatan-flyway"))
     testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:${project.property("testcontainersVersion")}")
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))

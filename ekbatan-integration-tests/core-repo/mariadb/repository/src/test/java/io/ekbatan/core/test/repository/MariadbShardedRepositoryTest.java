@@ -8,7 +8,7 @@ import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.AbstractRepository;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.test.model.Dummy;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import java.util.UUID;
 import org.jooq.SQLDialect;
 import org.testcontainers.junit.jupiter.Container;
@@ -75,6 +75,6 @@ public class MariadbShardedRepositoryTest extends BaseShardedRepositoryTest {
     }
 
     private static void runMigrations(MariaDBContainer container) {
-        FlywayHelper.migrate(container.getJdbcUrl(), container.getUsername(), container.getPassword());
+        FlywayMigrator.migrate(container.getJdbcUrl(), container.getUsername(), container.getPassword());
     }
 }

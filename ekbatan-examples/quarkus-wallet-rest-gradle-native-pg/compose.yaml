@@ -1,17 +1,30 @@
 services:
-  postgres:
+  postgres-global:
     image: postgres:17
     environment:
       POSTGRES_USER: wallet
       POSTGRES_PASSWORD: wallet
-      POSTGRES_DB: wallet
-      # Pin the server TZ to UTC — the Ekbatan framework writes/reads TIMESTAMP
-      # (without time zone) and assumes UTC at the DB layer.
+      POSTGRES_DB: wallet_global
       TZ: UTC
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wallet -d wallet"]
+      test: ["CMD-SHELL", "pg_isready -U wallet -d wallet_global"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+
+  postgres-mexico:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet
+      POSTGRES_DB: wallet_mexico
+      TZ: UTC
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallet -d wallet_mexico"]
       interval: 1s
       timeout: 5s
       retries: 10

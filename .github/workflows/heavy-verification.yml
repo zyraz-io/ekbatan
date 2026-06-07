@@ -201,11 +201,9 @@ jobs:
           - project: micronaut-wallet-rest-gradle-native-pg
             command: ./gradlew test nativeTest --stacktrace
             allow_failure: false
-          # The example README documents a current native-runtime startup caveat.
-          # Execute it so the signal remains visible, but do not block the whole workflow yet.
           - project: quarkus-wallet-rest-gradle-native-mariadb
             command: ./gradlew test testNative --stacktrace
-            allow_failure: true
+            allow_failure: false
           - project: quarkus-wallet-rest-gradle-native-mysql
             command: ./gradlew test testNative --stacktrace
             allow_failure: false
@@ -219,6 +217,9 @@ jobs:
             command: ./gradlew test nativeTest --stacktrace
             allow_failure: false
           - project: spring-boot-wallet-rest-gradle-native-pg
+            command: ./gradlew test nativeTest --stacktrace
+            allow_failure: false
+          - project: spring-boot-wallet-rest-gradle-native-sharded-pg
             command: ./gradlew test nativeTest --stacktrace
             allow_failure: false
           # Micronaut Maven native examples currently document native tests as not enabled.

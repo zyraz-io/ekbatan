@@ -55,6 +55,7 @@ dependencies {
     // Test
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation(project(":ekbatan-native"))
+    testImplementation(project(":ekbatan-flyway"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:${project.property("junitPlatformLauncherVersion")}")
     testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")

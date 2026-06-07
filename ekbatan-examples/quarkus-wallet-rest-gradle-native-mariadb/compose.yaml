@@ -1,21 +1,36 @@
 services:
-  postgres:
-    image: postgres:17
+  mariadb-global:
+    image: mariadb:11.8
     environment:
-      POSTGRES_USER: wallet
-      POSTGRES_PASSWORD: wallet
-      POSTGRES_DB: wallet
-      # Pin the server TZ to UTC — the Ekbatan framework writes/reads TIMESTAMP
-      # (without time zone) and assumes UTC at the DB layer.
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_USER: wallet
+      MARIADB_PASSWORD: wallet
+      MARIADB_DATABASE: wallet
       TZ: UTC
     ports:
-      # Fixed mapping so the hard-coded jdbc:postgresql://localhost:5432/... in
-      # application.yml (used by Ekbatan) matches. Spring Boot's docker-compose
-      # integration also injects the mapped port into spring.datasource.* for
-      # the Flyway-driven migration run.
-      - "5432:5432"
+      - "3306:3306"
+    volumes:
+      - "./src/main/resources/mariadb_init.sql:/docker-entrypoint-initdb.d/mariadb_init.sql:ro"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wallet -d wallet"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 1s
       timeout: 5s
-      retries: 10
+      retries: 30
+
+  mariadb-mexico:
+    image: mariadb:11.8
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_USER: wallet
+      MARIADB_PASSWORD: wallet
+      MARIADB_DATABASE: wallet
+      TZ: UTC
+    ports:
+      - "3307:3306"
+    volumes:
+      - "./src/main/resources/mariadb_init.sql:/docker-entrypoint-initdb.d/mariadb_init.sql:ro"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 1s
+      timeout: 5s
+      retries: 30

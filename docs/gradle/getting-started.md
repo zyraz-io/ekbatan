@@ -30,6 +30,8 @@ dependencies {
     // (2) The starter — pulls ekbatan-core, the local event handler,
     // and distributed jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.1.2")
+    // Programmatic shard-aware Flyway migration from ekbatan.sharding.*.
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
 
     // (3) @AutoBuilder is compile-time only: compileOnly exposes the annotation to javac,
     // annotationProcessor runs the processor that emits *Builder.java.
@@ -38,8 +40,13 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-web")
 
-    // Your DB driver + Flyway, plus a jooqCodegen() classpath entry for the driver
-    // so the build-time container can be introspected. See jooq-codegen.md.
+    // Flyway runtime. Spring Boot's single-datasource Flyway auto-run is disabled
+    // in application.yml; EkbatanShardFlywayMigrator calls FlywayMigrator instead.
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.flywaydb:flyway-database-postgresql")
+
+    // Your DB driver, plus a jooqCodegen() classpath entry for the driver so the
+    // build-time container can be introspected. See jooq-codegen.md.
     runtimeOnly("org.postgresql:postgresql")
     jooqCodegen("org.postgresql:postgresql")
 }
@@ -75,6 +82,8 @@ dependencies {
     // (2) The Quarkus extension — pulls ekbatan-core + the local-event-handler +
     // distributed-jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-quarkus:0.1.2")
+    // Programmatic shard-aware Flyway migration from ekbatan.sharding.*.
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
 
     // (3) @AutoBuilder is compile-time only: compileOnly + annotationProcessor.
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
@@ -83,9 +92,16 @@ dependencies {
     implementation("io.quarkus:quarkus-rest")
     implementation("io.quarkus:quarkus-rest-jackson")
 
+    // Flyway runtime. Quarkus' datasource/Flyway startup config is not used here;
+    // EkbatanShardFlywayMigrator calls FlywayMigrator instead.
+    implementation("io.quarkus:quarkus-flyway")
+    implementation("org.flywaydb:flyway-mysql")     // MariaDB/MySQL dialect module
+    implementation("io.quarkus:quarkus-jdbc-mariadb")
+
     // Driver + jooqCodegen entry.
     implementation("org.mariadb.jdbc:mariadb-java-client:3.5.7")
     jooqCodegen("org.mariadb.jdbc:mariadb-java-client:3.5.7")
+    jooqCodegen("org.flywaydb:flyway-mysql:12.0.0")
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -125,6 +141,8 @@ micronaut {
 dependencies {
     // (2) The integration jar — pulls ekbatan-core + handlers + jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-micronaut:0.1.2")
+    // Programmatic shard-aware Flyway migration from ekbatan.sharding.*.
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
     // (5) REQUIRED on Micronaut: the EkbatanStereotypeVisitor lives in ekbatan-micronaut
     // and must be on the annotationProcessor classpath so it sees @EkbatanAction etc.
     // during *your* compile. Without this, no BeanDefinition is generated for your
@@ -136,6 +154,11 @@ dependencies {
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
 
     implementation("io.micronaut:micronaut-jackson-databind")
+
+    // Flyway runtime. micronaut-flyway remains on the classpath for Flyway/native
+    // integration, but the startup @Context bean calls FlywayMigrator itself.
+    implementation("io.micronaut.flyway:micronaut-flyway")
+    implementation("org.flywaydb:flyway-database-postgresql")
 
     runtimeOnly("org.postgresql:postgresql:42.7.10")
     jooqCodegen("org.postgresql:postgresql:42.7.10")
@@ -162,6 +185,7 @@ repositories {
 dependencies {
     // ── Required ────────────────────────────────────────────────────────────
     implementation("io.github.zyraz-io:ekbatan-core:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2") // FlywayMigrator
 
     // ── Optional capabilities — add only what you need ──────────────────────
 
@@ -176,6 +200,8 @@ dependencies {
     // Distributed background jobs (db-scheduler facade; cluster-exclusive scheduling).
     implementation("io.github.zyraz-io:ekbatan-distributed-jobs:0.1.2")
 
+    implementation("org.flywaydb:flyway-core:12.0.0")
+    implementation("org.flywaydb:flyway-database-postgresql:12.0.0")
     runtimeOnly("org.postgresql:postgresql:42.7.10")
     jooqCodegen("org.postgresql:postgresql:42.7.10")
 }
@@ -260,6 +286,9 @@ Spring Boot and Quarkus don't need a separate annotation-processor line for thei
 The DI integration dependencies pull the common runtime modules such as the local event handler and distributed jobs. `ekbatan-annotation-processor` stays explicit and compile-time only. The following are deliberately *not* pulled; add them only when you need them:
 
 ```kotlin
+// Programmatic Flyway migration from one DataSource or every primary shard in ShardingConfig.
+implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
+
 // Redis-backed distributed KeyedLockProvider (Redisson under the hood).
 implementation("io.github.zyraz-io:ekbatan-keyed-lock-redis:0.1.2")
 
@@ -334,6 +363,6 @@ Commit `gradle/wrapper/gradle-wrapper.jar`, `gradle/wrapper/gradle-wrapper.prope
 - [jOOQ codegen on Gradle](jooq-codegen.md) — the `dev.monosoul.jooq-docker` plugin, per-dialect container/forced-type blocks, source-set wiring
 - [Wiring with Spring Boot](../wiring/spring.md) / [Quarkus](../wiring/quarkus.md) / [Micronaut](../wiring/micronaut.md) — what these dependencies enable on the Java side
 - [Database → PostgreSQL](../database/postgresql.md) / [MariaDB](../database/mariadb.md) / [MySQL](../database/mysql.md) — per-dialect column types, framework tables, gotchas
-- [`ekbatan-examples/`](../../ekbatan-examples/) — every example is a runnable Gradle project
+- [`ekbatan-examples/`](../../ekbatan-examples/) — runnable Gradle and Maven examples
 
 ← Back to [Gradle](README.md) · [docs index](../README.md)

@@ -57,6 +57,7 @@ dependencies {
 
     // ── Ekbatan ─────────────────────────────────────────────────────────────
     implementation("io.github.zyraz-io:ekbatan-quarkus:$ekbatanVersion")
+    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
     annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
 
@@ -79,9 +80,8 @@ dependencies {
     // but the driver still needs to be reachable when Flyway / Hikari look it up via the
     // Class.forName(...) path inside a native binary.
     implementation("io.quarkus:quarkus-jdbc-mariadb")
-    // Quarkus's official Flyway extension — runs migrations at app startup via
-    // `quarkus.flyway.migrate-at-start=true` against the datasource overridden by
-    // `EkbatanShardFlywayCustomizer` to point at the default shard's primaryConfig.
+    // EkbatanShardFlywayMigrator runs Flyway over every shard from ekbatan.sharding.*.
+    // quarkus-flyway stays on the classpath for Flyway/native-image integration.
     implementation("io.quarkus:quarkus-flyway")
 
     // ── Flyway ──────────────────────────────────────────────────────────────
@@ -152,6 +152,7 @@ tasks {
     // them so the regular `test` task doesn't try to connect to a packaged app that isn't up.
     named<Test>("test") {
         exclude("**/*IT.class")
+        failOnNoDiscoveredTests = false
     }
 }
 

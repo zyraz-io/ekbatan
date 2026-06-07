@@ -40,7 +40,7 @@ The native examples are the cleanest source of truth because they include the st
 
 <div data-stack="spring" data-build="gradle">
 
-Use `spring-boot-wallet-rest-gradle-native-{pg,mariadb,mysql}`. It is the same Spring Boot wallet app as the JVM sibling, with the GraalVM Build Tools plugin and native metadata added.
+Use `spring-boot-wallet-rest-gradle-native-{pg,mariadb,mysql}`. It is the same Spring Boot wallet app as the JVM sibling, with the GraalVM Build Tools plugin and native metadata added. For sharded Spring Boot native coverage, use `spring-boot-wallet-rest-gradle-native-sharded-pg`.
 
 </div>
 
@@ -111,9 +111,10 @@ dependencies {
 - Jackson 3 reflection metadata for Java records, action params, event payloads, `@JsonCreator` classes, `@AutoBuilder` builders, and generated jOOQ classes.
 - GraalVM metadata for Kafka clients, Avro `SpecificRecord`s, and Testcontainers/docker-java when those libraries are present.
 - HikariCP reachability metadata.
-- `FlywayHelper`, for cases where your app runs raw/programmatic Flyway instead of a framework Flyway integration.
 
 The jOOQ native substitution lives in `ekbatan-core`, so it is available without extra user code.
+
+If your app calls Ekbatan's programmatic Flyway migrator, also add `ekbatan-flyway`. That module provides `FlywayMigrator`, which can run one datasource or every primary shard in `ShardingConfig`.
 
 ## 4. Set The Scan Package
 
@@ -183,12 +184,12 @@ Flyway is the one native-image topic where stack behavior differs. Use the patte
 
 | Stack | Migration pattern in the native examples |
 |---|---|
-| Spring Boot | `spring-boot-starter-flyway` plus a `@FlywayDataSource` bean built from `ekbatan.sharding.*`. No `FlywayHelper` in the application migration path. |
-| Quarkus | `quarkus-flyway` plus an `EkbatanShardFlywayCustomizer` that points Flyway at the Ekbatan shard config. No `FlywayHelper` in the application migration path. |
-| Micronaut | A small startup migrator calls `FlywayHelper.migrate(...)`; `micronaut-flyway` remains on the classpath for Flyway/native support, but the example does not use a `flyway:` auto-config block. |
-| Plain Java / raw Flyway | Call `FlywayHelper.migrate(...)` yourself. |
+| Spring Boot | `spring-boot-starter-flyway` stays on the classpath, `spring.flyway.enabled=false` disables Boot's single-datasource auto-run, and a startup bean calls `FlywayMigrator.migrate(shardingConfig)`. |
+| Quarkus | A `StartupEvent` observer calls `FlywayMigrator.migrate(shardingConfig)` from `ekbatan-flyway`; `quarkus-flyway` and the matching `quarkus-jdbc-*` extension stay on the classpath for Flyway/driver native-image integration. |
+| Micronaut | A small startup migrator calls `FlywayMigrator.migrate(...)`; `micronaut-flyway` remains on the classpath for Flyway/native support, but the example does not use a `flyway:` auto-config block. |
+| Plain Java / raw Flyway | Call `FlywayMigrator.migrate(...)` yourself. |
 
-`FlywayHelper` is a thin wrapper. On the JVM it behaves like normal `Flyway.configure().dataSource(...).load().migrate()`. In a native image it installs Ekbatan's resource provider so Flyway can find `classpath:db/migration`.
+`FlywayMigrator` is a thin wrapper. On the JVM it behaves like normal `Flyway.configure().dataSource(...).load().migrate()`. In a native image it installs Ekbatan's internal resource scanner so Flyway can find `classpath:db/migration`.
 
 ## 6. Include SQL Resources
 
@@ -306,6 +307,6 @@ Use the GraalVM Build Tools `nativeCompile` / `nativeTest` tasks or `native-mave
 ## See Also
 
 - [Reference -> GraalVM native-image](/reference/runtime/native-image/) - feature list, Flyway patterns, toolchain notes, troubleshooting
-- [`ekbatan-examples/*-native-*`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples) - 18 native wallet examples across Spring Boot, Quarkus, Micronaut, Gradle, Maven, and the three supported databases
+- [`ekbatan-examples/*-native-*`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples) - 19 native wallet examples across Spring Boot, Quarkus, Micronaut, Gradle, Maven, the three supported databases, and the sharded Spring Boot PG example
 - [GraalVM Build Tools docs](https://graalvm.github.io/native-build-tools/latest/) - official Gradle/Maven native plugin reference
 - [Quarkus native guide](https://quarkus.io/guides/building-native-image) - Quarkus-specific native build details

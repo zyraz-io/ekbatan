@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.ekbatan.core.shard.ShardIdentifier;
 import io.example.wallet.model.NotificationKind;
 import io.example.wallet.repository.NotificationRepository;
+import io.example.wallet.repository.WalletRepository;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,44 +20,38 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
-/**
- * End-to-end integration test for the wallet REST endpoints. {@link TestcontainersConfiguration}
- * brings up the testcontainer and publishes its JDBC coords as {@code ekbatan.sharding.*}
- * properties via {@code DynamicPropertyRegistrar}. Spring Boot's {@code FlywayAutoConfiguration}
- * then runs migrations at context startup; {@code EkbatanShardFlywayCustomizer} overrides the
- * Flyway dataSource from the same {@code ekbatan.sharding.*} block, so connection coordinates
- * have a single source of truth.
- */
 @SpringBootTest(
         classes = {Application.class, TestcontainersConfiguration.class},
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-            // Single-shard sharding skeleton - container-dependent jdbcUrl/username/password
-            // come from the DynamicPropertyRegistrar in TestcontainersConfiguration.
+            "spring.flyway.enabled=false",
             "ekbatan.namespace=test.wallet",
             "ekbatan.sharding.defaultShard.group=0",
             "ekbatan.sharding.defaultShard.member=0",
             "ekbatan.sharding.groups[0].group=0",
-            "ekbatan.sharding.groups[0].name=default",
+            "ekbatan.sharding.groups[0].name=global",
             "ekbatan.sharding.groups[0].members[0].member=0",
-            "ekbatan.sharding.groups[0].members[0].configs.primaryConfig.maximumPoolSize=5",
-            "ekbatan.sharding.groups[0].members[0].configs.jobsConfig.maximumPoolSize=4",
-            // Lock pool - sized for concurrent held leases.
-            "ekbatan.sharding.groups[0].members[0].configs.lockConfig.maximumPoolSize=15",
-            "ekbatan.sharding.groups[0].members[0].configs.lockConfig.leakDetectionThreshold=0",
-            // Tighten poll intervals so the listen-to-yourself path doesn't sit idle for default waits.
+            "ekbatan.sharding.groups[0].members[0].name=global",
+            "ekbatan.sharding.groups[1].group=1",
+            "ekbatan.sharding.groups[1].name=mexico",
+            "ekbatan.sharding.groups[1].members[0].member=0",
+            "ekbatan.sharding.groups[1].members[0].name=mexico",
             "ekbatan.local-event-handler.fanout-poll-delay=PT0.2S",
             "ekbatan.local-event-handler.handling-poll-delay=PT0.2S",
             "ekbatan.jobs.polling-interval=PT1S",
             "ekbatan.jobs.shutdown-max-wait=PT5S",
-            // @ConditionalOnProperty is evaluated before DynamicPropertyRegistrar runs, so the
-            // local-event-handler opt-in lives here in @SpringBootTest(properties=).
             "ekbatan.local-event-handler.handling.enabled=true",
         })
 class WalletControllerIntegrationTest {
 
+    private static final ShardIdentifier GLOBAL_SHARD = ShardIdentifier.of(0, 0);
+    private static final ShardIdentifier MEXICO_SHARD = ShardIdentifier.of(1, 0);
+
     @LocalServerPort
     private int port;
+
+    @Autowired
+    private WalletRepository walletRepository;
 
     @Autowired
     private NotificationRepository notificationRepository;
@@ -64,24 +60,33 @@ class WalletControllerIntegrationTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
+    void separate_wallets_route_to_their_own_shards() throws Exception {
+        final var globalWallet = parse(createWallet("US", "USD", "10.00"));
+        final var mexicoWallet = parse(createWallet("MX", "MXN", "20.00"));
+        final var globalId = UUID.fromString((String) globalWallet.get("id"));
+        final var mexicoId = UUID.fromString((String) mexicoWallet.get("id"));
+
+        assertThat(globalWallet).containsEntry("shardGroup", 0).containsEntry("shardMember", 0);
+        assertThat(mexicoWallet).containsEntry("shardGroup", 1).containsEntry("shardMember", 0);
+
+        assertThat(parse(deposit(globalId, "5.00", "global@example.com"))).containsEntry("balance", 15.00);
+        assertThat(parse(deposit(mexicoId, "7.00", "mexico@example.com"))).containsEntry("balance", 27.00);
+
+        assertThat(walletRepository.existsOnShard(GLOBAL_SHARD, globalId)).isTrue();
+        assertThat(walletRepository.existsOnShard(MEXICO_SHARD, globalId)).isFalse();
+        assertThat(walletRepository.existsOnShard(MEXICO_SHARD, mexicoId)).isTrue();
+        assertThat(walletRepository.existsOnShard(GLOBAL_SHARD, mexicoId)).isFalse();
+    }
+
+    @Test
     void deposit_emits_event_and_handler_creates_notification() throws Exception {
-        // GIVEN - a freshly created wallet
-        final var ownerId = UUID.randomUUID();
-        final var createResponse =
-                post("/wallets", Map.of("ownerId", ownerId.toString(), "currency", "USD", "initialBalance", "0.00"));
-        assertThat(createResponse.statusCode()).isEqualTo(201);
-        final var walletId = UUID.fromString((String) parse(createResponse).get("id"));
+        final var wallet = parse(createWallet("US", "USD", "0.00"));
+        final var walletId = UUID.fromString((String) wallet.get("id"));
 
-        // WHEN - deposit $100 with a notification recipient
-        final var depositResponse = post(
-                "/wallets/" + walletId + "/deposits", Map.of("amount", "100.00", "recipient", "alice@example.com"));
-
-        // THEN - the synchronous response reflects the new balance
+        final var depositResponse = deposit(walletId, "100.00", "alice@example.com");
         assertThat(depositResponse.statusCode()).isEqualTo(200);
         assertThat(parse(depositResponse)).containsEntry("balance", 100.00);
 
-        // AND - the listen-to-yourself handler eventually creates the Notification row.
-        // The fan-out + handling jobs poll asynchronously, so we wait until the row appears.
         await().atMost(Duration.ofSeconds(15))
                 .pollInterval(Duration.ofMillis(200))
                 .untilAsserted(() -> {
@@ -95,20 +100,27 @@ class WalletControllerIntegrationTest {
 
     @Test
     void close_transitions_wallet_to_closed_state() throws Exception {
-        // GIVEN - a freshly created wallet
-        final var ownerId = UUID.randomUUID();
-        final var createResponse =
-                post("/wallets", Map.of("ownerId", ownerId.toString(), "currency", "EUR", "initialBalance", "0.00"));
-        final var walletId = UUID.fromString((String) parse(createResponse).get("id"));
+        final var wallet = parse(createWallet("US", "EUR", "0.00"));
+        final var walletId = UUID.fromString((String) wallet.get("id"));
 
-        // WHEN
         final var closeResponse = post("/wallets/" + walletId + "/close", Map.of());
-
-        // THEN
         assertThat(closeResponse.statusCode()).isEqualTo(200);
-
-        // AND
         assertThat(parse(get("/wallets/" + walletId))).containsEntry("state", "CLOSED");
+    }
+
+    private HttpResponse<String> createWallet(String countryCode, String currency, String initialBalance)
+            throws Exception {
+        return post(
+                "/wallets",
+                Map.of(
+                        "countryCode", countryCode,
+                        "ownerId", UUID.randomUUID().toString(),
+                        "currency", currency,
+                        "initialBalance", initialBalance));
+    }
+
+    private HttpResponse<String> deposit(UUID walletId, String amount, String recipient) throws Exception {
+        return post("/wallets/" + walletId + "/deposits", Map.of("amount", amount, "recipient", recipient));
     }
 
     private HttpResponse<String> post(String path, Object body) throws Exception {

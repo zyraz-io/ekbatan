@@ -5,7 +5,7 @@ import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import io.ekbatan.core.config.DataSourceConfig;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import org.jooq.SQLDialect;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -42,7 +42,7 @@ public class MysqlRepositoryTest extends BaseRepositoryTest {
         TRANSACTION_MANAGER =
                 new TransactionManager(primaryConnectionProvider, secondaryConnectionProvider, SQLDialect.MYSQL);
 
-        FlywayHelper.migrate(jdbcUrl, username, password);
+        FlywayMigrator.migrate(jdbcUrl, username, password);
 
         var databaseRegistry =
                 databaseRegistry().withDatabase(TRANSACTION_MANAGER).build();

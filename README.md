@@ -473,14 +473,15 @@ Per-stack starting points (every one has 6 sibling DB / build-tool variants — 
 | [`quarkus-wallet-rest-gradle-pg`](./ekbatan-examples/quarkus-wallet-rest-gradle-pg) | Quarkus wallet — same surface, using `quarkus-flyway` + a CDI `FlywayConfigurationCustomizer` |
 | [`micronaut-wallet-rest-gradle-pg`](./ekbatan-examples/micronaut-wallet-rest-gradle-pg) | Micronaut wallet — same surface, using `micronaut-flyway` + a `@Named("default")` customizer and `micronaut-serde-jackson` |
 | [`spring-boot-wallet-rest-gradle-sharded-pg`](./ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) | Multi-shard Spring Boot wallet — 2 Postgres instances, `ShardedUUID`, and `WalletTransferAction` as an `allowCrossShard(true)` mechanics demo with one independent transaction per shard; use the saga example for production transfer workflows |
+| [`spring-boot-wallet-rest-gradle-native-sharded-pg`](./ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg) | Native-image sibling of the multi-shard Spring Boot wallet — same two-shard runtime path, plus `ekbatan-native`, native migration resources, and `nativeTest` coverage |
 | [`spring-boot-wallet-saga-gradle-pg`](./ekbatan-examples/spring-boot-wallet-saga-gradle-pg) | Saga pattern — `InitiateTransferAction` → `CompleteTransferAction` → `RefundTransferAction` chained by `@EkbatanEventHandler`s, forward-only compensation |
 | [`spring-boot-job-worker-gradle-pg`](./ekbatan-examples/spring-boot-job-worker-gradle-pg) | `@EkbatanDistributedJob` as the primary feature — no HTTP, `spring.main.web-application-type=none`, two jobs running end-to-end |
 
-**Use these as the template when wiring Ekbatan into your own project.** They show the canonical framework-native dep choices (`quarkus-flyway` / `micronaut-flyway` / `spring-boot-starter-flyway` — never raw `flyway-core` and a hand-rolled runner) and the customizer hooks each framework uses to feed connection coordinates from `ekbatan.sharding.*` into Flyway.
+**Use these as the template when wiring Ekbatan into your own project.** They show the canonical framework-native dep choices (`quarkus-flyway`, `spring-boot-starter-flyway`, or `ekbatan-flyway` when you need a programmatic one-or-many-shard migrator) and the hooks each framework uses to feed connection coordinates from `ekbatan.sharding.*` into Flyway.
 
 ### [`ekbatan-integration-tests/`](./ekbatan-integration-tests) — framework's own smoke tests
 
-These are **not** examples in the "copy me" sense — they're the framework's own integration test suite, exercising `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, the four `KeyedLockProvider` backends, and the three Debezium SMT serializers directly. Each runs against real Testcontainers and produces real coverage; together they're the green-light check before a release. They deliberately **do not** use a DI framework (except where the test target is the DI integration itself), and they call **raw Flyway** via `FlywayHelper.migrate(url, user, pass)` — see the [two Flyway-on-native patterns](./docs/runtime/native-image.md#flyway-on-native--two-patterns) for why that's right for these tests and wrong for your app.
+These are **not** examples in the "copy me" sense — they're the framework's own integration test suite, exercising `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, the four `KeyedLockProvider` backends, and the three Debezium SMT serializers directly. Each runs against real Testcontainers and produces real coverage; together they're the green-light check before a release. They deliberately **do not** use a DI framework (except where the test target is the DI integration itself), and they call **raw Flyway** via `FlywayMigrator.migrate(url, user, pass)` — see [Flyway on native](./docs/runtime/native-image.md#flyway-on-native) for why that's right for these tests and usually not the first choice for framework apps.
 
 | Subproject | What it covers |
 |---|---|
@@ -493,7 +494,7 @@ These are **not** examples in the "copy me" sense — they're the framework's ow
 | `local-event-handler/{shared,pg,mariadb,mysql}/` | In-process consumer (fan-out + handling jobs) on PG / MariaDB / MySQL |
 | `di/{spring-boot-starter,quarkus,micronaut}/` | DI integration smoke tests for the framework's auto-config / extension / visitor |
 
-Every test module also has a `nativeTest` task (Gradle) — the full 402-test suite passes against the compiled native binary, validating the GraalVM substitutions, reachability metadata, and `NativeImageFlywayResourceProvider` end-to-end.
+Every test module also has a `nativeTest` task (Gradle) — the full 402-test suite passes against the compiled native binary, validating the GraalVM substitutions, reachability metadata, and `FlywayMigrator`'s native-image classpath migration path end-to-end.
 
 ---
 

@@ -1,45 +1,82 @@
 package io.example.wallet;
 
+import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.DynamicPropertyRegistrar;
+import org.springframework.test.context.DynamicPropertyRegistry;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-/**
- * Boots a testcontainer and points Ekbatan's sharding config at it. Migrations are NOT
- * run here - Spring Boot's {@code FlywayAutoConfiguration} owns that at context startup;
- * {@code EkbatanShardFlywayCustomizer} builds Flyway's @FlywayDataSource bean from the same
- * {@link io.ekbatan.core.config.ShardingConfig} this registrar populates, so the same
- * code path serves both production and tests.
- *
- * <p>Bean-based wiring (rather than {@code @Container} + {@code @DynamicPropertySource}) is the
- * Spring AOT / native-image friendly pattern - the lambda runs at context refresh, so the JDBC
- * URL reflects whatever port Docker assigned for this run.
- */
+/** Boots two database containers and points Ekbatan at them as global + Mexico shards. */
 @TestConfiguration(proxyBeanMethods = false)
 class TestcontainersConfiguration {
 
-    @Bean(initMethod = "start", destroyMethod = "stop")
-    PostgreSQLContainer postgresContainer() {
+    @Bean(name = "globalDatabaseContainer", initMethod = "start", destroyMethod = "stop")
+    PostgreSQLContainer globalDatabaseContainer() {
         return new PostgreSQLContainer("postgres:17")
-                .withDatabaseName("wallet")
+                .withDatabaseName("wallet_global")
+                .withUsername("wallet")
+                .withPassword("wallet")
+                .withEnv("TZ", "UTC");
+    }
+
+    @Bean(name = "mexicoDatabaseContainer", initMethod = "start", destroyMethod = "stop")
+    PostgreSQLContainer mexicoDatabaseContainer() {
+        return new PostgreSQLContainer("postgres:17")
+                .withDatabaseName("wallet_mexico")
                 .withUsername("wallet")
                 .withPassword("wallet")
                 .withEnv("TZ", "UTC");
     }
 
     @Bean
-    DynamicPropertyRegistrar ekbatanShardingProperties(PostgreSQLContainer postgres) {
+    DynamicPropertyRegistrar ekbatanShardingProperties(
+            @Qualifier("globalDatabaseContainer") PostgreSQLContainer global,
+            @Qualifier("mexicoDatabaseContainer") PostgreSQLContainer mexico) {
         return registry -> {
-            registry.add("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl", postgres::getJdbcUrl);
-            registry.add("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username", postgres::getUsername);
-            registry.add("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password", postgres::getPassword);
-            registry.add("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl", postgres::getJdbcUrl);
-            registry.add("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username", postgres::getUsername);
-            registry.add("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password", postgres::getPassword);
-            registry.add("ekbatan.sharding.groups[0].members[0].configs.lockConfig.jdbcUrl", postgres::getJdbcUrl);
-            registry.add("ekbatan.sharding.groups[0].members[0].configs.lockConfig.username", postgres::getUsername);
-            registry.add("ekbatan.sharding.groups[0].members[0].configs.lockConfig.password", postgres::getPassword);
+            registerShard(
+                    registry,
+                    "ekbatan.sharding.groups[0].members[0]",
+                    global::getJdbcUrl,
+                    global::getUsername,
+                    global::getPassword,
+                    "org.postgresql.Driver");
+            registerShard(
+                    registry,
+                    "ekbatan.sharding.groups[1].members[0]",
+                    mexico::getJdbcUrl,
+                    mexico::getUsername,
+                    mexico::getPassword,
+                    "org.postgresql.Driver");
         };
+    }
+
+    private static void registerShard(
+            DynamicPropertyRegistry registry,
+            String prefix,
+            Supplier<String> jdbcUrl,
+            Supplier<String> username,
+            Supplier<String> password,
+            String driverClassName) {
+        addDataSource(registry, prefix + ".configs.primaryConfig", jdbcUrl, username, password, driverClassName, 5);
+        addDataSource(registry, prefix + ".configs.jobsConfig", jdbcUrl, username, password, driverClassName, 4);
+        addDataSource(registry, prefix + ".configs.lockConfig", jdbcUrl, username, password, driverClassName, 15);
+        registry.add(prefix + ".configs.lockConfig.leakDetectionThreshold", () -> "0");
+    }
+
+    private static void addDataSource(
+            DynamicPropertyRegistry registry,
+            String prefix,
+            Supplier<String> jdbcUrl,
+            Supplier<String> username,
+            Supplier<String> password,
+            String driverClassName,
+            int maximumPoolSize) {
+        registry.add(prefix + ".jdbcUrl", () -> jdbcUrl.get());
+        registry.add(prefix + ".username", () -> username.get());
+        registry.add(prefix + ".password", () -> password.get());
+        registry.add(prefix + ".driverClassName", () -> driverClassName);
+        registry.add(prefix + ".maximumPoolSize", () -> Integer.toString(maximumPoolSize));
     }
 }

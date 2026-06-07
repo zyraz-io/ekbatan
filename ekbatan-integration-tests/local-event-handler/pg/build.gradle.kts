@@ -60,6 +60,7 @@ dependencies {
 
     testImplementation(testFixtures(project(":ekbatan-integration-tests-local-event-handler-shared")))
     testImplementation(project(":ekbatan-native"))
+    testImplementation(project(":ekbatan-flyway"))
 
     testImplementation("org.testcontainers:testcontainers-postgresql:${project.property("testcontainersVersion")}")
 }

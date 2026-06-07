@@ -73,6 +73,11 @@
         </dependency>
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-flyway</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
             <scope>provided</scope>
@@ -101,12 +106,10 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest-jackson</artifactId>
         </dependency>
-        <!-- ── Flyway via Quarkus's official extension ──────────────────────────── -->
-        <!-- Migrations run at app startup driven by `quarkus.flyway.migrate-at-start=true`
-             against the `quarkus.datasource.*` config (see application.properties). The
-             extension carries native-image reachability metadata for Flyway 12.0.0 and
-             handles the substrate-VM classpath scanning Flyway can't do on its own - no
-             FlywayHelper or NativeImageFlywayResourceProvider is needed in user code. -->
+        <!-- ── Flyway support ───────────────────────────────────────────────────── -->
+        <!-- EkbatanShardFlywayMigrator calls FlywayMigrator.migrate(shardingConfig)
+             over every primary shard in ekbatan.sharding.*. quarkus-flyway stays on
+             the classpath for Flyway and native-image integration. -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-flyway</artifactId>

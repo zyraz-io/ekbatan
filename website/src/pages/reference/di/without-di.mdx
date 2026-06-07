@@ -162,6 +162,7 @@ import static io.ekbatan.distributedjobs.JobRegistry.jobRegistry;
 import static io.ekbatan.events.localeventhandler.EventHandlerRegistry.eventHandlerRegistry;
 import static io.ekbatan.events.localeventhandler.job.EventFanoutJob.eventFanoutJob;
 import static io.ekbatan.events.localeventhandler.job.EventHandlingJob.eventHandlingJob;
+import io.ekbatan.flyway.FlywayMigrator;
 // …
 
 public class Application {
@@ -196,9 +197,9 @@ public class Application {
                 .build();
 
         // ─── 2. Run Flyway migrations ────────────────────────────────────────
-        // FlywayHelper is GraalVM-native-image-aware. On JVM it's a thin wrapper
+        // FlywayMigrator is GraalVM-native-image-aware. On JVM it's a thin wrapper
         // around Flyway.configure().dataSource(...).migrate().
-        FlywayHelper.migrate(primary.jdbcUrl, primary.username, primary.password);
+        FlywayMigrator.migrate(primary.jdbcUrl, primary.username, primary.password);
 
         // ─── 3. TransactionManager + DatabaseRegistry ────────────────────────
         // Each shard gets its own TransactionManager. With one shard (the default),
@@ -293,7 +294,7 @@ public class Application {
 | Block | Concept | Doc |
 |---|---|---|
 | 1. Datasources | `DataSourceConfig` carries the Hikari knobs and resolves the dialect from the JDBC URL | [Sharding](/reference/sharding/) covers the broader topology |
-| 2. Migrations | `FlywayHelper.migrate(...)` runs Flyway, native-image-aware | [Native image](/reference/runtime/native-image/) |
+| 2. Migrations | `FlywayMigrator.migrate(...)` runs Flyway, native-image-aware | [Native image](/reference/runtime/native-image/) |
 | 3. TM + registry | One `TransactionManager` per shard; `DatabaseRegistry` indexes them by `ShardIdentifier` | [The outbox](/concepts/outbox/), [Sharding](/reference/sharding/) |
 | 4. Repositories | One repository instance per persistable type, registered into a `RepositoryRegistry` | [Repositories](/reference/repository/) |
 | 5. Actions | One `Action` instance per concrete subclass — they're singletons, per-call state lives on the plan | [Actions](/concepts/actions/) |
@@ -314,7 +315,7 @@ The 9 blocks are arranged so you can drop any **optional** piece by deleting a s
 
 ## Same thing with less code
 
-Most of the wiring above (datasources, registry construction, lifecycle) is mechanical glue your application doesn't really care about. If you're already running on Spring Boot, Quarkus, or Micronaut, the framework's DI integration replaces blocks 1–8 with one starter dependency and four `@Ekbatan*` annotations on the classes you write. See [Wiring with DI](with-di.md).
+Most of the wiring above (datasources, registry construction, lifecycle) is mechanical glue your application doesn't really care about. If you're already running on Spring Boot, Quarkus, or Micronaut, the framework's DI integration replaces blocks 1–8 with a small dependency block and four `@Ekbatan*` annotations on the classes you write. See [Wiring with DI](with-di.md).
 
 ## See also
 

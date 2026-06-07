@@ -56,10 +56,11 @@ dependencies {
     implementation("org.apache.commons:commons-lang3:3.20.0")
 
     // Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
-    // Flyway resource provider, etc.) that auto-apply when native-image runs. Also provides
-    // FlywayHelper for the native-aware startup migrator. Only needed because we want a native binary;
-    // the JVM-only sibling doesn't include it.
+    // HikariCP metadata, etc.) that auto-apply when native-image runs. Only needed because
+    // we want a native binary; the JVM-only sibling doesn't include it.
     implementation("io.github.zyraz-io:ekbatan-native:$ekbatanVersion")
+    // Programmatic Flyway migrator. Native-aware classpath migration scanning lives here.
+    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
 
     // ── Micronaut runtime ───────────────────────────────────────────────────
     // micronaut-serde-jackson — Jackson-compatible (de)serialization using
@@ -71,10 +72,9 @@ dependencies {
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("org.yaml:snakeyaml")
 
-    // ── Flyway via Micronaut's official extension ────────────────────────────
-    // micronaut-flyway picks up `flyway.datasources.{name}.enabled=true` blocks and runs
-    // Flyway on startup; `EkbatanShardFlywayCustomizer` overrides the dataSource from
-    // `ekbatan.sharding.*`. Version of flyway-core is BOM-managed by Micronaut.
+    // ── Flyway support ───────────────────────────────────────────────────────
+    // ekbatan-flyway runs migrations from an eager startup bean using typed ShardingConfig.
+    // micronaut-flyway stays on the classpath for Flyway and native-image support.
     implementation("io.micronaut.flyway:micronaut-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
 
@@ -152,7 +152,7 @@ sourceSets {
 // Use a Java 25 toolchain that can run native-image. Gradle's toolchain auto-detection picks up
 // SDKMAN / asdf / system installs without relying on one exact vendor label. Bundle Flyway
 // migration SQL files into the image (without this they're not on the runtime classpath and
-// FlywayHelper cannot discover them). The reachability-metadata repo brings in published
+// FlywayMigrator cannot discover them). The reachability-metadata repo brings in published
 // native hints for Postgres JDBC, HikariCP, Jackson, etc.
 graalvmNative {
     toolchainDetection.set(true)

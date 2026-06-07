@@ -1,6 +1,6 @@
 # GraalVM native-image
 
-Ekbatan native-image support is split across your build tool, your framework integration, and the `ekbatan-native` module. Native-image support is not a different execution model for Ekbatan: actions, repositories, optimistic locking, sharding, and outbox writes behave the same as on the JVM. The native-specific work is making GraalVM aware of reflection targets, SQL resources, native-friendly Flyway behavior, and the libraries used by the selected stack.
+Ekbatan native-image support is split across your build tool, your framework integration, the `ekbatan-native` module, and optionally `ekbatan-flyway` when you run Flyway programmatically. Native-image support is not a different execution model for Ekbatan: actions, repositories, optimistic locking, sharding, and outbox writes behave the same as on the JVM. The native-specific work is making GraalVM aware of reflection targets, SQL resources, programmatic Flyway migration resources, and the libraries used by the selected stack.
 
 ## The moving parts
 
@@ -8,7 +8,8 @@ Ekbatan native-image support is split across your build tool, your framework int
 |---|---|
 | GraalVM JDK 25 | Provides the `native-image` compiler. |
 | Stack native plugin | Spring Boot, Quarkus, Micronaut, or GraalVM Build Tools decide how the application binary/test binary is built. |
-| `ekbatan-native` | Registers Ekbatan/Jackson/jOOQ/Kafka/Avro/Testcontainers metadata and provides `FlywayHelper` for raw Flyway. |
+| `ekbatan-native` | Registers Ekbatan/Jackson/jOOQ/Kafka/Avro/Testcontainers metadata. |
+| `ekbatan-flyway` | Optional module for `FlywayMigrator`, a programmatic Flyway runner for one datasource or every primary shard in `ShardingConfig`. |
 | Scan package build arg | Tells Ekbatan's native features where your application records, builders, events, and generated jOOQ classes live. |
 | Resource inclusion | Ensures `db/migration/*.sql` and init scripts are bundled into the native image. |
 
@@ -28,6 +29,20 @@ or Maven:
 <dependency>
   <groupId>io.github.zyraz-io</groupId>
   <artifactId>ekbatan-native</artifactId>
+  <version>0.1.2</version>
+</dependency>
+```
+
+If your app calls Ekbatan's programmatic Flyway migrator, also add `ekbatan-flyway`:
+
+```kotlin
+implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
+```
+
+```xml
+<dependency>
+  <groupId>io.github.zyraz-io</groupId>
+  <artifactId>ekbatan-flyway</artifactId>
   <version>0.1.2</version>
 </dependency>
 ```
@@ -105,18 +120,19 @@ Flyway's normal classpath scanner does not always work inside a native image bec
 
 | Stack | Recommended pattern |
 |---|---|
-| Spring Boot | Use `spring-boot-starter-flyway` and provide a `@FlywayDataSource` bean built from `ekbatan.sharding.*`. Do not run Flyway manually from `@PostConstruct`. |
-| Quarkus | Use `quarkus-flyway` and an `EkbatanShardFlywayCustomizer` that points Flyway at the Ekbatan shard config. Do not run raw Flyway from startup observers. |
-| Micronaut | The native examples use a small startup migrator that calls `FlywayHelper.migrate(...)`. They keep `micronaut-flyway` on the classpath for Flyway/native dependencies and hints, but do not use a `flyway:` auto-config block. |
-| Plain Java / raw tests | Use `FlywayHelper.migrate(...)` directly. |
+| Spring Boot | Keep `spring-boot-starter-flyway` on the classpath, set `spring.flyway.enabled=false`, and call `FlywayMigrator.migrate(shardingConfig)` from a startup bean. |
+| Quarkus | Use `ekbatan-flyway` from a `StartupEvent` observer that calls `FlywayMigrator.migrate(shardingConfig)`. Keep `quarkus-flyway` and the matching `quarkus-jdbc-*` extension on the classpath for Flyway/driver native-image integration. |
+| Micronaut | The native examples use a small startup migrator that calls `FlywayMigrator.migrate(...)`. They keep `micronaut-flyway` on the classpath for Flyway/native dependencies and hints, but do not use a `flyway:` auto-config block. |
+| Plain Java / raw tests | Use `FlywayMigrator.migrate(...)` directly. |
 
-`FlywayHelper` is a wrapper around normal Flyway configuration. On the JVM it behaves like inline `Flyway.configure().dataSource(...).locations(...).load().migrate()`. In a native image it installs `NativeImageFlywayResourceProvider`, which can walk bundled `classpath:` migrations.
+`FlywayMigrator` is a wrapper around normal Flyway configuration. On the JVM it behaves like inline `Flyway.configure().dataSource(...).locations(...).load().migrate()`. In a native image it installs an internal resource scanner that can walk bundled `classpath:` migrations.
 
 ```java
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 
-FlywayHelper.migrate(jdbcUrl, username, password);
-FlywayHelper.migrate(jdbcUrl, username, password, "classpath:db/migration", "classpath:db/seed");
+FlywayMigrator.migrate(jdbcUrl, username, password);
+FlywayMigrator.migrate(jdbcUrl, username, password, "classpath:db/migration", "classpath:db/seed");
+FlywayMigrator.migrate(shardingConfig); // runs on every primary shard, sequentially
 ```
 
 ## Build and test commands

@@ -66,6 +66,11 @@
         </dependency>
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-flyway</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
             <scope>provided</scope>
@@ -130,11 +135,10 @@
             <artifactId>logback-classic</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- ── Flyway via Micronaut's official extension ──────────────────────── -->
-        <!-- micronaut-flyway picks up `flyway.datasources.{name}.enabled=true` blocks
-             and runs Flyway on startup; `EkbatanShardFlywayCustomizer` overrides the
-             dataSource from `ekbatan.sharding.*`. flyway-core version is BOM-managed
-             by Micronaut. -->
+        <!-- ── Flyway support ─────────────────────────────────────────────────── -->
+        <!-- ekbatan-flyway runs migrations from an eager startup bean using typed
+             ShardingConfig. micronaut-flyway stays on the classpath for Flyway and
+             native-image support. -->
         <dependency>
             <groupId>io.micronaut.flyway</groupId>
             <artifactId>micronaut-flyway</artifactId>

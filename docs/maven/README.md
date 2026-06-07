@@ -1,6 +1,6 @@
 # Maven
 
-Ekbatan publishes 16 JARs to Maven Central and has no Gradle-only runtime requirement — every framework artifact works the same way in a Maven project. This category covers the build-tool surface that a Maven consumer actually has to write.
+Ekbatan publishes 17 JARs to Maven Central and has no Gradle-only runtime requirement — every framework artifact works the same way in a Maven project. This category covers the build-tool surface that a Maven consumer actually has to write.
 
 For the Gradle equivalent, see [Gradle](../gradle/README.md). The framework itself is build-tool-agnostic — only the codegen tooling differs: Ekbatan-on-Gradle uses [`dev.monosoul.jooq-docker`](https://github.com/monosoul/jooq-gradle-plugin), which bundles container + Flyway + jOOQ codegen into one plugin; Ekbatan-on-Maven composes three independent plugins (`fabric8 docker` + `flyway-maven` + `jooq-codegen-maven`). Both produce the same generated Java; only the build descriptor differs.
 

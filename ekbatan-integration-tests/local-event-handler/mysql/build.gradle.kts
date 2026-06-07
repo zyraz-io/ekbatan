@@ -87,6 +87,7 @@ dependencies {
 
     testImplementation(testFixtures(project(":ekbatan-integration-tests-local-event-handler-shared")))
     testImplementation(project(":ekbatan-native"))
+    testImplementation(project(":ekbatan-flyway"))
     testImplementation(project(":ekbatan-test-support"))
 
     testImplementation("org.testcontainers:testcontainers-mysql:${project.property("testcontainersVersion")}")

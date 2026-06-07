@@ -82,6 +82,11 @@
             <artifactId>ekbatan-quarkus</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-flyway</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
         <!-- @AutoBuilder is compile-time only. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
@@ -120,14 +125,10 @@
             <artifactId>quarkus-rest-jackson</artifactId>
         </dependency>
 
-        <!-- ── Flyway via Quarkus's official extension ──────────────────────────── -->
-        <!-- Migrations run at app startup driven by `quarkus.flyway.migrate-at-start=true`
-             against the `quarkus.datasource.*` config (see application.properties). The
-             extension carries native-image reachability metadata for Flyway 12.0.0 and
-             handles the substrate-VM classpath scanning Flyway can't do on its own - no
-             FlywayHelper or NativeImageFlywayResourceProvider is needed in user code.
-             Mirrors the Spring Boot starter pattern: the framework extension owns Flyway
-             startup, and Ekbatan only points it at the shard config. -->
+        <!-- ── Flyway support ───────────────────────────────────────────────────── -->
+        <!-- EkbatanShardFlywayMigrator calls FlywayMigrator.migrate(shardingConfig)
+             over every primary shard in ekbatan.sharding.*. quarkus-flyway stays on
+             the classpath for Flyway and native-image integration. -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-flyway</artifactId>
@@ -142,8 +143,7 @@
         <!-- ── PostgreSQL JDBC driver ───────────────────────────────────────────── -->
         <!-- quarkus-jdbc-postgresql registers the driver for reflective Class.forName in
              native image AND pulls in the org.postgresql:postgresql JAR transitively, so
-             both the Quarkus datasource (used by quarkus-flyway for migrations) and
-             Ekbatan's own Hikari pool (used at runtime) can resolve the driver. -->
+             Ekbatan's migrator and Ekbatan's runtime pools can resolve the driver. -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-jdbc-postgresql</artifactId>

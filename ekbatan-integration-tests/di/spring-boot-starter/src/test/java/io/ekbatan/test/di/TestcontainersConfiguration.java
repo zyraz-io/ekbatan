@@ -1,6 +1,6 @@
 package io.ekbatan.test.di;
 
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.DynamicPropertyRegistrar;
@@ -52,7 +52,7 @@ class TestcontainersConfiguration {
     @Bean
     DynamicPropertyRegistrar ekbatanShardingProperties(PostgreSQLContainer postgres) {
         return registry -> {
-            FlywayHelper.migrate(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+            FlywayMigrator.migrate(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
 
             registry.add("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl", postgres::getJdbcUrl);
             registry.add("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username", postgres::getUsername);

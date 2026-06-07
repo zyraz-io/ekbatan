@@ -30,6 +30,7 @@ dependencies {
     // Test
     testImplementation("io.micronaut.test:micronaut-test-junit5")
     testImplementation(project(":ekbatan-native"))
+    testImplementation(project(":ekbatan-flyway"))
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:${project.property("junitPlatformLauncherVersion")}")

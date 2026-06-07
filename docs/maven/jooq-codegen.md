@@ -76,9 +76,9 @@ The testcontainers community plugin bundles all three concerns the same way the 
 ```xml
 <properties>
     <fabric8-docker-plugin-version>0.48.1</fabric8-docker-plugin-version>
-    <flyway-maven-plugin-version>11.20.0</flyway-maven-plugin-version>
+    <flyway-maven-plugin-version>12.0.0</flyway-maven-plugin-version>
     <jooq-codegen-maven-plugin-version>3.20.10</jooq-codegen-maven-plugin-version>
-    <flyway-version>11.20.0</flyway-version>
+    <flyway-version>12.0.0</flyway-version>
     <postgresql.version>42.7.10</postgresql.version>
 
     <!-- Single source of truth for the codegen container — used by docker (to start it),

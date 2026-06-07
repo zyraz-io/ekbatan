@@ -185,8 +185,8 @@ dependencies {
     // The codegen task runs Flyway against the container, and `flyway-mysql` is what
     // Flyway uses to recognize MariaDB JDBC URLs (the artifact name is historical — it
     // covers MariaDB too).
-    jooqCodegen("org.flywaydb:flyway-mysql:11.20.0")
-    implementation("org.flywaydb:flyway-mysql:11.20.0")
+    jooqCodegen("org.flywaydb:flyway-mysql:12.0.0")
+    implementation("org.flywaydb:flyway-mysql:12.0.0")
 }
 ```
 
@@ -268,8 +268,8 @@ tasks {
 dependencies {
     implementation("com.mysql:mysql-connector-j:9.4.0")
     jooqCodegen("com.mysql:mysql-connector-j:9.4.0")
-    jooqCodegen("org.flywaydb:flyway-mysql:11.20.0")
-    implementation("org.flywaydb:flyway-mysql:11.20.0")
+    jooqCodegen("org.flywaydb:flyway-mysql:12.0.0")
+    implementation("org.flywaydb:flyway-mysql:12.0.0")
 }
 ```
 

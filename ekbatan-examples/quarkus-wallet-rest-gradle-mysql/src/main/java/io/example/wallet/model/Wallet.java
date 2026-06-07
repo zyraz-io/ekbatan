@@ -3,9 +3,10 @@ package io.example.wallet.model;
 import static io.example.wallet.model.WalletState.CLOSED;
 import static io.example.wallet.model.WalletState.OPENED;
 
-import io.ekbatan.core.domain.Id;
 import io.ekbatan.core.domain.Model;
+import io.ekbatan.core.domain.ShardedId;
 import io.ekbatan.core.processor.AutoBuilder;
+import io.ekbatan.core.shard.ShardIdentifier;
 import io.example.wallet.model.events.WalletClosedEvent;
 import io.example.wallet.model.events.WalletCreatedEvent;
 import io.example.wallet.model.events.WalletMoneyDepositedEvent;
@@ -16,7 +17,7 @@ import java.util.UUID;
 import org.apache.commons.lang3.Validate;
 
 @AutoBuilder
-public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
+public final class Wallet extends Model<Wallet, ShardedId<Wallet>, WalletState> {
 
     public final UUID ownerId;
     public final Currency currency;
@@ -30,8 +31,8 @@ public final class Wallet extends Model<Wallet, Id<Wallet>, WalletState> {
     }
 
     public static WalletBuilder createWallet(
-            UUID ownerId, Currency currency, BigDecimal initialBalance, Instant createdDate) {
-        final var id = Id.random(Wallet.class);
+            ShardIdentifier shard, UUID ownerId, Currency currency, BigDecimal initialBalance, Instant createdDate) {
+        final var id = ShardedId.generate(Wallet.class, shard);
         return WalletBuilder.wallet()
                 .id(id)
                 .state(OPENED)

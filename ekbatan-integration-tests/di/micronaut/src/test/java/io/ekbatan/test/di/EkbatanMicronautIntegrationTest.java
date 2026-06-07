@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import io.ekbatan.core.action.ActionExecutor;
-import io.ekbatan.graalvm.flyway.FlywayHelper;
+import io.ekbatan.flyway.FlywayMigrator;
 import io.ekbatan.test.di.shared.widget.action.WidgetCreateAction;
 import io.ekbatan.test.di.shared.widget.handler.WidgetCreatedCounterHandler;
 import io.ekbatan.test.di.shared.widget.models.WidgetState;
@@ -67,7 +67,7 @@ class EkbatanMicronautIntegrationTest implements TestPropertyProvider {
     public Map<String, String> getProperties() {
         postgres.start();
 
-        FlywayHelper.migrate(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+        FlywayMigrator.migrate(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
 
         var props = new HashMap<String, String>();
         // Sharding - single shard pointing at the Testcontainers PG. driverClassName is supplied

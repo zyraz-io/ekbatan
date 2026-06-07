@@ -104,12 +104,16 @@
 
 
         <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
-             Flyway resource provider, etc.) that auto-apply when native-image runs. Also provides
-             FlywayHelper for the native-aware startup migrator. Only needed because we want a native binary;
-             the JVM-only sibling doesn't include it. -->
+             HikariCP metadata, etc.) that auto-apply when native-image runs. Only needed because
+             we want a native binary; the JVM-only sibling doesn't include it. -->
         <dependency>
             <groupId>io.github.zyraz-io</groupId>
             <artifactId>ekbatan-native</artifactId>
+            <version>${ekbatan.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.zyraz-io</groupId>
+            <artifactId>ekbatan-flyway</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
 
@@ -146,11 +150,10 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- ── Flyway via Micronaut's official extension ──────────────────────── -->
-        <!-- micronaut-flyway picks up `flyway.datasources.{name}.enabled=true` blocks
-             and runs Flyway on startup; `EkbatanShardFlywayCustomizer` overrides the
-             dataSource from `ekbatan.sharding.*`. flyway-core version is BOM-managed
-             by Micronaut. -->
+        <!-- ── Flyway support ─────────────────────────────────────────────────── -->
+        <!-- ekbatan-flyway runs migrations from an eager startup bean using typed
+             ShardingConfig. micronaut-flyway stays on the classpath for Flyway and
+             native-image support. -->
         <dependency>
             <groupId>io.micronaut.flyway</groupId>
             <artifactId>micronaut-flyway</artifactId>
@@ -282,9 +285,14 @@
                              with: UnsupportedFeatureError: Record components not available for
                              record class io.example.wallet.action.WalletCreateAction$Params -->
                         <buildArg>-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,io.example</buildArg>
+                        <buildArg>--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory</buildArg>
+                        <buildArg>--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory$DelegatingLogger</buildArg>
+                        <buildArg>--initialize-at-build-time=ch.qos.logback</buildArg>
+                        <buildArg>--initialize-at-build-time=org.slf4j</buildArg>
+                        <buildArg>--initialize-at-build-time=org.xml.sax.helpers</buildArg>
                         <!-- Bundle Flyway migration SQL files into the image. Without this,
                              native-image's default resource inclusion rules skip arbitrary
-                             classpath SQL files and FlywayHelper finds nothing to apply. -->
+                             classpath SQL files and FlywayMigrator finds nothing to apply. -->
                         <buildArg>-H:IncludeResources=db/migration/.*\.sql</buildArg>
                     </buildArgs>
                 </configuration>

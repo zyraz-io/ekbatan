@@ -38,10 +38,4 @@ dependencies {
     // ClassGraph powers the build-time classpath scan inside Jackson3RecordsFeature.
     // It must reach the native-image build classpath, so it ships transitively.
     api("io.github.classgraph:classgraph:4.8.181")
-
-    // Flyway is the compile-time backing for NativeImageFlywayResourceProvider / FlywayHelper.
-    // Consumers who don't use Flyway never reach those classes — the native-image analyser drops
-    // them, no dead weight in the image. Exposed as `api` so callers of FlywayHelper.migrate(...)
-    // see Flyway transitively without declaring it themselves.
-    api("org.flywaydb:flyway-core:${project.property("flywayVersion")}")
 }

@@ -39,6 +39,7 @@ dependencies {
     // The Spring Boot starter pulls ekbatan-core, the local-event-handler,
     // and distributed-jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:$ekbatanVersion")
+    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
     // @AutoBuilder is compile-time only: compileOnly exposes the annotation to javac,
     // annotationProcessor runs the processor that emits *Builder classes.
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")

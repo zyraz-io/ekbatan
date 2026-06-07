@@ -45,6 +45,7 @@ dependencies {
     // The Spring Boot starter pulls ekbatan-core, the local-event-handler,
     // and distributed-jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:$ekbatanVersion")
+    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
     // @AutoBuilder is compile-time only: compileOnly exposes the annotation to javac,
     // annotationProcessor runs the processor that emits *Builder classes.
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
@@ -67,9 +68,9 @@ dependencies {
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 
     // ── Flyway via Spring Boot's official starter ─────────────────────────
-    // spring-boot-starter-flyway brings `FlywayAutoConfiguration` plus flyway-core.
-    // `EkbatanShardFlywayCustomizer` (CDI-style @Component) overrides the dataSource
-    // from `ekbatan.sharding.*` so connection coords live in one place.
+    // spring-boot-starter-flyway keeps Flyway on the classpath; Spring Boot's
+    // single-datasource auto-run is disabled and EkbatanShardFlywayMigrator runs
+    // migrations over every shard from ekbatan.sharding.*.
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
 

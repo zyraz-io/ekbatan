@@ -64,6 +64,7 @@ dependencies {
     // The Quarkus extension pulls ekbatan-core, the local-event-handler,
     // and distributed-jobs transitively.
     implementation("io.github.zyraz-io:ekbatan-quarkus:$ekbatanVersion")
+    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
     // @AutoBuilder is compile-time only: compileOnly exposes the annotation to javac,
     // annotationProcessor runs the processor that emits *Builder classes.
     compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
@@ -85,10 +86,8 @@ dependencies {
     jooqCodegen("org.mariadb.jdbc:mariadb-java-client:$mariadbDriverVersion")
 
     // ── Flyway ──────────────────────────────────────────────────────────────
-    // Quarkus's official Flyway extension — runs migrations at app startup via
-    // `quarkus.flyway.migrate-at-start=true` against the datasource overridden by
-    // `EkbatanShardFlywayCustomizer` to point at the default shard's primaryConfig. The
-    // extension transitively brings flyway-core at Quarkus's BOM-pinned version (12.0.0).
+    // EkbatanShardFlywayMigrator runs Flyway over every shard from ekbatan.sharding.*.
+    // quarkus-flyway stays on the classpath for Flyway/native-image integration.
     implementation("io.quarkus:quarkus-flyway")
     // Flyway needs flyway-mysql to recognize the MariaDB JDBC URL.
     implementation("org.flywaydb:flyway-mysql")
