@@ -33,7 +33,7 @@ curl https://start.spring.io/starter.zip \
 
 ```bash
 # Install: brew install quarkusio/tap/quarkus
-quarkus create app io.example:wallet:0.1.2 \
+quarkus create app io.example:wallet:1.0.0-SNAPSHOT \
     --extension=rest-jackson,jdbc-postgresql,flyway,jooq
 cd wallet
 ```
@@ -126,10 +126,10 @@ Add Ekbatan, `ekbatan-flyway`, your JDBC driver, and your stack's Flyway integra
 extra["jooq.version"] = "3.20.10"
 
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
 
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")  // (7) Flyway 10+ needs the per-dialect module on the runtime classpath
@@ -145,10 +145,10 @@ dependencies {
 extra["jooq.version"] = "3.20.10"
 
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
 
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-mysql")            // (7) Flyway 10+ needs the dialect module; flyway-mysql also covers MariaDB
@@ -165,10 +165,10 @@ dependencies {
 extra["jooq.version"] = "3.20.10"
 
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
 
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-mysql")          // (7) Flyway 10+ needs the dialect module
@@ -188,17 +188,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-spring-boot-starter</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>
@@ -225,17 +225,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-spring-boot-starter</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>
@@ -262,17 +262,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-spring-boot-starter</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>
@@ -296,10 +296,10 @@ dependencies {
 extra["jooq.version"] = "3.20.10"
 
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-quarkus:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-quarkus:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
 
     implementation("io.quarkus:quarkus-jdbc-postgresql")
     implementation("io.quarkus:quarkus-flyway")
@@ -315,10 +315,10 @@ dependencies {
 extra["jooq.version"] = "3.20.10"
 
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-quarkus:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-quarkus:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
 
     implementation("io.quarkus:quarkus-jdbc-mariadb")
     implementation("io.quarkus:quarkus-flyway")
@@ -335,10 +335,10 @@ dependencies {
 extra["jooq.version"] = "3.20.10"
 
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-quarkus:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-quarkus:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
 
     implementation("io.quarkus:quarkus-jdbc-mysql")
     implementation("io.quarkus:quarkus-flyway")
@@ -358,17 +358,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-quarkus</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>
@@ -395,17 +395,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-quarkus</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>
@@ -432,17 +432,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-quarkus</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>
@@ -463,11 +463,11 @@ dependencies {
 <div data-stack="micronaut" data-build="gradle" data-db="pg">
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
-    implementation("io.github.zyraz-io:ekbatan-micronaut:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.1.2")  // CRITICAL — see "(5) Micronaut needs the AP line"
+    implementation("io.github.zyraz-io:ekbatan-micronaut:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.2.0")  // CRITICAL — see "(5) Micronaut needs the AP line"
 
     implementation("io.micronaut.flyway:micronaut-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")  // (7) Flyway 10+ needs the per-dialect module on the runtime classpath
@@ -481,11 +481,11 @@ dependencies {
 <div data-stack="micronaut" data-build="gradle" data-db="mariadb">
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
-    implementation("io.github.zyraz-io:ekbatan-micronaut:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.1.2")  // CRITICAL — see "(5) Micronaut needs the AP line"
+    implementation("io.github.zyraz-io:ekbatan-micronaut:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.2.0")  // CRITICAL — see "(5) Micronaut needs the AP line"
 
     implementation("io.micronaut.flyway:micronaut-flyway")
     implementation("org.flywaydb:flyway-mysql")          // (7) Flyway 10+ needs the dialect module; flyway-mysql also covers MariaDB
@@ -500,11 +500,11 @@ dependencies {
 <div data-stack="micronaut" data-build="gradle" data-db="mysql">
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
-    implementation("io.github.zyraz-io:ekbatan-micronaut:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.1.2")  // CRITICAL — see "(5) Micronaut needs the AP line"
+    implementation("io.github.zyraz-io:ekbatan-micronaut:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:0.2.0")  // CRITICAL — see "(5) Micronaut needs the AP line"
 
     implementation("io.micronaut.flyway:micronaut-flyway")
     implementation("org.flywaydb:flyway-mysql")          // (7) Flyway 10+ needs the dialect module
@@ -522,17 +522,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-micronaut</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>
@@ -561,17 +561,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-micronaut</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>
@@ -600,17 +600,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-micronaut</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>
@@ -636,10 +636,10 @@ dependencies {
 <div data-stack="plain" data-build="gradle" data-db="pg">
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
-    implementation("io.github.zyraz-io:ekbatan-core:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-core:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
 
     implementation("org.flywaydb:flyway-core:12.0.0")
     implementation("org.flywaydb:flyway-database-postgresql:12.0.0")  // (7) Flyway 10+ needs the per-dialect module
@@ -652,10 +652,10 @@ dependencies {
 <div data-stack="plain" data-build="gradle" data-db="mariadb">
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="yellow" code={`dependencies {
-    implementation("io.github.zyraz-io:ekbatan-core:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-core:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
 
     implementation("org.flywaydb:flyway-core:12.0.0")
     implementation("org.flywaydb:flyway-mysql:12.0.0")  // (7) Flyway 10+ needs the dialect module; flyway-mysql also covers MariaDB
@@ -669,10 +669,10 @@ dependencies {
 <div data-stack="plain" data-build="gradle" data-db="mysql">
 
 <CodeBlock filename="build.gradle.kts" language="kotlin" shadow="orange" code={`dependencies {
-    implementation("io.github.zyraz-io:ekbatan-core:0.1.2")
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-core:0.2.0")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
+    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
+    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:0.2.0")
 
     implementation("org.flywaydb:flyway-core:12.0.0")
     implementation("org.flywaydb:flyway-mysql:12.0.0")  // (7) Flyway 10+ needs the dialect module
@@ -689,17 +689,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-core</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>
@@ -726,17 +726,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-core</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>
@@ -763,17 +763,17 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-core</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-annotation-processor</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <scope>provided</scope>
 </dependency>
 <dependency>

@@ -334,7 +334,7 @@ Ekbatan's Spring Boot examples do not let Spring Boot's single-datasource Flyway
 // build.gradle.kts
 dependencies {
     // Ekbatan's migrator reads ekbatan.sharding.* and runs Flyway on every primary shard.
-    implementation("io.github.zyraz-io:ekbatan-flyway:0.1.2")
+    implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
 
     // Spring Boot's starter keeps Flyway and Spring Boot's Flyway/native integration
     // on the classpath, but Boot's auto-run is disabled in application.yml below.
@@ -350,7 +350,7 @@ dependencies {
 <dependency>
     <groupId>io.github.zyraz-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>org.springframework.boot</groupId>

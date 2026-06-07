@@ -1,6 +1,6 @@
 name: Release
 
-# Fires on tag push matching `v*` (e.g., v0.1.2, v0.2.0, v2.0.0-rc.1).
+# Fires on tag push matching `v*` (e.g., v0.2.0, v0.3.0, v2.0.0-rc.1).
 # Also supports manual triggers via workflow_dispatch — useful for re-running a failed
 # release without re-pushing the tag (the tag itself is idempotent).
 on:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to re-release (e.g. v0.1.2)."
+        description: "Existing tag to re-release (e.g. v0.2.0)."
         required: true
 
 jobs:
@@ -38,9 +38,9 @@ jobs:
 
       - name: Verify gradle.properties version matches tag
         # Catches three real mistakes:
-        #   1. Push `v0.1.2` but the tagged commit's gradle.properties says `version=0.1.2-SNAPSHOT`
-        #   2. Bump gradle.properties to 0.1.2 then tag the bump commit as v0.1.2 by mistake
-        #   3. Dispatch with tag=v0.1.2 on a commit where gradle.properties says something else
+        #   1. Push `v0.2.0` but the tagged commit's gradle.properties says `version=0.2.0-SNAPSHOT`
+        #   2. Bump gradle.properties to 0.2.0 then tag the bump commit as v0.2.0 by mistake
+        #   3. Dispatch with tag=v0.2.0 on a commit where gradle.properties says something else
         # In each case, JReleaser would silently use gradle.properties's version and tag the
         # release with the wrong label. Fail loudly before any upload happens.
         run: |

@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>spring-boot-wallet-rest-maven-pg</artifactId>
-    <version>0.1.2-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>spring-boot-wallet-rest-maven-pg</name>
     <description>Spring Boot + Postgres wallet example demonstrating Ekbatan with Maven (PG dialect of the Maven sibling triple).</description>
@@ -27,7 +27,7 @@
              Override the parent's property so the generated record classes and the runtime jOOQ classpath agree. -->
         <jooq.version>3.20.10</jooq.version>
 
-        <ekbatan.version>0.1.2</ekbatan.version>
+        <ekbatan.version>0.2.0</ekbatan.version>
         <!-- Avoid the `flyway.*` namespace for Maven properties - Flyway's maven plugin scans
              system properties and rejects anything prefixed with `flyway.` that isn't a known
              Flyway configuration key. Same caution applies to `jooq.*` (the codegen plugin scans

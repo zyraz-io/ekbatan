@@ -7,7 +7,7 @@
 
     <groupId>io.example</groupId>
     <artifactId>micronaut-wallet-rest-maven-native-mariadb</artifactId>
-    <version>0.1.2-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <packaging>${packaging}</packaging>
     <name>micronaut-wallet-rest-maven-native-mariadb</name>
     <description>Micronaut + MariaDB wallet example demonstrating Ekbatan with Maven + GraalVM native-image (MariaDB dialect of the Maven Micronaut native triple).</description>
@@ -24,7 +24,7 @@
 
         <packaging>jar</packaging>
 
-        <ekbatan.version>0.1.2</ekbatan.version>
+        <ekbatan.version>0.2.0</ekbatan.version>
         <micronaut.runtime>netty</micronaut.runtime>
         <exec.mainClass>io.example.wallet.Application</exec.mainClass>
 

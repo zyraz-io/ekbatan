@@ -13,7 +13,7 @@ plugins {
 }
 
 group = "io.example"
-version = "0.1.2-SNAPSHOT"
+version = "1.0.0-SNAPSHOT"
 
 // Flyway version held as a local val so the resolutionStrategy.force block (below)
 // has something to reference. Spring Boot BOM-managed deps don\'t need an inline version on
