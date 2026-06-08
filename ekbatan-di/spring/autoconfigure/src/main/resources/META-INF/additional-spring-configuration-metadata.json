@@ -5,6 +5,12 @@
       "type": "java.lang.Boolean",
       "description": "Whether the in-process EventHandlingJob is registered. Read by @ConditionalOnProperty, so it is not bound to the EkbatanProperties record. Set to true to invoke @EkbatanEventHandler beans in-process; leave unset (or false) when notifications are consumed by an external mechanism (e.g. a Kafka pipeline) and the in-process handler should not run.",
       "defaultValue": false
+    },
+    {
+      "name": "ekbatan.spring.allow-boot-database-auto-configuration",
+      "type": "java.lang.Boolean",
+      "description": "Escape hatch for advanced Spring apps. Leave false for normal Ekbatan apps so the starter filters Boot's default single-datasource DataSource/Flyway auto-configuration. Set true only if you intentionally want Boot to create or migrate its own separate conventional datasource.",
+      "defaultValue": false
     }
   ]
 }

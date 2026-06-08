@@ -61,8 +61,8 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <!-- Flyway stays on the classpath, but Spring Boot's single-datasource
-             auto-run is disabled; EkbatanShardFlywayMigrator calls FlywayMigrator. -->
+        <!-- Flyway stays on the classpath. Ekbatan's Spring starter filters Boot's
+             single-datasource auto-run; EkbatanShardFlywayMigrator calls FlywayMigrator. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-flyway</artifactId>

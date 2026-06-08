@@ -184,7 +184,7 @@ Flyway is the one native-image topic where stack behavior differs. Use the patte
 
 | Stack | Migration pattern in the native examples |
 |---|---|
-| Spring Boot | `spring-boot-starter-flyway` stays on the classpath, `spring.flyway.enabled=false` disables Boot's single-datasource auto-run, and a startup bean calls `FlywayMigrator.migrate(shardingConfig)`. |
+| Spring Boot | `spring-boot-starter-flyway` stays on the classpath, a startup bean calls `FlywayMigrator.migrate(shardingConfig)`, and the Ekbatan Spring starter filters Boot's default single-datasource DataSource/Flyway auto-configuration. |
 | Quarkus | A `StartupEvent` observer calls `FlywayMigrator.migrate(shardingConfig)` from `ekbatan-flyway`; `quarkus-flyway` and the matching `quarkus-jdbc-*` extension stay on the classpath for Flyway/driver native-image integration. |
 | Micronaut | A small startup migrator calls `FlywayMigrator.migrate(...)`; `micronaut-flyway` remains on the classpath for Flyway/native support, but the example does not use a `flyway:` auto-config block. |
 | Plain Java / raw Flyway | Call `FlywayMigrator.migrate(...)` yourself. |

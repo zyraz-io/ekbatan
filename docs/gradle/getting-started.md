@@ -40,8 +40,8 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-web")
 
-    // Flyway runtime. Spring Boot's single-datasource Flyway auto-run is disabled
-    // in application.yml; EkbatanShardFlywayMigrator calls FlywayMigrator instead.
+    // Flyway runtime. Ekbatan's Spring starter filters Boot's single-datasource
+    // Flyway auto-run; EkbatanShardFlywayMigrator calls FlywayMigrator instead.
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
 

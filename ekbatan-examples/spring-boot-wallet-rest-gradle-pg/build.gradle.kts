@@ -57,9 +57,9 @@ dependencies {
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 
     // ── Flyway via Spring Boot's official starter ─────────────────────────
-    // spring-boot-starter-flyway keeps Flyway on the classpath; Spring Boot's
-    // single-datasource auto-run is disabled and EkbatanShardFlywayMigrator runs
-    // migrations over every shard from ekbatan.sharding.*.
+    // spring-boot-starter-flyway keeps Flyway on the classpath; the Ekbatan
+    // starter filters Boot's single-datasource auto-run, and
+    // EkbatanShardFlywayMigrator runs migrations over every shard from ekbatan.sharding.*.
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
 

@@ -2224,17 +2224,11 @@ The framework reads connection coordinates from `ekbatan.sharding.*`. Each shard
 
 > **Casing.** The snippets below use **kebab-case** -- the canonical convention for Spring, Quarkus, and Micronaut. Ekbatan also accepts **camelCase** (`jdbc-url` / `jdbcUrl`, `default-shard` / `defaultShard`, `primary-config` / `primaryConfig`, `jobs-config` / `jobsConfig`, `lock-config` / `lockConfig`) and you can mix the two within a single file; keys are normalised to a canonical form before binding. Whichever style you write, the Java code that reads user-defined datasource slots uses the camelCase form internally: `member.configFor("jobsConfig")` and `member.configFor("lockConfig")`, not `jobs-config` or `lock-config`. The local-event-handler config follows the same rule: `local-event-handler` / `localEventHandler`, `fanout-poll-delay` / `fanoutPollDelay`, `handling-poll-delay` / `handlingPollDelay`, etc.
 
-Note what's **NOT** here: no `spring.datasource.*`, no `datasources.default`, no `quarkus.datasource.*`. The framework owns its pools directly; your stack's datasource auto-config is intentionally **not used** -- so Flyway and Ekbatan don't argue over connection coords. Step 9 runs Flyway from the same `ekbatan.sharding.*` block.
+Note what's **NOT** here: no `spring.datasource.*`, no `datasources.default`, no `quarkus.datasource.*`. The framework owns its pools directly. The Spring Boot starter filters Boot's default single-datasource DataSource/Flyway auto-configuration, and the Quarkus/Micronaut examples do not configure a framework datasource. Step 9 runs Flyway from the same `ekbatan.sharding.*` block.
 
 <div data-stack="spring" data-db="pg">
 
-<CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="orange" code={`spring:
-  autoconfigure:
-    exclude: org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
-  flyway:
-    enabled: false
-
-ekbatan:
+<CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="orange" code={`ekbatan:
     namespace: example.wallet
     sharding:
       default-shard:
@@ -2275,12 +2269,6 @@ ekbatan:
 <div data-stack="spring" data-db="mariadb">
 
 <CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="yellow" code={`
-  spring:
-    autoconfigure:
-      exclude: org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
-    flyway:
-      enabled: false
-
   ekbatan:
     namespace: example.wallet
     sharding:
@@ -2322,12 +2310,6 @@ ekbatan:
 <div data-stack="spring" data-db="mysql">
 
 <CodeBlock filename="src/main/resources/application.yml" language="yaml" shadow="orange" code={`
-  spring:
-    autoconfigure:
-      exclude: org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
-    flyway:
-      enabled: false
-
   ekbatan:
     namespace: example.wallet
     sharding:
@@ -2617,7 +2599,9 @@ Spring Boot, Quarkus, and Micronaut still keep their Flyway integration dependen
 
 <div data-stack="spring">
 
-Because step 8 sets `spring.flyway.enabled=false`, Spring Boot will not run its single-datasource Flyway initializer. This bean runs Flyway against every Ekbatan shard first, then adds an explicit dependency so Ekbatan's distributed job registry cannot start before migrations complete.
+The Ekbatan Spring Boot starter filters Spring Boot's default single-datasource DataSource/Flyway auto-configuration, so you do not need `spring.datasource.*`, `spring.autoconfigure.exclude`, or `spring.flyway.enabled=false`. This bean runs Flyway against every Ekbatan shard first, then adds an explicit dependency so Ekbatan's distributed job registry cannot start before migrations complete.
+
+Escape hatch: set `ekbatan.spring.allow-boot-database-auto-configuration=true` only if you intentionally want Spring Boot to create or migrate its own separate conventional datasource. In normal Ekbatan applications, leave it unset.
 
 <CodeBlock filename="src/main/java/io/example/wallet/startup/EkbatanShardFlywayMigrator.java" language="java" shadow="yellow" code={`import io.ekbatan.core.config.ShardingConfig;
 import io.ekbatan.flyway.FlywayMigrator;
@@ -2653,6 +2637,8 @@ public class EkbatanShardFlywayMigrator {
 
     public static final class FlywayMigration {}
 }`} />
+
+`FlywayMigration` is just a marker bean. Creating it runs the migration, and its bean name gives Spring something concrete that `ekbatanJobRegistry` can depend on before jobs start polling.
 
 </div>
 

@@ -24,7 +24,6 @@ import org.springframework.boot.test.web.server.LocalServerPort;
         classes = {Application.class, TestcontainersConfiguration.class},
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-            "spring.flyway.enabled=false",
             "ekbatan.namespace=test.wallet",
             "ekbatan.sharding.defaultShard.group=0",
             "ekbatan.sharding.defaultShard.member=0",

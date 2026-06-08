@@ -1,12 +1,6 @@
 spring:
-  autoconfigure:
-    exclude: org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
   application:
     name: spring-boot-wallet-rest-maven-pg
-  flyway:
-    # Migrations are run by io.example.wallet.startup.EkbatanShardFlywayMigrator
-    # so every configured shard is migrated from the same ekbatan.sharding.* tree.
-    enabled: false
 
 # Two configured shards. Each action execution in this example touches one shard only;
 # cross-shard actions are not enabled.

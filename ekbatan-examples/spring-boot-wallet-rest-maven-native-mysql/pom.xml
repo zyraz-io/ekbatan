@@ -118,9 +118,9 @@
         </dependency>
 
         <!-- ── Flyway via Spring Boot's official starter ───────────────────────── -->
-        <!-- spring-boot-starter-flyway keeps Flyway on the classpath. Spring Boot's
-             single-datasource auto-run is disabled and EkbatanShardFlywayMigrator
-             runs migrations over every shard from ekbatan.sharding.*. -->
+        <!-- spring-boot-starter-flyway keeps Flyway on the classpath. The Ekbatan
+             starter filters Boot's single-datasource auto-run, and
+             EkbatanShardFlywayMigrator runs migrations over every shard from ekbatan.sharding.*. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-flyway</artifactId>

@@ -326,7 +326,11 @@ To customize the `ObjectMapper`, declare a `@Bean Jackson2ObjectMapperBuilderCus
 
 ### Flyway — use `ekbatan-flyway` + Spring Boot's Flyway dependencies
 
-Ekbatan's Spring Boot examples do not let Spring Boot's single-datasource Flyway initializer choose the migration target. Ekbatan already owns the runtime database coordinates under `ekbatan.sharding.*`, so the examples use the same migration path for one shard and many shards: keep Spring Boot's Flyway dependencies on the classpath, disable Boot's automatic Flyway run, and call `FlywayMigrator.migrate(shardingConfig)` from a startup bean.
+Ekbatan's Spring Boot examples do not let Spring Boot's single-datasource DataSource or Flyway auto-configuration choose the migration target. Ekbatan already owns the runtime database coordinates under `ekbatan.sharding.*`, so the starter filters Spring Boot's default DataSource/Flyway auto-configuration when `EkbatanCoreConfiguration` is imported. You keep Spring Boot's Flyway dependencies on the classpath, but you do not need `spring.datasource.*`, `spring.autoconfigure.exclude`, or `spring.flyway.enabled=false`.
+
+Escape hatch: set `ekbatan.spring.allow-boot-database-auto-configuration=true` only if you intentionally want Spring Boot to create or migrate its own separate conventional datasource. Once you do that, you own the matching `spring.datasource.*` / `spring.flyway.*` setup and must make sure Boot does not accidentally run migrations against the wrong database.
+
+The application still decides when migrations run. The usual setup is one startup bean that calls `FlywayMigrator.migrate(shardingConfig)` before Ekbatan jobs start.
 
 **Dependencies** — pull the Spring Boot starter, NOT raw `flyway-core`:
 
@@ -337,7 +341,8 @@ dependencies {
     implementation("io.github.zyraz-io:ekbatan-flyway:0.2.0")
 
     // Spring Boot's starter keeps Flyway and Spring Boot's Flyway/native integration
-    // on the classpath, but Boot's auto-run is disabled in application.yml below.
+    // on the classpath; Ekbatan's starter prevents Boot's single-datasource
+    // Flyway auto-run from selecting one target.
     implementation("org.springframework.boot:spring-boot-starter-flyway")
 
     // Database-specific Flyway plugin (BOM-managed; no version needed).
@@ -362,15 +367,7 @@ dependencies {
 </dependency>
 ```
 
-Disable Spring Boot's single-datasource Flyway run:
-
-```yaml
-spring:
-  flyway:
-    enabled: false
-```
-
-Then run migrations from the typed Ekbatan shard config:
+Run migrations from the typed Ekbatan shard config:
 
 ```java
 import io.ekbatan.core.config.ShardingConfig;
@@ -411,7 +408,7 @@ public class EkbatanShardFlywayMigrator {
 
 `FlywayMigrator.migrate(shardingConfig)` runs against every configured shard member's `primaryConfig`, sequentially and fail-fast. With a single configured member, it is just one Flyway run. By default it uses `classpath:db/migration`; pass locations explicitly if your migrations live elsewhere.
 
-The `flywayMigration` marker bean gives the distributed job registry an explicit happens-before edge: `ekbatanJobRegistry` will not start polling until migrations have completed.
+The empty `FlywayMigration` class is only a marker type. Creating the `flywayMigration` bean runs `FlywayMigrator.migrate(...)`, and the returned marker object gives Spring a concrete bean name that other beans can depend on. `jobRegistryDependsOnFlyway()` adds that dependency to `ekbatanJobRegistry`, so the distributed job registry will not start polling until migrations have completed.
 
 See [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) for the single-shard shape, [`spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) for the multi-shard one, and [`spring-boot-wallet-rest-gradle-native-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg) for the same sharded shape under `nativeTest`.
 
@@ -423,6 +420,7 @@ See [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/zy
 | `ekbatan.local-event-handler.handling.enabled` | `false` | Run `EventHandlingJob` in this process. Off by default so deployments with external consumers (Kafka) keep their `@EkbatanEventHandler` beans without an in-process consumer. |
 | `ekbatan.local-event-handler.fanout-poll-delay` / `handling-poll-delay` / `fanout-batch-size` / `handling-batch-size` / `handling-max-backoff-cap` / `handling-retention-window` | sensible defaults | Tunables for the fan-out and dispatch jobs — see [docs/events/local-event-handler.md](/reference/events/local-event-handler/) |
 | `ekbatan.jobs.polling-interval` / `heartbeat-interval` / `shutdown-max-wait` | sensible defaults | Tunables for `JobRegistry` — see [docs/jobs/distributed-jobs.md](/reference/jobs/distributed-jobs/) |
+| `ekbatan.spring.allow-boot-database-auto-configuration` | `false` | Escape hatch for advanced Spring apps. Set to `true` only when you deliberately want Boot's own single-datasource DataSource/Flyway auto-configuration to run. |
 
 All rows above also accept camelCase aliases: `ekbatan.localEventHandler.*`, `fanoutPollDelay`, `handlingPollDelay`, `handlingMaxBackoffCap`, `handlingRetentionWindow`, `ekbatan.jobs.pollingInterval`, `heartbeatInterval`, and `shutdownMaxWait`.
 

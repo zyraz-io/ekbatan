@@ -2,9 +2,9 @@ spring:
   application:
     name: spring-boot-wallet-saga-gradle-pg
 
-# Single source of truth for DB connection details — both Flyway and Ekbatan's runtime pools
-# read from this block. Spring Boot's own DataSource/Flyway auto-config is intentionally NOT
-# used.
+# Single source of truth for DB connection details. Ekbatan's runtime pools and the
+# FlywayMigrator startup bean both read from this block; the Spring starter filters Boot's
+# default single-datasource DataSource/Flyway auto-config.
 ekbatan:
   namespace: example.wallet.saga
   sharding:

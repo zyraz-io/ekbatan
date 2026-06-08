@@ -125,7 +125,7 @@ Flyway's normal classpath scanner does not always work inside a native image bec
 
 | Stack | Recommended pattern |
 |---|---|
-| Spring Boot | Keep `spring-boot-starter-flyway` on the classpath, set `spring.flyway.enabled=false`, and call `FlywayMigrator.migrate(shardingConfig)` from a startup bean. |
+| Spring Boot | Keep `spring-boot-starter-flyway` on the classpath and call `FlywayMigrator.migrate(shardingConfig)` from a startup bean. The Ekbatan Spring starter filters Boot's default single-datasource DataSource/Flyway auto-configuration. |
 | Quarkus | Use `ekbatan-flyway` from a `StartupEvent` observer that calls `FlywayMigrator.migrate(shardingConfig)`. Keep `quarkus-flyway` and the matching `quarkus-jdbc-*` extension on the classpath for Flyway/driver native-image integration. |
 | Micronaut | The native examples use a small startup migrator that calls `FlywayMigrator.migrate(...)`. They keep `micronaut-flyway` on the classpath for Flyway/native dependencies and hints, but do not use a `flyway:` auto-config block. |
 | Plain Java / raw tests | Use `FlywayMigrator.migrate(...)` directly. |

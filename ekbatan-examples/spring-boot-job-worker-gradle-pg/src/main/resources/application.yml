@@ -1,6 +1,4 @@
 spring:
-  autoconfigure:
-    exclude: org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
   application:
     name: spring-boot-job-worker-gradle-pg
   main:
