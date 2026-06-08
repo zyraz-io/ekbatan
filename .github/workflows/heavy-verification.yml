@@ -14,6 +14,12 @@ concurrency:
   group: heavy-verification-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # GitHub-hosted runners are disposable VMs, so runner teardown cleans up test
+  # containers. Avoid failing heavy verification before tests start if Docker Hub
+  # cannot serve the optional Testcontainers Ryuk reaper image.
+  TESTCONTAINERS_RYUK_DISABLED: "true"
+
 jobs:
   activity:
     name: Check Recent Activity
@@ -83,10 +89,15 @@ jobs:
         shell: bash
         run: |
           export GRAALVM_HOME="$JAVA_HOME"
+          # Debezium/Kafka event-pipeline coverage runs on the JVM; the native
+          # JUnit launcher cannot currently compute selectors for these suites.
           ./gradlew \
             -Dorg.gradle.java.installations.paths="$JAVA_HOME" \
             -Dorg.gradle.java.installations.auto-detect=false \
-            nativeTest --parallel --max-workers=4 --continue --stacktrace
+            nativeTest --max-workers=1 --continue --stacktrace \
+            -x :ekbatan-integration-tests-event-pipeline-debezium-kafka-json:nativeTest \
+            -x :ekbatan-integration-tests-event-pipeline-debezium-kafka-avro-smt:nativeTest \
+            -x :ekbatan-integration-tests-event-pipeline-debezium-kafka-protobuf-smt:nativeTest
 
       - name: Upload Root Native Test Reports
         if: failure() || cancelled()

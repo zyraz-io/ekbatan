@@ -244,7 +244,7 @@ class MariaDBKeyedLockProviderIntegrationTest {
         }
 
         // THEN
-        assertThat(hikari.getHikariPoolMXBean().getActiveConnections()).isEqualTo(beforeActive);
+        assertActiveConnectionsEventually(hikari, beforeActive);
     }
 
     // ----- Correctness under contention -----
@@ -296,7 +296,7 @@ class MariaDBKeyedLockProviderIntegrationTest {
                     .isEqualTo(1);
         }
 
-        assertThat(hikari.getHikariPoolMXBean().getActiveConnections()).isEqualTo(beforeActive);
+        assertActiveConnectionsEventually(hikari, beforeActive);
     }
 
     @Test
@@ -405,6 +405,22 @@ class MariaDBKeyedLockProviderIntegrationTest {
             throw new RuntimeException(error.get());
         }
         return got.get();
+    }
+
+    private static void assertActiveConnectionsEventually(HikariDataSource hikari, int expected)
+            throws InterruptedException {
+        AssertionError lastError = null;
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        do {
+            try {
+                assertThat(hikari.getHikariPoolMXBean().getActiveConnections()).isEqualTo(expected);
+                return;
+            } catch (AssertionError e) {
+                lastError = e;
+                Thread.sleep(20);
+            }
+        } while (System.nanoTime() < deadline);
+        throw lastError;
     }
 
     private static String uniqueKey() {

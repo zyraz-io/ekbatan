@@ -191,6 +191,7 @@ graalvmNative {
         buildArgs.add("--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory\$DelegatingLogger")
         buildArgs.add("--initialize-at-build-time=ch.qos.logback")
         buildArgs.add("--initialize-at-build-time=org.slf4j")
+        buildArgs.add("--initialize-at-run-time=io.netty.handler.pcap.PcapWriteHandler\$WildcardAddressHolder")
     }
     binaries.named("test") {
         quickBuild.set(true)

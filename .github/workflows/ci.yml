@@ -21,6 +21,12 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # GitHub-hosted runners are disposable VMs, so runner teardown cleans up test
+  # containers. Avoid failing CI before tests start if Docker Hub cannot serve
+  # the optional Testcontainers Ryuk reaper image.
+  TESTCONTAINERS_RYUK_DISABLED: "true"
+
 jobs:
   build:
     name: Build & test (Java 25, Ubuntu)

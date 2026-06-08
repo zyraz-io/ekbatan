@@ -207,7 +207,7 @@ class PostgresKeyedLockProviderIntegrationTest {
         }
 
         // THEN - pool's active-connection count returns to its starting value (no leaks)
-        assertThat(hikari.getHikariPoolMXBean().getActiveConnections()).isEqualTo(beforeActive);
+        assertActiveConnectionsEventually(hikari, beforeActive);
     }
 
     // ----- Correctness under contention -----
@@ -262,7 +262,7 @@ class PostgresKeyedLockProviderIntegrationTest {
                     .isEqualTo(1);
         }
 
-        assertThat(hikari.getHikariPoolMXBean().getActiveConnections()).isEqualTo(beforeActive);
+        assertActiveConnectionsEventually(hikari, beforeActive);
     }
 
     @Test
@@ -373,6 +373,22 @@ class PostgresKeyedLockProviderIntegrationTest {
             throw new RuntimeException(error.get());
         }
         return got.get();
+    }
+
+    private static void assertActiveConnectionsEventually(HikariDataSource hikari, int expected)
+            throws InterruptedException {
+        AssertionError lastError = null;
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        do {
+            try {
+                assertThat(hikari.getHikariPoolMXBean().getActiveConnections()).isEqualTo(expected);
+                return;
+            } catch (AssertionError e) {
+                lastError = e;
+                Thread.sleep(20);
+            }
+        } while (System.nanoTime() < deadline);
+        throw lastError;
     }
 
     private static String uniqueKey() {

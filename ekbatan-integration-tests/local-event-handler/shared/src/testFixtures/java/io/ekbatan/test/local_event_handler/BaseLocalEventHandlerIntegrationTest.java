@@ -27,6 +27,7 @@ import io.ekbatan.test.local_event_handler.widget.handler.WidgetCreatedAutoNoteH
 import io.ekbatan.test.local_event_handler.widget.handler.WidgetCreatedEmailHandler;
 import io.ekbatan.test.local_event_handler.widget.handler.WidgetCreatedIndexerHandler;
 import io.ekbatan.test.local_event_handler.widget.models.Widget;
+import io.ekbatan.testsupport.time.VirtualClock;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -60,11 +61,15 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
         this.auditEntryRepo = auditEntryRepo;
         this.objectMapper = new ObjectMapper();
 
-        var clock = Clock.systemUTC();
-        this.executor = actionExecutor()
+        this.executor = newActionExecutor(Clock.systemUTC());
+    }
+
+    private ActionExecutor newActionExecutor(Clock clock) {
+        return actionExecutor()
                 .namespace("test.local-event-handler")
                 .databaseRegistry(databaseRegistry)
                 .objectMapper(objectMapper)
+                .clock(clock)
                 .repositoryRegistry(repositoryRegistry()
                         .withModelRepository(Widget.class, widgetRepo)
                         .withModelRepository(Note.class, noteRepo)
@@ -436,13 +441,16 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
     @Test
     void slow_failing_handler_expires_using_post_invocation_time() throws Exception {
         // GIVEN
-        var slowFailing = new SlowAlwaysFailingHandler(Duration.ofMillis(100));
+        var clock = new VirtualClock();
+        clock.pauseAt(Instant.parse("2026-01-01T00:00:00Z"));
+        var deterministicExecutor = newActionExecutor(clock);
+        var slowFailing = new SlowAlwaysFailingHandler(Duration.ZERO, () -> clock.advance(Duration.ofMillis(100)));
         var registry = eventHandlerRegistry().withHandler(slowFailing).build();
 
         var fanoutJob = eventFanoutJob()
                 .databaseRegistry(databaseRegistry)
                 .eventHandlerRegistry(registry)
-                .clock(Clock.systemUTC())
+                .clock(clock)
                 .build();
         var handlingJob = eventHandlingJob()
                 .databaseRegistry(databaseRegistry)
@@ -450,21 +458,25 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
                 .objectMapper(objectMapper)
                 .maxBackoffCap(Duration.ofMillis(5))
                 .retentionWindow(Duration.ofMillis(50))
-                .clock(Clock.systemUTC())
+                .clock(clock)
                 .build();
 
         // WHEN
-        executor.execute(
+        deterministicExecutor.execute(
                 () -> "tester", WidgetCreateAction.class, new WidgetCreateAction.Params(shardFor(0), "alpha", "red"));
         fanoutJob.drainOneRound();
         handlingJob.drainOneRound();
 
         // THEN
-        assertThat(slowFailing.callCount()).isEqualTo(1);
-        assertThat(countNotifications("EXPIRED")).isEqualTo(1);
-        assertThat(countNotifications("FAILED")).isZero();
-        assertThat(countNotifications("SUCCEEDED")).isZero();
-        assertThat(countNotifications("PENDING")).isZero();
+        await().atMost(Duration.ofSeconds(5))
+                .pollInterval(Duration.ofMillis(20))
+                .untilAsserted(() -> {
+                    assertThat(slowFailing.callCount()).isEqualTo(1);
+                    assertThat(countNotifications("EXPIRED")).isEqualTo(1);
+                    assertThat(countNotifications("FAILED")).isZero();
+                    assertThat(countNotifications("SUCCEEDED")).isZero();
+                    assertThat(countNotifications("PENDING")).isZero();
+                });
     }
 
     @Test

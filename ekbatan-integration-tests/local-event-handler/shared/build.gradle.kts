@@ -16,6 +16,7 @@ dependencies {
     testFixturesApi(project(":ekbatan-core"))
     testFixturesApi(project(":ekbatan-distributed-jobs"))
     testFixturesApi(project(":ekbatan-events-local-event-handler"))
+    testFixturesApi(project(":ekbatan-test-support"))
 
     testFixturesCompileOnly(project(":ekbatan-annotation-processor"))
     testFixturesAnnotationProcessor(project(":ekbatan-annotation-processor"))

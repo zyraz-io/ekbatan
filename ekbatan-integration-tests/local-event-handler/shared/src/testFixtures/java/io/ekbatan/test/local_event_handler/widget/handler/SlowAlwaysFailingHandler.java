@@ -9,10 +9,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class SlowAlwaysFailingHandler implements EventHandler<WidgetCreatedEvent> {
 
     private final Duration sleep;
+    private final Runnable afterDelay;
     private final AtomicInteger callCount = new AtomicInteger();
 
     public SlowAlwaysFailingHandler(Duration sleep) {
+        this(sleep, () -> {});
+    }
+
+    public SlowAlwaysFailingHandler(Duration sleep, Runnable afterDelay) {
         this.sleep = sleep;
+        this.afterDelay = afterDelay;
     }
 
     @Override
@@ -28,6 +34,7 @@ public final class SlowAlwaysFailingHandler implements EventHandler<WidgetCreate
     @Override
     public void handle(EventEnvelope<WidgetCreatedEvent> envelope) throws InterruptedException {
         Thread.sleep(sleep.toMillis());
+        afterDelay.run();
         callCount.incrementAndGet();
         throw new RuntimeException("intentional failure");
     }
