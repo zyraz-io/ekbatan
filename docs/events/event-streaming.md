@@ -206,6 +206,6 @@ The router in the integration tests does this automatically.
 ## See also
 
 - [The outbox: atomic state + events](../concepts/outbox.md) — what Debezium reads from
-- [Outbox schema](../database/outbox-schema.md) — the SQL DDL of `eventlog.events`
+- [`eventlog.events`](../database/tables/events.md) — the SQL columns and indexes of the event table
 - [Listen-to-yourself: in-process event handlers](local-event-handler.md) — the alternative consumer path; can coexist with this one
 - [`ekbatan-integration-tests/event-pipeline`](../../ekbatan-integration-tests/event-pipeline) — the runnable end-to-end tests for all three variants (JSON / Avro / Protobuf)

@@ -1,6 +1,6 @@
 # PostgreSQL
 
-PostgreSQL is the most straightforward fit for Ekbatan: native `UUID` and `JSONB` types, real schemas, and partial indexes for the polling-query optimizations. This page is the one-stop reference for setting up a Postgres database that the framework will run against — migrations, codegen, gotchas. Cross-dialect background lives in [Multi-database](multi-database.md), the canonical outbox shape in [Outbox schema](outbox-schema.md).
+PostgreSQL is the most straightforward fit for Ekbatan: native `UUID` and `JSONB` types, real schemas, and partial indexes for the polling-query optimizations. This page is the one-stop reference for setting up a Postgres database that the framework will run against — migrations, codegen, gotchas. Cross-dialect background lives in [Multi-database](multi-database.md), and the canonical table reference lives in [Framework tables](tables.md).
 
 ## Quick reference
 
@@ -32,7 +32,7 @@ src/main/resources/db/migration/
 
 ### `eventlog.events` (always required)
 
-The outbox — every action execution writes at least one row here. Sentinel rows have null `model_*` / `event_type` / `payload` (an action that emitted no events still gets recorded). The `delivered` flag is written `FALSE` on every insert and flipped `TRUE` by the in-process fan-out (no-op for Kafka-only deployments). Conceptual details: [Outbox schema](outbox-schema.md).
+The event table — every action execution writes at least one row here. Sentinel rows have null `model_*` / `event_type` / `payload` (an action that emitted no events still gets recorded). The `delivered` flag is written `FALSE` on every insert and flipped `TRUE` by the in-process fan-out (no-op for Kafka-only deployments). Column details: [`eventlog.events`](tables/events.md).
 
 ```sql
 CREATE SCHEMA IF NOT EXISTS eventlog;
@@ -194,7 +194,7 @@ tasks {
 ## See also
 
 - [Multi-database](multi-database.md) — cross-dialect background, the column-type cheatsheet, init scripts, repository field-definition pattern
-- [Outbox schema](outbox-schema.md) — the logical shape of `eventlog.events` and what each column means
+- [`eventlog.events`](tables/events.md) — the logical shape of the event table and what each column means
 - [Repositories on JOOQ](repositories.md) — how `AbstractRepository` consumes the generated classes
 - [JOOQ codegen](jooq-codegen.md) — what codegen generates, the converters, per-dialect modeling rationale
 - [JOOQ codegen on Gradle](../gradle/jooq-codegen.md) — the full `build.gradle.kts` reference for all dialects

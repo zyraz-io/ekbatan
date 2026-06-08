@@ -1,0 +1,138 @@
+---
+interface LearnPage {
+    slug: string;
+    href: string;
+    title: string;
+}
+
+interface Props {
+    current: string;
+}
+
+const { current } = Astro.props;
+
+const pages: LearnPage[] = [
+    {
+        slug: "getting-started",
+        href: "/learn/getting-started/",
+        title: "Getting started",
+    },
+    {
+        slug: "your-first-action",
+        href: "/learn/your-first-action/",
+        title: "Your first Action",
+    },
+    {
+        slug: "consuming-events",
+        href: "/learn/consuming-events/",
+        title: "Consuming events",
+    },
+    {
+        slug: "sharding",
+        href: "/learn/sharding/",
+        title: "Adding a shard",
+    },
+    {
+        slug: "native-image",
+        href: "/learn/native-image/",
+        title: "Native image",
+    },
+    {
+        slug: "complete-project-setup",
+        href: "/learn/complete-project-setup/",
+        title: "Complete project setup",
+    },
+];
+
+const currentIndex = pages.findIndex((page) => page.slug === current);
+const previous =
+    currentIndex > 0
+        ? pages[currentIndex - 1]
+        : { href: "/learn/", title: "Learn overview" };
+const next =
+    currentIndex >= 0 && currentIndex < pages.length - 1
+        ? pages[currentIndex + 1]
+        : { href: "/reference/", title: "Reference" };
+
+const linkTo = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\//, "")}`;
+---
+
+<nav class="learn-pager" aria-label="Learn page navigation">
+    <a class="learn-pager-link previous" href={linkTo(previous.href)}>
+        <span class="learn-pager-kicker">Previous</span>
+        <span class="learn-pager-title">← {previous.title}</span>
+    </a>
+    <a class="learn-pager-link next" href={linkTo(next.href)}>
+        <span class="learn-pager-kicker">Next</span>
+        <span class="learn-pager-title">{next.title} →</span>
+    </a>
+</nav>
+
+<style>
+    .learn-pager {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+        margin: 2rem 0;
+    }
+
+    .learn-pager-link {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: 0.35rem;
+        border: 2px solid var(--ink, #0a0a0a);
+        background: var(--paper, #fafafa);
+        padding: 1rem;
+        text-decoration: none;
+        transition:
+            transform 0.15s ease,
+            box-shadow 0.15s ease,
+            background 0.15s ease;
+    }
+
+    .learn-pager-link:hover,
+    .learn-pager-link:focus-visible {
+        background: var(--brand-yellow, #ffd23f);
+        box-shadow: 4px 4px 0 0 var(--ink, #0a0a0a);
+        transform: translate(-2px, -2px);
+    }
+
+    .learn-pager-link.next {
+        text-align: right;
+    }
+
+    .learn-pager-kicker {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.68rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted-foreground, #525252);
+    }
+
+    .learn-pager-title {
+        overflow-wrap: anywhere;
+        font-family: "Space Grotesk", system-ui, sans-serif;
+        font-size: 1.1rem;
+        font-weight: 700;
+        line-height: 1.15;
+    }
+
+    :global(.doc-prose .learn-pager a) {
+        text-decoration: none;
+    }
+
+    :global(.doc-prose .learn-pager a:hover) {
+        color: var(--ink, #0a0a0a);
+    }
+
+    @media (max-width: 640px) {
+        .learn-pager {
+            grid-template-columns: 1fr;
+        }
+
+        .learn-pager-link.next {
+            text-align: left;
+        }
+    }
+</style>

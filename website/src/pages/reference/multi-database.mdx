@@ -5,7 +5,7 @@ activeSection: reference
 lead: 'Ekbatan supports PostgreSQL, MySQL, and MariaDB out of the box. Most of the framework is dialect-agnostic — the differences are concentrated in three places: column types in your migrations, JOOQ converters in your repository field constants, and the codegen container that introspects your schema at build time.'
 ---
 
-For the *what & why* of codegen (generated classes, converters, modeling rationale), see [JOOQ codegen](/reference/jooq-codegen/). For the per-dialect build-tool syntax, see [JOOQ codegen on Gradle](/learn/getting-started/#jooq-codegen) (`build.gradle.kts`) or [JOOQ codegen on Maven](/learn/getting-started/#jooq-codegen) (`pom.xml`). This page covers everything else.
+For the *what & why* of codegen (generated classes, converters, modeling rationale), see [JOOQ codegen](/reference/jooq-codegen/). For the per-dialect build-tool syntax, see [JOOQ codegen on Gradle](/learn/complete-project-setup/#jooq-codegen) (`build.gradle.kts`) or [JOOQ codegen on Maven](/learn/complete-project-setup/#jooq-codegen) (`pom.xml`). This page covers everything else.
 
 ## Always UTC
 
@@ -37,7 +37,7 @@ UUID strings are pure 7-bit ASCII (8-4-4-4-12 hex with hyphens). Pinning the cha
 
 ### Why MariaDB JSON columns still need a converter
 
-MariaDB stores `JSON` as `LONGTEXT` with a CHECK constraint internally, and the JDBC driver reports the type accordingly. The forced-type entry must use `(?i:JSON)` (or `(?i:JSON|LONGTEXT)` if you have legitimate `LONGTEXT` columns) and bind `JSONObjectNodeConverter`. See [JOOQ codegen on Gradle](/learn/getting-started/#jooq-codegen) (for `generateJooqClasses { … }`) or [JOOQ codegen on Maven](/learn/getting-started/#jooq-codegen) (for `<forcedType>`) for the full block.
+MariaDB stores `JSON` as `LONGTEXT` with a CHECK constraint internally, and the JDBC driver reports the type accordingly. The forced-type entry must use `(?i:JSON)` (or `(?i:JSON|LONGTEXT)` if you have legitimate `LONGTEXT` columns) and bind `JSONObjectNodeConverter`. See [JOOQ codegen on Gradle](/learn/complete-project-setup/#jooq-codegen) (for `generateJooqClasses { … }`) or [JOOQ codegen on Maven](/learn/complete-project-setup/#jooq-codegen) (for `<forcedType>`) for the full block.
 
 ### Why MySQL UUID converter is `CHAR(36)`-shaped, not `BINARY(16)`
 
@@ -112,14 +112,14 @@ Reference implementations: `ekbatan-core/.../single_table_json/EventEntityReposi
 4. Implement a `DummyRepository` for the new dialect with the right field-constant set.
 5. Create a test runner extending `BaseRepositoryTest`.
 6. If the dialect requires new SQL strategies (e.g. a different idiom for batch update), branch on `dialect.family()` in `AbstractRepository`.
-7. Add the per-dialect codegen block to the new test module — [Gradle](/learn/getting-started/#jooq-codegen) (`build.gradle.kts`) or [Maven](/learn/getting-started/#jooq-codegen) (`pom.xml`).
+7. Add the per-dialect codegen block to the new test module — [Gradle](/learn/complete-project-setup/#jooq-codegen) (`build.gradle.kts`) or [Maven](/learn/complete-project-setup/#jooq-codegen) (`pom.xml`).
 
 ## See also
 
 - [JOOQ codegen](/reference/jooq-codegen/) — what codegen generates, the seven framework converters, per-dialect modeling rationale
-- [JOOQ codegen on Gradle](/learn/getting-started/#jooq-codegen) — the per-dialect `build.gradle.kts` blocks
-- [JOOQ codegen on Maven](/learn/getting-started/#jooq-codegen) — the equivalent `pom.xml` plugin chain
+- [JOOQ codegen on Gradle](/learn/complete-project-setup/#jooq-codegen) — the per-dialect `build.gradle.kts` blocks
+- [JOOQ codegen on Maven](/learn/complete-project-setup/#jooq-codegen) — the equivalent `pom.xml` plugin chain
 - [Repositories on JOOQ](/reference/repository/) — how field constants and converters fit together
 - [The outbox: atomic state + events](/concepts/outbox/) — the framework's canonical schema this page enables you to author
-- [Outbox schema](/reference/outbox-schema/) — the on-disk shape of `eventlog.events` and friends
+- [Framework tables](/reference/tables/) — the on-disk shape of `eventlog.events` and friends
 - [GraalVM native-image](/reference/runtime/native-image/) — Flyway and JDBC driver native-image considerations

@@ -1,0 +1,151 @@
+---
+const options = [
+    { id: "pg", label: "PostgreSQL" },
+    { id: "mariadb", label: "MariaDB" },
+    { id: "mysql", label: "MySQL" },
+] as const;
+---
+
+<div class="db-picker-sentinel" aria-hidden="true"></div>
+
+<aside class="db-picker brutalist-border bg-paper sticky" aria-label="Database picker">
+    <div class="container-px max-w-7xl mx-auto py-3 grid gap-2">
+        <div class="flex items-center gap-4 flex-wrap">
+            <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground w-20 shrink-0">
+                Database
+            </span>
+            <div class="flex gap-0 brutalist-border min-w-0 overflow-x-auto db-picker-row">
+                {
+                    options.map((opt, i) => (
+                        <button
+                            type="button"
+                            data-db-picker-value={opt.id}
+                            class:list={[
+                                "font-mono text-[10px] uppercase tracking-widest px-2.5 py-1 bg-paper text-ink shrink-0",
+                                i < options.length - 1 && "border-r-2 border-ink",
+                            ]}
+                            aria-pressed="false"
+                        >
+                            {opt.label}
+                        </button>
+                    ))
+                }
+            </div>
+        </div>
+    </div>
+</aside>
+
+<style>
+    .db-picker {
+        margin: 0;
+        position: sticky;
+        top: 57px;
+        z-index: 40;
+    }
+    .db-picker.brutalist-border.is-stuck {
+        border-color: transparent;
+    }
+    .db-picker.is-stuck::before {
+        content: "";
+        position: absolute;
+        top: -2px;
+        bottom: -2px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100vw;
+        background: var(--paper, #fafafa);
+        border-top: 2px solid var(--ink, #0a0a0a);
+        border-bottom: 2px solid var(--ink, #0a0a0a);
+        z-index: -1;
+        pointer-events: none;
+    }
+    .db-picker-sentinel {
+        height: 1px;
+        margin-bottom: -1px;
+        pointer-events: none;
+    }
+    .db-picker-row {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(10, 10, 10, 0.25) transparent;
+    }
+    .db-picker-row::-webkit-scrollbar {
+        height: 6px;
+    }
+    .db-picker-row::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .db-picker-row::-webkit-scrollbar-thumb {
+        background: rgba(10, 10, 10, 0.25);
+        border-radius: 3px;
+    }
+    .db-picker-row::-webkit-scrollbar-thumb:hover {
+        background: rgba(10, 10, 10, 0.45);
+    }
+    :global(html),
+    :global(body) {
+        overflow-x: clip;
+    }
+</style>
+
+<script is:inline>
+    (function () {
+        const STORAGE_KEY = "ekbatan.stackPicker";
+        const DEFAULT_DB = "pg";
+
+        function read() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+            } catch {
+                return {};
+            }
+        }
+        function write(state) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+        function apply(db) {
+            document.body.dataset.activeDb = db;
+            document.querySelectorAll("[data-db-picker-value]").forEach((btn) => {
+                const active = btn.getAttribute("data-db-picker-value") === db;
+                btn.classList.toggle("bg-ink", active);
+                btn.classList.toggle("text-paper", active);
+                btn.classList.toggle("bg-paper", !active);
+                btn.classList.toggle("text-ink", !active);
+                btn.setAttribute("aria-pressed", String(active));
+            });
+            document.querySelectorAll("[data-db]").forEach((el) => {
+                el.toggleAttribute("hidden", el.getAttribute("data-db") !== db);
+            });
+        }
+
+        const state = read();
+        const initialDb = state.db || DEFAULT_DB;
+
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", () => apply(initialDb));
+        } else {
+            apply(initialDb);
+        }
+
+        document.addEventListener("click", (e) => {
+            const btn = e.target instanceof Element ? e.target.closest("[data-db-picker-value]") : null;
+            if (!btn) return;
+            const db = btn.getAttribute("data-db-picker-value");
+            if (!db) return;
+            const nextState = { ...read(), db };
+            write(nextState);
+            apply(db);
+        });
+
+        const picker = document.querySelector(".db-picker");
+        const sentinel = document.querySelector(".db-picker-sentinel");
+        if (picker && sentinel && "IntersectionObserver" in window) {
+            const stickyObserver = new IntersectionObserver(
+                ([entry]) => {
+                    picker.classList.toggle("is-stuck", !entry.isIntersecting);
+                },
+                { rootMargin: "-57px 0px 0px 0px" },
+            );
+            stickyObserver.observe(sentinel);
+        }
+    })();
+</script>

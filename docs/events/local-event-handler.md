@@ -229,7 +229,7 @@ The DI integrations accept both root spellings: `ekbatan.local-event-handler.*` 
 
 ## Schema additions
 
-The `delivered` column on `eventlog.events` is part of the base outbox schema (see [outbox-schema.md](../database/outbox-schema.md)) — every Ekbatan deployment already has it, written as `FALSE` on insert. The local-event-handler path adds an `events_undelivered` partial index for the fan-out scan and a new `eventlog.event_notifications` table. PostgreSQL:
+The `delivered` column on `eventlog.events` is part of the base framework table schema (see [`eventlog.events`](../database/tables/events.md)) — every Ekbatan deployment already has it, written as `FALSE` on insert. The local-event-handler path adds an `events_undelivered` partial index for the fan-out scan and a new `eventlog.event_notifications` table. PostgreSQL:
 
 ```sql
 CREATE INDEX events_undelivered ON eventlog.events (event_type, event_date) WHERE delivered = FALSE;
@@ -265,7 +265,7 @@ CREATE INDEX event_notifications_due
     WHERE state IN ('PENDING', 'FAILED');
 ```
 
-For MySQL/MariaDB equivalents, drop the `WHERE` clauses on the partial indexes and use the dialect-appropriate UUID/JSON column types — see [Multi-database](../database/multi-database.md) and the migrations under [`ekbatan-integration-tests/local-event-handler/{mysql,mariadb}/src/test/resources/db/migration/`](../../ekbatan-integration-tests/local-event-handler/).
+For MySQL/MariaDB equivalents, see the full [`eventlog.event_notifications`](../database/tables/event-notifications.md) DDL.
 
 The denormalization is deliberate: dispatch reads everything it needs from one notification row — no JOIN to `eventlog.events`, no race if the source row is already aged out.
 

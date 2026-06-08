@@ -35,9 +35,17 @@ const groups = [
             { href: "/reference/repository/", title: "Repository", blurb: "@EkbatanRepository, getById/getAll, shard routing.", status: "ready" },
             { href: "/reference/transaction-manager/", title: "TransactionManager", blurb: "inTransaction(shard, fn), readonly variants, isolation.", status: "ready" },
             { href: "/reference/sharding/", title: "Sharding", blurb: "ShardedUUID, EmbeddedBitsShardingStrategy, policy axes.", status: "ready" },
-            { href: "/reference/outbox-schema/", title: "Outbox schema", blurb: "eventlog.events DDL, dialect specifics, indexes.", status: "ready" },
             { href: "/reference/keyed-locks/", title: "Keyed locks", blurb: "PG / MariaDB / MySQL providers, lease semantics.", status: "ready" },
             { href: "/reference/multi-database/", title: "Multi-database", blurb: "Routing actions across multiple databases.", status: "ready" },
+        ],
+    },
+    {
+        title: "Tables",
+        entries: [
+            { href: "/reference/tables/", title: "Framework tables", blurb: "Table map, optionality matrix, and links to each table's full DDL.", status: "ready" },
+            { href: "/reference/tables/events/", title: "eventlog.events", blurb: "Durable event rows written with each action transaction.", status: "ready" },
+            { href: "/reference/tables/event-notifications/", title: "eventlog.event_notifications", blurb: "Optional local-handler delivery rows, states, retries, and handler names.", status: "ready" },
+            { href: "/reference/tables/scheduled-tasks/", title: "scheduled_tasks", blurb: "Optional db-scheduler table used by distributed jobs and local handlers.", status: "ready" },
         ],
     },
     {

@@ -2,117 +2,13 @@
 layout: ../../layouts/DocLayout.astro
 title: 'Outbox schema'
 activeSection: reference
-lead: 'The on-disk shape of the outbox. For the *why* — the atomic state + events guarantee, the dual-write problem, the framework''s headline — read <a href="../concepts/outbox.md">The outbox: atomic state + events</a> first. This page is the SQL reference.'
+lead: 'This page has moved. The schema reference now lives under Framework tables.'
 ---
 
-## `eventlog.events` (PostgreSQL)
+The SQL reference now lives at [Framework tables](/reference/tables/), because the schema reference covers more than the base event table:
 
-Every event Ekbatan writes lands in a single denormalized table:
+- [`eventlog.events`](/reference/tables/events/) — committed action/event rows written by the default event persister.
+- [`eventlog.event_notifications`](/reference/tables/event-notifications/) — optional local-event-handler delivery rows.
+- [`scheduled_tasks`](/reference/tables/scheduled-tasks/) — optional db-scheduler table used by distributed jobs and local handlers.
 
-```sql
-CREATE SCHEMA IF NOT EXISTS eventlog;
-
-CREATE TABLE eventlog.events (
-    id              UUID         PRIMARY KEY,
-    namespace       VARCHAR(255) NOT NULL,    -- service identifier, set on ActionExecutor
-    action_id       UUID         NOT NULL,    -- one per action execution; same UUID across all rows of the same action
-    action_name     VARCHAR(255) NOT NULL,    -- e.g. "WalletDepositAction"
-    action_params   JSONB        NOT NULL,    -- the action's Params record, serialized
-    started_date    TIMESTAMP    NOT NULL,
-    completion_date TIMESTAMP    NOT NULL,
-    model_id        VARCHAR(255),             -- the affected model's id (null on sentinel rows)
-    model_type      VARCHAR(255),             -- e.g. "Wallet"     (null on sentinel rows)
-    event_type      VARCHAR(255),             -- e.g. "WalletMoneyDepositedEvent" (null on sentinel rows)
-    payload         JSONB,                    -- the event itself, serialized        (null on sentinel rows)
-    event_date      TIMESTAMP    NOT NULL,
-    delivered       BOOLEAN      NOT NULL     -- written FALSE on every insert; flipped TRUE by the in-process fan-out (no-op for Kafka-only deployments)
-);
-
-CREATE INDEX idx_events_action_id ON eventlog.events(action_id);
-```
-
-One row per emitted event. Each row carries everything a downstream consumer needs — the action that caused it, when it ran, the params it received, the model that changed, and the event payload itself. Because every row already includes its action context, downstream consumers don't need to join back to anything: they tail the table and ship rows.
-
-`event_type` stores the event class's simple name, not its fully-qualified package name. The default `SingleTableJsonEventPersister` rejects two different event classes with the same simple name in one process, so a service cannot silently write ambiguous event rows.
-
-> **`delivered` has no SQL `DEFAULT`, by recommendation.** `SingleTableJsonEventPersister` writes it as `FALSE` on every insert, so the column doesn't need a DDL default — and Ekbatan generally prefers having the framework code be the single source of truth for "what gets written when nothing else is supplied," instead of letting a dialect-specific DDL clause silently fill in. This is a recommendation rather than a hard rule (the project uses `DEFAULT` where it adds clarity, e.g. `attempts INT NOT NULL DEFAULT 0` in `event_notifications`). Hand-written admin SQL or test fixtures touching `eventlog.events` must include the column.
-
-## Sentinel rows
-
-Actions that produce **zero** events still get a single row with `model_id`, `model_type`, `event_type`, and `payload` all set to `NULL`. The action's existence is always recorded, even if no model emitted an event.
-
-CDC consumers should skip these by checking `event_type IS NULL`. The framework's bundled SMTs ([Streaming via Debezium → Kafka](/reference/events/streaming/)) already do this.
-
-## Cross-dialect column types
-
-The logical schema is the same on every supported database; the column types differ. Quick table — the [Multi-database](/reference/multi-database/) doc has the full cheatsheet:
-
-| Logical column | PostgreSQL | MySQL | MariaDB |
-|---|---|---|---|
-| `id`, `action_id` | `UUID` | `CHAR(36) CHARACTER SET ascii` | `UUID` |
-| `action_params`, `payload` | `JSONB` | `JSON` | `JSON` |
-| `*_date` | `TIMESTAMP` | `DATETIME(6)` | `DATETIME(6)` |
-| `namespace`, `action_name`, `model_*`, `event_type` | `VARCHAR(N)` | same | same |
-| `delivered` | `BOOLEAN` | `BOOLEAN` | `BOOLEAN` |
-
-In MySQL/MariaDB, `eventlog` is a separate **database** (not a schema), so the first migration must `CREATE DATABASE IF NOT EXISTS eventlog;`. The named test user typically also needs cross-database `GRANT`s — see [Multi-database](/reference/multi-database/#schema-vs-database).
-
-All timestamps are UTC. Use `TIMESTAMP` (or `DATETIME(6)`), **never** `TIMESTAMPTZ`.
-
-## When the local-event-handler is in use
-
-The `delivered` flag is part of the base schema above — every Ekbatan deployment writes it as `FALSE` on every insert, regardless of whether the in-process consumer path is wired up. The [in-process consumer path](/reference/events/local-event-handler/) adds the partial index that the fan-out scan needs and a separate `event_notifications` table:
-
-```sql
-CREATE INDEX events_undelivered
-    ON eventlog.events (event_type, event_date)
-    WHERE delivered = FALSE;            -- partial index, PG only
-
-CREATE TABLE eventlog.event_notifications (
-    id              UUID         PRIMARY KEY,
-    event_id        UUID         NOT NULL,
-    handler_name    VARCHAR(255) NOT NULL,
-    -- denormalized event + action context — copied from eventlog.events at fan-out time
-    -- so dispatch reads everything it needs from a single row, no JOIN.
-    namespace       VARCHAR(255) NOT NULL,
-    action_id       UUID         NOT NULL,
-    action_name     VARCHAR(255) NOT NULL,
-    action_params   JSONB        NOT NULL,
-    started_date    TIMESTAMP    NOT NULL,
-    completion_date TIMESTAMP    NOT NULL,
-    model_id        VARCHAR(255),
-    model_type      VARCHAR(255),
-    event_type      VARCHAR(255) NOT NULL,
-    payload         JSONB,
-    event_date      TIMESTAMP    NOT NULL,
-    -- delivery state
-    state           VARCHAR(24)  NOT NULL,
-    attempts        INT          NOT NULL DEFAULT 0,
-    next_retry_at   TIMESTAMP    NOT NULL,
-    created_date    TIMESTAMP    NOT NULL,
-    updated_date    TIMESTAMP    NOT NULL,
-    UNIQUE (event_id, handler_name)
-);
-
-CREATE INDEX event_notifications_due
-    ON eventlog.event_notifications (next_retry_at)
-    WHERE state IN ('PENDING', 'FAILED');
-```
-
-`EventFanoutJob` only scans event types that currently have registered handlers, then flips `delivered = TRUE` after materializing one `event_notifications` row per `(event × subscribed handler)`. Events whose type has no subscriber remain `delivered = FALSE` and can be fanned out if a matching handler is deployed later. `EventHandlingJob` then drains the notifications, invokes handlers, and transitions `state` to `SUCCEEDED` / `FAILED` / `EXPIRED`.
-
-For MySQL/MariaDB, drop the `WHERE` clauses on the partial indexes (those dialects don't support them) and use full composite indexes such as `(delivered, event_type, event_date)` for fan-out and `(state, next_retry_at)` for due notifications.
-
-A complete worked migration set for each dialect lives in [`ekbatan-integration-tests/local-event-handler/{pg,mysql,mariadb}/src/test/resources/db/migration/`](../../ekbatan-integration-tests/local-event-handler/).
-
-## Coexistence with Debezium
-
-Debezium's outbox SMTs (`OutboxToAvroTransform`, `OutboxToProtobufTransform`) drop non-INSERT operations, so the `UPDATE delivered = TRUE` writes the local-event-handler issues never become Kafka messages. You can run **both** consumer paths against the same `eventlog.events` table simultaneously without double-publishing.
-
-## See also
-
-- [The outbox: atomic state + events](/concepts/outbox/) — what this schema is *for*
-- [Multi-database](/reference/multi-database/) — full dialect cheatsheet, init scripts, partial-index notes
-- [Sharding](/reference/sharding/) — how the outbox lives on each shard (cross-shard events get one row per shard, same UUID)
-- [Listen-to-yourself](/reference/events/local-event-handler/) — the consumer that drives the `delivered` flag and `event_notifications`
-- [Streaming via Debezium → Kafka](/reference/events/streaming/) — the CDC consumer
+Keep using this URL for old links, but use [Framework tables](/reference/tables/) for new references.

@@ -2,16 +2,19 @@
 layout: ../../layouts/DocLayout.astro
 title: 'Adding a shard'
 activeSection: learn
-lead: 'Take the single-database wallet from the previous lessons to two shards using EmbeddedBitsShardingStrategy. Your action and controller code does not change. Only the model''s ID type and the registry configuration do.'
+lead: 'Split the wallet example across two databases. New wallets choose a shard when they are created, and later reads or deposits route to the right database from the wallet ID.'
 ---
 
-import StackPicker from '../../components/StackPicker.astro';
+import LearnPager from '../../components/LearnPager.astro';
 
-<StackPicker />
+In the previous lessons, every wallet lived in one database. In this lesson, we add a second Postgres database and route wallets between them.
 
-The conceptual model behind two-axis sharding lives at [Concepts → Sharding strategies](/concepts/sharding/) — read it first if you haven't. This lesson is the mechanical recipe: take the wallet you built in [Your first Action](/learn/your-first-action/) and split it across two Postgres databases, keeping action code unchanged.
+The example uses a simple rule:
 
-We'll use `EmbeddedBitsShardingStrategy` — the shard `(group, member)` lives in 14 bits of the wallet's UUID, so any code with a `Wallet` ID can route to the right database without a lookup table.
+- US/global wallets go to shard `(0, 0)`
+- Mexico wallets go to shard `(1, 0)`
+
+The important part is when the decision happens. A wallet chooses its shard once, when it is created. After that, the wallet ID carries the shard information, so a deposit action can receive only the wallet ID and still reach the right database.
 
 ```
    Before                          After
@@ -27,6 +30,10 @@ We'll use `EmbeddedBitsShardingStrategy` — the shard `(group, member)` lives i
    └────────────┘                  └────────────┘    └────────────┘
                                    (e.g. global)     (e.g. mexico)
 ```
+
+In Ekbatan, a shard is addressed as `(group, member)`. The `group` is the business or policy boundary, such as `global` or `mexico`. The `member` is the database inside that group. This lesson uses one member in each group, so the two databases are `(0, 0)` and `(1, 0)`.
+
+We'll use `EmbeddedBitsShardingStrategy`, Ekbatan's default strategy for sharded IDs. It stores the shard `(group, member)` inside the wallet UUID, so any code with a `Wallet` ID can route to the right database without a lookup table. You can also provide your own `ShardingStrategy` when the shard should be resolved in a different way. The deeper model behind groups, members, and other sharding strategies lives in [Concepts → Sharding strategies](/concepts/sharding/).
 
 ## 1. Change the model's ID type
 
@@ -97,86 +104,44 @@ The shard is chosen *once*, at creation. From here on every query / update throu
 
 ## 3. Wire the second database
 
-<div data-stack="spring">
-
 ```yaml
 # application.yml
 ekbatan:
+  namespace: example.wallet
   sharding:
+    default-shard:
+      group: 0
+      member: 0
     groups:
-      - id: global
+      - group: 0
+        name: global
         members:
-          - shardKey: 0
+          - member: 0
+            name: global
             configs:
-              primaryConfig:
-                jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+              primary-config:
+                jdbc-url: jdbc:postgresql://localhost:5432/wallet_global
                 username: wallet
                 password: wallet
-      - id: mexico
+                driver-class-name: org.postgresql.Driver
+                maximum-pool-size: 20
+      - group: 1
+        name: mexico
         members:
-          - shardKey: 0
+          - member: 0
+            name: mexico
             configs:
-              primaryConfig:
-                jdbcUrl: jdbc:postgresql://localhost:5433/wallet
+              primary-config:
+                jdbc-url: jdbc:postgresql://localhost:5433/wallet_mexico
                 username: wallet
                 password: wallet
+                driver-class-name: org.postgresql.Driver
+                maximum-pool-size: 20
 ```
 
-</div>
+Spring Boot, Quarkus, and Micronaut all bind this same `ekbatan.sharding` structure. If you wire Ekbatan manually, provide the same `ShardingConfig` before creating the `DatabaseRegistry` — see [Plain Java wiring](/reference/di/without-di/).
 
-<div data-stack="quarkus">
-
-```properties
-# application.properties
-ekbatan.sharding.groups[0].id=global
-ekbatan.sharding.groups[0].members[0].shardKey=0
-ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl=jdbc:postgresql://localhost:5432/wallet
-ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username=wallet
-ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password=wallet
-
-ekbatan.sharding.groups[1].id=mexico
-ekbatan.sharding.groups[1].members[0].shardKey=0
-ekbatan.sharding.groups[1].members[0].configs.primaryConfig.jdbcUrl=jdbc:postgresql://localhost:5433/wallet
-ekbatan.sharding.groups[1].members[0].configs.primaryConfig.username=wallet
-ekbatan.sharding.groups[1].members[0].configs.primaryConfig.password=wallet
-```
-
-</div>
-
-<div data-stack="micronaut">
-
-```yaml
-# application.yml
-ekbatan:
-  sharding:
-    groups:
-      - id: global
-        members:
-          - shardKey: 0
-            configs:
-              primaryConfig:
-                jdbcUrl: jdbc:postgresql://localhost:5432/wallet
-                username: wallet
-                password: wallet
-      - id: mexico
-        members:
-          - shardKey: 0
-            configs:
-              primaryConfig:
-                jdbcUrl: jdbc:postgresql://localhost:5433/wallet
-                username: wallet
-                password: wallet
-```
-
-</div>
-
-<div data-stack="plain">
-
-Wire the `DatabaseRegistry` programmatically — see [Plain Java wiring § sharding](/reference/di/without-di/).
-
-</div>
-
-The framework runs Flyway migrations against each shard on startup (same set of SQL files, applied independently). No multi-tenant column to add; both shards have the same schema.
+The `FlywayMigrator.migrate(shardingConfig)` startup hook from project setup runs the same migrations against each shard independently. No multi-tenant column to add; both shards have the same schema.
 
 ## 4. Spin up the second database
 
@@ -265,6 +230,8 @@ executor.execute(principal, WalletTransferAction.class, params, config);
 ## Next
 
 → **[Compiling to a native binary](/learn/native-image/)** — take the same wallet code and package it as a GraalVM native executable.
+
+<LearnPager current="sharding" />
 
 ## See also
 

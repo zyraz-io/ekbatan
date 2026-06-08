@@ -118,5 +118,5 @@ Reference implementations: `ekbatan-core/.../single_table_json/EventEntityReposi
 - [JOOQ codegen on Maven](../maven/jooq-codegen.md) — the equivalent `pom.xml` plugin chain
 - [Repositories on JOOQ](repositories.md) — how field constants and converters fit together
 - [The outbox: atomic state + events](../concepts/outbox.md) — the framework's canonical schema this page enables you to author
-- [Outbox schema](outbox-schema.md) — the on-disk shape of `eventlog.events` and friends
+- [Framework tables](tables.md) — the on-disk shape of `eventlog.events` and friends
 - [GraalVM native-image](../runtime/native-image.md) — Flyway and JDBC driver native-image considerations

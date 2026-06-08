@@ -2,16 +2,14 @@
 layout: ../../layouts/DocLayout.astro
 title: 'Consuming events'
 activeSection: learn
-lead: 'After your first Action commits, there is a row in eventlog.events. From there you choose the delivery topology: consume locally, publish from a handler, stream with CDC, or fan out through a router.'
+lead: 'After your first Action commits, eventlog.events contains a durable event row. From there you choose how to use it: handle it locally, publish from a handler, stream with CDC, or fan out through a router.'
 ---
 
-import StackPicker from '../../components/StackPicker.astro';
-
-<StackPicker />
+import LearnPager from '../../components/LearnPager.astro';
 
 Ekbatan's main job is to persist events safely. When an Action commits, the domain rows and the `eventlog.events` rows are written in the same database transaction. After that, your application chooses how to use those persisted events.
 
-This page shows the main ways to consume those outbox rows: handle them inside the same service, publish them from a handler, stream them with CDC, or route them into multiple broker topics.
+This page shows the main ways to consume those event rows: handle them inside the same service, publish them from a handler, stream them with CDC, or route them into multiple broker topics.
 
 ```
                          eventlog.events
@@ -26,7 +24,7 @@ This page shows the main ways to consume those outbox rows: handle them inside t
    local work or broker publish          derived topics / rekeyed streams
 ```
 
-You do not have to pick only one. Local handlers and CDC can run simultaneously against the same outbox. The local handler's `delivered=true` flip generates an UPDATE row that the Debezium SMTs drop, so only the original INSERT rows ship to Kafka.
+You do not have to pick only one. Local handlers and CDC can run simultaneously against the same events table. The local handler's `delivered=true` flip generates an UPDATE row that the Debezium SMTs drop, so only the original INSERT rows ship to Kafka.
 
 ## Choose a delivery topology
 
@@ -54,23 +52,23 @@ You can write an event handler for an event, and then in that handler manually i
 eventlog.events -> EventHandlingJob -> your handler -> Kafka / Pulsar / RabbitMQ / SQS / another broker
 ```
 
-Think of the handler as a small publisher worker. You create a local event handler, listen to the local event, and then manually publish it yourself to Kafka, Pulsar, RabbitMQ, SQS, or another message broker. Ekbatan first commits the database change and the outbox row; later, the handling job invokes your handler, and your handler decides what broker messages to send.
+Think of the handler as a small publisher worker. You create a local event handler, listen to the local event, and then manually publish it yourself to Kafka, Pulsar, RabbitMQ, SQS, or another message broker. Ekbatan first commits the database change and the event row; later, the handling job invokes your handler, and your handler decides what broker messages to send.
 
-Choose this shape when publishing is not a simple "copy this outbox row to a topic" operation. Because you publish in application code, you decide the topic or stream, message key, headers, schema, partitioning key, tenant route, and destination broker. A single `WalletMoneyDepositedEvent` could publish one message to `wallet.deposits`, another to `risk.large-deposits`, and nothing to billing if the action params say the deposit was internal.
+Choose this shape when publishing is not a simple "copy each event to one topic" operation. Because you publish in application code, you decide the topic or stream, message key, headers, schema, partitioning key, tenant route, and destination broker. A single `WalletMoneyDepositedEvent` could publish one message to `wallet.deposits`, another to `risk.large-deposits`, and nothing to billing if the action params say the deposit was internal.
 
 It is also a good fit when the outgoing message needs application-specific enrichment before it leaves the service: for example, adding tenant metadata, mapping an internal event into a public integration event, redacting fields, or publishing different contracts for different consumers.
 
-The tradeoff is that the handler is now an at-least-once publisher. If the broker publish succeeds but the handler process crashes before the notification row is marked `SUCCEEDED`, the handler can run again. Use the outbox event id, or another stable business key, so downstream consumers can dedupe.
+The tradeoff is that the handler is now an at-least-once publisher. If the broker publish succeeds but the handler process crashes before the notification row is marked `SUCCEEDED`, the handler can run again. Use the event row id, or another stable business key, so downstream consumers can dedupe.
 
 ### 3. CDC directly to one raw broker topic
 
-Use Debezium or another CDC tool when you want infrastructure to stream committed outbox rows without application code publishing to the broker.
+Use Debezium or another CDC tool when you want infrastructure to stream committed event rows without application code publishing to the broker.
 
 ```
 eventlog.events -> Debezium -> ekbatan.<namespace>
 ```
 
-This produces a raw event stream for the service. The outbox row is the source of truth; the broker topic is a projection of that table. Consumers can subscribe to the raw topic and filter by `model_type`, `event_type`, namespace, tenant, or any metadata you include in the message envelope.
+This produces a raw event stream for the service. The row in `eventlog.events` is the source of truth; the broker topic is a projection of that table. Consumers can subscribe to the raw topic and filter by `model_type`, `event_type`, namespace, tenant, or any metadata you include in the message envelope.
 
 For Kafka, use `model_id` as the message key when consumers need per-aggregate ordering. That keeps events for the same wallet, order, account, or other model instance on the same partition.
 
@@ -82,7 +80,7 @@ Use this when "one queue" is not enough.
 eventlog.events -> Debezium -> raw topic -> router / stream processor -> derived topics
 ```
 
-The CDC connector writes every outbox event to a raw topic. A downstream routing layer then branches the stream into whatever shape the organization needs:
+The CDC connector writes every event to a raw topic. A downstream routing layer then branches the stream into whatever shape the organization needs:
 
 - one topic per `event_type`
 - one topic per `model_type`
@@ -90,7 +88,7 @@ The CDC connector writes every outbox event to a raw topic. A downstream routing
 - multiple topics for the same event
 - a rekeyed topic where the partition key is changed for a specific consumer
 
-Good tools for this layer include Kafka Streams, ksqlDB, Apache Flink, Apache Beam, Pulsar Functions, or a small custom consumer/producer service. The important distinction is that fan-out and repartitioning happen after the durable outbox stream exists; Ekbatan does not force the broker topology into the database write path.
+Good tools for this layer include Kafka Streams, ksqlDB, Apache Flink, Apache Beam, Pulsar Functions, or a small custom consumer/producer service. The important distinction is that fan-out and repartitioning happen after the durable event stream exists; Ekbatan does not force the broker topology into the database write path.
 
 ## Path A — Local event handler (start here)
 
@@ -98,37 +96,19 @@ The fastest path: no broker, no CDC, no Kafka cluster. The `ekbatan-events:local
 
 ### A.1 Add the module
 
-<div data-stack="spring" data-build="gradle">
+If you use the Spring Boot starter, Quarkus extension, or Micronaut module, the local event handler and distributed jobs runtime are already on the classpath.
+
+If you wire Ekbatan manually, add the local event handler module:
+
+Gradle:
 
 ```kotlin
-// build.gradle.kts
-dependencies {
-    // Pulled transitively by ekbatan-spring-boot-starter — explicit line not needed.
-}
-```
-
-The Spring Boot starter already pulls `ekbatan-local-event-handler`. Nothing to add.
-
-</div>
-
-<div data-stack="spring" data-build="maven">
-
-The Spring Boot starter already pulls `ekbatan-local-event-handler` transitively. Nothing to add.
-
-</div>
-
-<div data-stack="quarkus" data-build="gradle">
-
-```kotlin
-// build.gradle.kts
 dependencies {
     implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.2.1")
 }
 ```
 
-</div>
-
-<div data-stack="quarkus" data-build="maven">
+Maven:
 
 ```xml
 <dependency>
@@ -138,53 +118,7 @@ dependencies {
 </dependency>
 ```
 
-</div>
-
-<div data-stack="micronaut" data-build="gradle">
-
-```kotlin
-// build.gradle.kts
-dependencies {
-    implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.2.1")
-}
-```
-
-</div>
-
-<div data-stack="micronaut" data-build="maven">
-
-```xml
-<dependency>
-  <groupId>io.github.zyraz-io</groupId>
-  <artifactId>ekbatan-local-event-handler</artifactId>
-  <version>0.2.1</version>
-</dependency>
-```
-
-</div>
-
-<div data-stack="plain" data-build="gradle">
-
-```kotlin
-dependencies {
-    implementation("io.github.zyraz-io:ekbatan-local-event-handler:0.2.1")
-    implementation("io.github.zyraz-io:ekbatan-distributed-jobs:0.2.1")  // pulls the job runtime
-}
-```
-
-</div>
-
-<div data-stack="plain" data-build="maven">
-
-```xml
-<dependency>
-  <groupId>io.github.zyraz-io</groupId>
-  <artifactId>ekbatan-local-event-handler</artifactId>
-  <version>0.2.1</version>
-</dependency>
-```
-
-</div>
+The local event handler module depends on `ekbatan-distributed-jobs`, because the fan-out and handling loops run as distributed jobs.
 
 ### A.2 Write the handler
 
@@ -246,7 +180,7 @@ After that deploy, old rows with `handler_name = 'wallet-money-deposited-notifie
 
 The [Local event handler reference](/reference/events/local-event-handler/) has an animated walkthrough that shows this rename mechanism: old rows routing through `aliases()`, and new rows routing through the current `name()`.
 
-Per the [listen-to-yourself pattern](/reference/events/local-event-handler/), the handler can dispatch its own actions via an injected `ActionExecutor` to record its work in the same outbox. That same shape is used for [sagas](/concepts/sagas/) when one committed action should trigger the next committed action.
+Per the [listen-to-yourself pattern](/reference/events/local-event-handler/), the handler can dispatch its own actions via an injected `ActionExecutor`, and those actions persist their own resulting events through the normal action flow. That same shape is used for [sagas](/concepts/sagas/) when one committed action should trigger the next committed action.
 
 ### A.3 Run
 
@@ -263,15 +197,15 @@ ORDER BY created_date DESC;
 
 ## Path B — Debezium CDC → Kafka
 
-When you need fan-out beyond your own application (other services, a data lake, an analytics warehouse), tail the outbox with Debezium. The framework ships two Kafka Connect SMTs that can turn real outbox event rows into Avro or Protobuf bytes before they reach Kafka. A downstream router can then fan the raw topic out to per-model or per-event topics.
+When you need fan-out beyond your own application (other services, a data lake, an analytics warehouse), tail `eventlog.events` with Debezium. The framework ships two Kafka Connect SMTs that can turn real event rows into Avro or Protobuf bytes before they reach Kafka. A downstream router can then fan the raw topic out to per-model or per-event topics.
 
 ### B.1 Set up Debezium
 
-Point a Debezium Postgres source connector at the database. Capture only the outbox table:
+Point a Debezium Postgres source connector at the database. Capture only the events table:
 
 ```json
 {
-  "name": "wallet-outbox",
+  "name": "wallet-events",
   "config": {
     "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
     "tasks.max": "1",
@@ -355,7 +289,7 @@ All delivery paths are **at-least-once**. That is true for local handlers, handl
 
 Design consumers so duplicate delivery is harmless:
 
-- Store the outbox event id, or a domain-specific idempotency key, in the consumer's table before applying the side effect.
+- Store the event row id, or a domain-specific idempotency key, in the consumer's table before applying the side effect.
 - Put a unique constraint on that key so duplicate attempts become no-ops.
 - Use `model_id` as the broker message key when ordering matters per aggregate.
 - Keep handler names stable. If you rename a local handler, use `aliases()` until old `event_notifications.handler_name` rows drain.
@@ -364,9 +298,9 @@ Design consumers so duplicate delivery is harmless:
 
 - **Local consumption** keeps event delivery inside your application — same database, no broker, no external infrastructure to operate.
 - **Handler publishing** lets application code publish to one or many broker destinations with custom keys, headers, schemas, and routing.
-- **CDC to a raw topic** turns committed outbox rows into a cross-service event stream without publishing from request handlers.
+- **CDC to a raw topic** turns committed event rows into a cross-service event stream without publishing from request handlers.
 - **CDC plus downstream routing** lets one raw stream become many topics or differently keyed streams.
-- All of them read the same outbox row. The dual-write trap is structurally impossible — there is only one durable write inside the action's transaction, and everything else consumes from it.
+- All of them read from the same `eventlog.events` rows. The dual-write trap is structurally impossible — there is only one durable write inside the action's transaction, and everything else consumes from it.
 
 If you start with local consumption and later add CDC, **no application code changes**. The Debezium connector starts tailing the same table from now on; backfill earlier events by configuring `snapshot.mode`.
 
@@ -374,10 +308,12 @@ If you start with local consumption and later add CDC, **no application code cha
 
 → **[Adding a shard](/learn/sharding/)** — take the single-database wallet to two shards using `EmbeddedBitsShardingStrategy`. Your action signatures don't change.
 
+<LearnPager current="consuming-events" />
+
 ## See also
 
 - [Concepts → The outbox: atomic state + events](/concepts/outbox/) — why the durable outbox exists
 - [Reference → Local event handler](/reference/events/local-event-handler/) — `EventHandler` API, retry/expiry config, `EventEnvelope` shape
 - [Reference → Streaming (Debezium)](/reference/events/streaming/) — `OutboxToAvro` / `OutboxToProtobuf` SMT options, topic naming, snapshot modes
-- [Reference → Outbox schema](/reference/outbox-schema/) — `eventlog.events` + `eventlog.event_notifications` DDL
+- [Reference -> Framework tables](/reference/tables/) — table map plus full DDL for `eventlog.events` and `eventlog.event_notifications`
 - [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) — runs the in-process `WalletMoneyDepositedEventHandler` end-to-end with an integration test that asserts the notification row appears

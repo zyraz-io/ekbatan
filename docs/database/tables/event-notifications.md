@@ -1,0 +1,171 @@
+# `eventlog.event_notifications`
+
+`eventlog.event_notifications` is optional. You only need it when the local event handler module is installed. It turns one durable event row into one delivery row per subscribed handler.
+
+Example: if `WalletMoneyDepositedEvent` has two handlers, `EventFanoutJob` creates two notification rows with the same `event_id` and different `handler_name` values.
+
+**Required when:** only when you use `ekbatan-local-event-handler`, either to handle events locally or to publish from a local handler.
+
+**Writer:** `EventFanoutJob` creates rows; `EventHandlingJob` updates rows.
+
+**Row model:** `io.ekbatan.events.localeventhandler.model.EventNotification`.
+
+`EventNotification` is an internal row representation, not a domain `Model` or `Entity`. The handling jobs update rows directly as delivery state changes.
+
+## DDL
+
+This DDL assumes the base [`eventlog.events`](events.md) table already exists. The first index below is on `eventlog.events`; it is part of the local-handler setup because fan-out polls undelivered event rows.
+
+### PostgreSQL
+
+```sql
+CREATE INDEX events_undelivered
+    ON eventlog.events (event_type, event_date)
+    WHERE delivered = FALSE;
+
+CREATE TABLE eventlog.event_notifications (
+    id              UUID         PRIMARY KEY,
+    event_id        UUID         NOT NULL,
+    handler_name    VARCHAR(255) NOT NULL,
+    namespace       VARCHAR(255) NOT NULL,
+    action_id       UUID         NOT NULL,
+    action_name     VARCHAR(255) NOT NULL,
+    action_params   JSONB        NOT NULL,
+    started_date    TIMESTAMP    NOT NULL,
+    completion_date TIMESTAMP    NOT NULL,
+    model_id        VARCHAR(255),
+    model_type      VARCHAR(255),
+    event_type      VARCHAR(255) NOT NULL,
+    payload         JSONB,
+    event_date      TIMESTAMP    NOT NULL,
+    state           VARCHAR(24)  NOT NULL,
+    attempts        INT          NOT NULL DEFAULT 0,
+    next_retry_at   TIMESTAMP    NOT NULL,
+    created_date    TIMESTAMP    NOT NULL,
+    updated_date    TIMESTAMP    NOT NULL,
+    UNIQUE (event_id, handler_name)
+);
+
+CREATE INDEX event_notifications_due
+    ON eventlog.event_notifications (next_retry_at)
+    WHERE state IN ('PENDING', 'FAILED');
+```
+
+### MariaDB
+
+```sql
+CREATE INDEX events_pending_fanout
+    ON eventlog.events (delivered, event_type, event_date);
+
+CREATE TABLE eventlog.event_notifications (
+    id              UUID         PRIMARY KEY,
+    event_id        UUID         NOT NULL,
+    handler_name    VARCHAR(255) NOT NULL,
+    namespace       VARCHAR(255) NOT NULL,
+    action_id       UUID         NOT NULL,
+    action_name     VARCHAR(255) NOT NULL,
+    action_params   JSON         NOT NULL,
+    started_date    DATETIME(6)  NOT NULL,
+    completion_date DATETIME(6)  NOT NULL,
+    model_id        VARCHAR(255),
+    model_type      VARCHAR(255),
+    event_type      VARCHAR(255) NOT NULL,
+    payload         JSON,
+    event_date      DATETIME(6)  NOT NULL,
+    state           VARCHAR(24)  NOT NULL,
+    attempts        INT          NOT NULL DEFAULT 0,
+    next_retry_at   DATETIME(6)  NOT NULL,
+    created_date    DATETIME(6)  NOT NULL,
+    updated_date    DATETIME(6)  NOT NULL,
+    UNIQUE (event_id, handler_name)
+);
+
+CREATE INDEX event_notifications_due ON eventlog.event_notifications (next_retry_at);
+```
+
+### MySQL
+
+```sql
+CREATE INDEX events_pending_fanout
+    ON eventlog.events (delivered, event_type, event_date);
+
+CREATE TABLE eventlog.event_notifications (
+    id              CHAR(36)     CHARACTER SET ascii NOT NULL,
+    event_id        CHAR(36)     CHARACTER SET ascii NOT NULL,
+    handler_name    VARCHAR(255) NOT NULL,
+    namespace       VARCHAR(255) NOT NULL,
+    action_id       CHAR(36)     CHARACTER SET ascii NOT NULL,
+    action_name     VARCHAR(255) NOT NULL,
+    action_params   JSON         NOT NULL,
+    started_date    DATETIME(6)  NOT NULL,
+    completion_date DATETIME(6)  NOT NULL,
+    model_id        VARCHAR(255),
+    model_type      VARCHAR(255),
+    event_type      VARCHAR(255) NOT NULL,
+    payload         JSON,
+    event_date      DATETIME(6)  NOT NULL,
+    state           VARCHAR(24)  NOT NULL,
+    attempts        INT          NOT NULL DEFAULT 0,
+    next_retry_at   DATETIME(6)  NOT NULL,
+    created_date    DATETIME(6)  NOT NULL,
+    updated_date    DATETIME(6)  NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE (event_id, handler_name)
+);
+
+CREATE INDEX event_notifications_due ON eventlog.event_notifications (next_retry_at);
+```
+
+## Columns
+
+| Column | Nullable | Meaning |
+|---|---:|---|
+| `id` | No | Primary key of this notification row. One event can have many notification rows, one per subscribed handler. |
+| `event_id` | No | Source `eventlog.events.id`. It is intentionally not enough by itself to be unique because several handlers can consume the same event. |
+| `handler_name` | No | Cluster-stable handler identifier from `EventHandler.name()`. Treat this like schema data: renaming it without `aliases()` makes old queued rows invisible to the new handler name. |
+| `namespace` | No | Copied from `eventlog.events.namespace` at fan-out time. |
+| `action_id` | No | Copied from the source event row. |
+| `action_name` | No | Copied from the source event row. |
+| `action_params` | No | Copied from the source event row. |
+| `started_date` | No | Copied from the source event row. |
+| `completion_date` | No | Copied from the source event row. |
+| `model_id` | Yes | Copied from the source event row. Usually non-null because sentinel rows are not fanned out, but the column stays nullable to mirror the source event shape. |
+| `model_type` | Yes | Copied from the source event row. Usually non-null for the same reason as `model_id`. |
+| `event_type` | No | Event simple class name used to route to a typed handler. Sentinel rows are skipped before notification creation, so this is required. |
+| `payload` | Yes | Event payload copied from the source event row. It can be `NULL` only if a malformed source row exists; normal emitted events have a payload. |
+| `event_date` | No | Copied from the source event row. |
+| `state` | No | Delivery lifecycle: `PENDING`, `FAILED`, `SUCCEEDED`, or `EXPIRED`. |
+| `attempts` | No | Number of failed delivery attempts so far. Defaults to `0` in the DDL. |
+| `next_retry_at` | No | Earliest UTC instant when `EventHandlingJob` may try this notification again. |
+| `created_date` | No | UTC instant when `EventFanoutJob` created the notification row. |
+| `updated_date` | No | UTC instant when the notification row was last updated. |
+
+The unique constraint on `(event_id, handler_name)` makes fan-out idempotent per handler. If the fan-out job sees the same event again, it cannot create duplicate work for the same handler.
+
+## State transitions
+
+| State | Meaning |
+|---|---|
+| `PENDING` | Initial state. The handler has not succeeded or failed yet. |
+| `FAILED` | A handler attempt threw and another retry is still allowed. |
+| `SUCCEEDED` | Terminal state. The handler returned normally. |
+| `EXPIRED` | Terminal state. The retry window elapsed without a successful handler run. |
+
+## Indexes
+
+| Index | Dialect | Purpose |
+|---|---|---|
+| `events_undelivered` on `eventlog.events(event_type, event_date)` with `WHERE delivered = FALSE` | PostgreSQL | Lets `EventFanoutJob` find undelivered rows for event types that currently have registered handlers. |
+| `events_pending_fanout` on `eventlog.events(delivered, event_type, event_date)` | MySQL/MariaDB | Same purpose as the PostgreSQL partial index; MySQL and MariaDB do not support PostgreSQL-style partial indexes. |
+| `event_notifications_due` on `eventlog.event_notifications(next_retry_at)` with `WHERE state IN ('PENDING', 'FAILED')` | PostgreSQL | Lets `EventHandlingJob` find due retryable rows without scanning terminal rows. |
+| `event_notifications_due` on `eventlog.event_notifications(next_retry_at)` | MySQL/MariaDB | The state predicate stays in the query because partial indexes are not available. |
+
+## Handler names
+
+`handler_name` stores `EventHandler.name()`, so treat it like durable schema data. If you rename a handler, use `aliases()` with the previous name while old rows drain. New fan-out rows are written with the canonical `name()`, and old queued rows can still route to the renamed handler through the alias.
+
+## See also
+
+- [Framework tables](../tables.md) — table map and optionality matrix.
+- [Local event handler](../../events/local-event-handler.md) — fan-out, dispatch, retries, expiry, and handler aliases.
+- [`eventlog.events`](events.md) — the source event rows that are fanned out.

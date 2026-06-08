@@ -310,6 +310,6 @@ The build-tool pages (linked at the top) cover the codegen iteration story when 
 - [Multi-database](multi-database.md) — UTC enforcement, the column-type cheatsheet, schema-vs-database, the dialect-switch repository pattern
 - [Repositories on JOOQ](repositories.md) — how the generated table/record classes feed into `AbstractRepository`
 - [PostgreSQL setup](postgresql.md) / [MariaDB setup](mariadb.md) / [MySQL setup](mysql.md) — per-dialect DDL, framework tables, gotchas
-- [Outbox schema](outbox-schema.md) — the canonical `eventlog.events` shape these forced types map to
+- [`eventlog.events`](tables/events.md) — the canonical event table shape these forced types map to
 
 ← Back to [Database](README.md) · [docs index](../README.md)

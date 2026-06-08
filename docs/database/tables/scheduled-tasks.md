@@ -1,0 +1,124 @@
+# `scheduled_tasks`
+
+`scheduled_tasks` is optional. You only need it when you use distributed jobs directly, or when you use a module that depends on distributed jobs, such as the local event handler. `EventFanoutJob` and `EventHandlingJob` are distributed jobs, so local event handling needs `scheduled_tasks`.
+
+`scheduled_tasks` is owned by [db-scheduler](https://github.com/kagkarlsson/db-scheduler). Ekbatan's `JobRegistry` is a small facade over db-scheduler, but it deliberately does not wrap this table in an Ekbatan model. Keep the db-scheduler schema verbatim for your dialect.
+
+**Required when:** only when you use `ekbatan-distributed-jobs`, or any module built on it such as `ekbatan-local-event-handler`.
+
+**Writer:** db-scheduler, through Ekbatan's `JobRegistry` facade.
+
+**Row model:** no Ekbatan model. db-scheduler owns this table.
+
+## DDL
+
+### PostgreSQL
+
+```sql
+-- db-scheduler's required schema for PostgreSQL.
+-- This is db-scheduler's own table, so Ekbatan intentionally steps
+-- off the always-TIMESTAMP rule here.
+create table scheduled_tasks (
+    task_name text not null,
+    task_instance text not null,
+    task_data bytea,
+    execution_time timestamp with time zone not null,
+    picked BOOLEAN not null,
+    picked_by text,
+    last_success timestamp with time zone,
+    last_failure timestamp with time zone,
+    consecutive_failures INT,
+    last_heartbeat timestamp with time zone,
+    version BIGINT not null,
+    priority SMALLINT,
+    PRIMARY KEY (task_name, task_instance)
+);
+
+CREATE INDEX execution_time_idx ON scheduled_tasks (execution_time);
+CREATE INDEX last_heartbeat_idx ON scheduled_tasks (last_heartbeat);
+CREATE INDEX priority_execution_time_idx ON scheduled_tasks (priority desc, execution_time asc);
+```
+
+### MariaDB
+
+```sql
+-- db-scheduler's required schema for MariaDB / MySQL.
+-- This is db-scheduler's own table, so Ekbatan intentionally follows
+-- db-scheduler's schema verbatim.
+create table scheduled_tasks (
+    task_name VARCHAR(100) NOT NULL,
+    task_instance VARCHAR(100) NOT NULL,
+    task_data BLOB,
+    execution_time TIMESTAMP(6) NOT NULL,
+    picked BOOLEAN NOT NULL,
+    picked_by VARCHAR(50),
+    last_success TIMESTAMP(6) NULL,
+    last_failure TIMESTAMP(6) NULL,
+    consecutive_failures INT,
+    last_heartbeat TIMESTAMP(6) NULL,
+    version BIGINT NOT NULL,
+    priority SMALLINT,
+    PRIMARY KEY (task_name, task_instance),
+    INDEX execution_time_idx (execution_time),
+    INDEX last_heartbeat_idx (last_heartbeat),
+    INDEX priority_execution_time_idx (priority, execution_time)
+);
+```
+
+### MySQL
+
+```sql
+-- db-scheduler's required schema for MySQL.
+-- This is db-scheduler's own table, so Ekbatan intentionally follows
+-- db-scheduler's schema verbatim.
+create table scheduled_tasks (
+    task_name VARCHAR(100) NOT NULL,
+    task_instance VARCHAR(100) NOT NULL,
+    task_data BLOB,
+    execution_time TIMESTAMP(6) NOT NULL,
+    picked BOOLEAN NOT NULL,
+    picked_by VARCHAR(50),
+    last_success TIMESTAMP(6) NULL,
+    last_failure TIMESTAMP(6) NULL,
+    consecutive_failures INT,
+    last_heartbeat TIMESTAMP(6) NULL,
+    version BIGINT NOT NULL,
+    priority SMALLINT,
+    PRIMARY KEY (task_name, task_instance),
+    INDEX execution_time_idx (execution_time),
+    INDEX last_heartbeat_idx (last_heartbeat),
+    INDEX priority_execution_time_idx (priority, execution_time)
+);
+```
+
+## Columns
+
+| Column | PostgreSQL type | MySQL/MariaDB type | Meaning |
+|---|---|---|---|
+| `task_name` | `text` | `VARCHAR(100)` | Cluster-wide task name. For Ekbatan jobs this comes from `DistributedJob.name()`. |
+| `task_instance` | `text` | `VARCHAR(100)` | db-scheduler task instance id. Together with `task_name`, this is the primary key. |
+| `task_data` | `bytea` | `BLOB` | Serialized db-scheduler task payload. Ekbatan's recurring `DistributedJob` facade does not expose this as application data. |
+| `execution_time` | `timestamp with time zone` | `TIMESTAMP(6)` | Next scheduled execution time. db-scheduler queries and orders by this. |
+| `picked` | `BOOLEAN` | `BOOLEAN` | Whether a scheduler instance has claimed this row for execution. |
+| `picked_by` | `text` | `VARCHAR(50)` | Identifier of the scheduler instance that claimed the row. `NULL` when not picked. |
+| `last_success` | `timestamp with time zone` | `TIMESTAMP(6)` | Last successful completion time, if any. |
+| `last_failure` | `timestamp with time zone` | `TIMESTAMP(6)` | Last failed completion time, if any. |
+| `consecutive_failures` | `INT` | `INT` | Number of consecutive failures recorded by db-scheduler. |
+| `last_heartbeat` | `timestamp with time zone` | `TIMESTAMP(6)` | Last heartbeat from the scheduler instance that owns the execution. Used to detect dead executions. |
+| `version` | `BIGINT` | `BIGINT` | db-scheduler's optimistic concurrency field for claims and updates. |
+| `priority` | `SMALLINT` | `SMALLINT` | Optional scheduler priority. |
+
+## Indexes
+
+| Index | Purpose |
+|---|---|
+| Primary key on `(task_name, task_instance)` | Identifies a scheduled task instance. |
+| `execution_time_idx` on `(execution_time)` | Lets scheduler polling find due rows. |
+| `last_heartbeat_idx` on `(last_heartbeat)` | Lets db-scheduler detect stale picked executions. |
+| `priority_execution_time_idx` on priority + execution time | Lets db-scheduler poll by priority and due time. PostgreSQL examples use `(priority desc, execution_time asc)`; MySQL/MariaDB examples use `(priority, execution_time)` following db-scheduler's dialect schema. |
+
+## See also
+
+- [Framework tables](../tables.md) — table map and optionality matrix.
+- [Distributed jobs](../../jobs/distributed-jobs.md) — how Ekbatan uses db-scheduler.
+- [Local event handler](../../events/local-event-handler.md) — why local event handling needs distributed jobs.

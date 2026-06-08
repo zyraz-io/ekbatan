@@ -5,11 +5,11 @@ activeSection: learn
 lead: 'Build a wallet deposit Action end-to-end: define the Model, attach an Event, write the Action, wire it into your HTTP layer, and watch the outbox row appear in eventlog.events after the commit.'
 ---
 
-import StackPicker from '../../components/StackPicker.astro';
+import LearnPager from '../../components/LearnPager.astro';
 
-<StackPicker />
+This lesson builds on [Getting started](/learn/getting-started/). We'll write actual domain code: a `Wallet` model that emits a `WalletMoneyDepositedEvent` and a `WalletDepositMoneyAction` that updates the balance.
 
-This lesson builds on [Getting started](/learn/getting-started/) — Ekbatan is on the classpath, Flyway has created your tables, and the framework is wired. Now we'll write actual domain code: a `Wallet` model that emits a `WalletMoneyDepositedEvent` and a `WalletDepositMoneyAction` that updates the balance.
+The action and model code are the same idea in every supported stack. The HTTP snippet below uses Spring Boot only to show where an application calls `ActionExecutor`. For complete project wiring, use [Complete project setup](/learn/complete-project-setup/).
 
 The shape of the surface, before we type a line:
 
@@ -158,9 +158,11 @@ public class WalletDepositMoneyAction extends Action<WalletDepositMoneyAction.Pa
 
 `@EkbatanAction` marks the class for discovery by the DI integration. The integration registers it in `ActionRegistry`, so the executor can route `execute(WalletDepositMoneyAction.class, params)` calls to it. See [Action](/reference/action/) and [Annotations](/reference/annotations/).
 
-## 4. Expose it over HTTP
+## 4. Call the action from application code
 
-<div data-stack="spring">
+In a real application, the caller can be an HTTP controller, a message handler, a scheduled job, or a CLI command. The important part is that the caller goes through `ActionExecutor.execute(...)`.
+
+Here is a Spring Boot controller example:
 
 ```java
 @RestController
@@ -188,106 +190,13 @@ public class WalletController {
 }
 ```
 
-</div>
-
-<div data-stack="quarkus">
-
-```java
-@Path("/wallets")
-@Produces(MediaType.APPLICATION_JSON)
-@Consumes(MediaType.APPLICATION_JSON)
-public class WalletResource {
-
-    @Inject ActionExecutor executor;
-    @Inject WalletRepository walletRepository;
-
-    public record DepositRequest(BigDecimal amount, String recipient) {}
-
-    @POST
-    @Path("/{id}/deposit")
-    public Response deposit(@PathParam("id") UUID id, DepositRequest body) throws Exception {
-        final var wallet = executor.execute(
-                () -> "rest-user",
-                WalletDepositMoneyAction.class,
-                new WalletDepositMoneyAction.Params(Id.of(Wallet.class, id), body.amount(), body.recipient()));
-        return Response.ok(WalletResponse.from(wallet)).build();
-    }
-}
-```
-
-</div>
-
-<div data-stack="micronaut">
-
-```java
-@Controller("/wallets")
-public class WalletController {
-
-    private final ActionExecutor executor;
-    private final WalletRepository walletRepository;
-
-    public WalletController(ActionExecutor executor, WalletRepository walletRepository) {
-        this.executor = executor;
-        this.walletRepository = walletRepository;
-    }
-
-    @Serdeable
-    public record DepositRequest(BigDecimal amount, String recipient) {}
-
-    @Post("/{id}/deposit")
-    public HttpResponse<WalletResponse> deposit(UUID id, @Body DepositRequest body) throws Exception {
-        final var wallet = executor.execute(
-                () -> "rest-user",
-                WalletDepositMoneyAction.class,
-                new WalletDepositMoneyAction.Params(Id.of(Wallet.class, id), body.amount(), body.recipient()));
-        return HttpResponse.ok(WalletResponse.from(wallet));
-    }
-}
-```
-
-`@Serdeable` is `micronaut-serde-jackson`'s compile-time alternative to Jackson's runtime reflection — the records need it to round-trip on the wire.
-
-</div>
-
-<div data-stack="plain">
-
-Plain-Java consumers call the executor directly — no HTTP layer:
-
-```java
-public class Main {
-    public static void main(String[] args) throws Exception {
-        // Wire up executor, repositories, etc. — see /reference/di/without-di/
-        ActionExecutor executor = ...;
-
-        final var walletId = Id.of(Wallet.class, UUID.fromString(args[0]));
-        final var amount   = new BigDecimal(args[1]);
-
-        final var updated = executor.execute(
-                () -> "cli-user",
-                WalletDepositMoneyAction.class,
-                new WalletDepositMoneyAction.Params(walletId, amount, "self"));
-
-        System.out.println("New balance: " + updated.balance);
-    }
-}
-```
-
-</div>
-
-The `() -> "rest-user"` lambda is the `java.security.Principal` — replace with whatever your auth layer hands you (Spring's `Authentication`, Quarkus's `SecurityIdentity`, JWT subject, etc.).
+The `() -> "rest-user"` lambda supplies the `java.security.Principal`. In a real service, use the identity from your authentication layer.
 
 ## 5. Run a deposit
 
-<div data-stack="spring" data-build="gradle"><code>./gradlew bootRun</code></div>
-<div data-stack="spring" data-build="maven"><code>./mvnw spring-boot:run</code></div>
-<div data-stack="quarkus" data-build="gradle"><code>./gradlew quarkusDev</code></div>
-<div data-stack="quarkus" data-build="maven"><code>./mvnw quarkus:dev</code></div>
-<div data-stack="micronaut" data-build="gradle"><code>./gradlew run</code></div>
-<div data-stack="micronaut" data-build="maven"><code>./mvnw mn:run</code></div>
-<div data-stack="plain" data-build="gradle"><code>./gradlew run --args="&lt;walletId&gt; 10.00"</code></div>
-<div data-stack="plain" data-build="maven"><code>./mvnw exec:java -Dexec.args="&lt;walletId&gt; 10.00"</code></div>
+Start the application with the command for your project. If you need a complete runnable setup first, use [Complete project setup](/learn/complete-project-setup/).
 
-Then hit the endpoint (skip if Plain Java):
+Then hit the endpoint:
 
 ```bash
 curl -X POST http://localhost:8080/wallets/<walletId>/deposit \
@@ -304,7 +213,7 @@ ORDER BY created_date DESC
 LIMIT 5;
 ```
 
-You should see one row with `event_type = 'WalletMoneyDepositedEvent'`, `model_name = 'Wallet'`, and the payload `{"amount": 10.00, "newBalance": ...}`. The matching `wallets` row also shows the new balance and `version + 1`. Both changed inside **one** transaction — see [Outbox schema](/reference/outbox-schema/) for what each column means.
+You should see one row with `event_type = 'WalletMoneyDepositedEvent'`, `model_name = 'Wallet'`, and the payload `{"amount": 10.00, "newBalance": ...}`. The matching `wallets` row also shows the new balance and `version + 1`. Both changed inside **one** transaction — see [`eventlog.events`](/reference/tables/events/) for what each column means.
 
 ## What just happened
 
@@ -316,6 +225,8 @@ You should see one row with `event_type = 'WalletMoneyDepositedEvent'`, `model_n
 ## Next
 
 → **[Consuming events](/learn/consuming-events/)** — turn that outbox row into action. Two paths: in-process `EventHandler`s (no broker) and Debezium → Kafka (with the `OutboxToAvro` SMT).
+
+<LearnPager current="your-first-action" />
 
 ## See also
 

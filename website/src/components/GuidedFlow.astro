@@ -1,0 +1,424 @@
+---
+interface Props {
+    variant: "broken" | "outbox";
+}
+
+const { variant } = Astro.props;
+---
+
+{
+    variant === "broken" ? (
+        <section class="guided-home-flow" aria-label="Dual-write failure flow">
+            <div class="brutalist-border brutalist-shadow-orange bg-paper flex flex-col">
+                <div class="flex items-center justify-between border-b-2 border-ink px-5 py-3 bg-ink text-paper">
+                    <h3 class="font-display text-lg font-bold tracking-tight">Two writes</h3>
+                    <span class="font-mono text-[10px] uppercase tracking-widest px-2 py-1 bg-orange text-paper">
+                        ✗ broken
+                    </span>
+                </div>
+                <div class="p-8 min-h-[280px] flex flex-col items-center justify-center flex-1">
+                    <div
+                        class="broken-layout"
+                        role="img"
+                        aria-label="Two writes: the app writes domain state to the database and publishes events to Kafka as two separate operations. The state write succeeds but the event publish fails, so the downstream consumer receives nothing."
+                    >
+                        <svg class="broken-wires" viewBox="0 0 360 410" aria-hidden="true">
+                            <defs>
+                                <filter id="guided-bw-glow-green" x="-500%" y="-2000%" width="1100%" height="4100%">
+                                    <feDropShadow
+                                        dx="0"
+                                        dy="0"
+                                        stdDeviation="2"
+                                        flood-color="#22c55e"
+                                        flood-opacity="1"
+                                    />
+                                    <feDropShadow
+                                        dx="0"
+                                        dy="0"
+                                        stdDeviation="5"
+                                        flood-color="#22c55e"
+                                        flood-opacity="1"
+                                    />
+                                </filter>
+                                <filter
+                                    id="guided-bw-glow-fail"
+                                    filterUnits="userSpaceOnUse"
+                                    x="-40"
+                                    y="-40"
+                                    width="80"
+                                    height="80"
+                                >
+                                    <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="b1" />
+                                    <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b2" />
+                                    <feMerge>
+                                        <feMergeNode in="b2" />
+                                        <feMergeNode in="b1" />
+                                        <feMergeNode in="SourceGraphic" />
+                                    </feMerge>
+                                </filter>
+                            </defs>
+                            <line x1="180" y1="41" x2="68" y2="205" class="wire" />
+                            <line x1="180" y1="41" x2="292" y2="205" class="wire" />
+                            <line x1="292" y1="205" x2="292" y2="336" class="wire" />
+                            <rect x="-10" y="-1.5" width="20" height="3" class="signal" filter="url(#guided-bw-glow-green)">
+                                <animateMotion
+                                    dur="3s"
+                                    repeatCount="indefinite"
+                                    rotate="auto"
+                                    keyTimes="0; 0.33; 1"
+                                    keyPoints="0; 1; 1"
+                                    calcMode="linear"
+                                    path="M 180 41 L 68 205"
+                                />
+                                <animate
+                                    attributeName="opacity"
+                                    values="1;1;0;0"
+                                    keyTimes="0;0.32;0.33;1"
+                                    dur="3s"
+                                    repeatCount="indefinite"
+                                />
+                            </rect>
+                            <g>
+                                <animateMotion
+                                    dur="3s"
+                                    repeatCount="indefinite"
+                                    rotate="auto"
+                                    keyTimes="0; 0.33; 0.72; 1"
+                                    keyPoints="0; 0; 0.75; 0.75"
+                                    calcMode="linear"
+                                    path="M 180 41 L 292 205"
+                                />
+                                <path
+                                    d="M -10 0 L -8.33 0 L -6.67 0 L -5 0 L -3.33 0 L -1.67 0 L 0 0 L 1.67 0 L 3.33 0 L 5 0 L 6.67 0 L 8.33 0 L 10 0"
+                                    class="signal signal-fail"
+                                    stroke="#22c55e"
+                                    stroke-width="3"
+                                    stroke-linecap="butt"
+                                    fill="none"
+                                    filter="url(#guided-bw-glow-fail)"
+                                >
+                                    <animate
+                                        attributeName="opacity"
+                                        values="0;0;1;1;0"
+                                        keyTimes="0;0.32;0.33;0.99;1"
+                                        dur="3s"
+                                        repeatCount="indefinite"
+                                    />
+                                    <animate
+                                        attributeName="stroke"
+                                        values="#22c55e;#22c55e;#ef4444;#ef4444"
+                                        keyTimes="0;0.53;0.61;1"
+                                        dur="3s"
+                                        repeatCount="indefinite"
+                                    />
+                                    <animate
+                                        attributeName="d"
+                                        values="M -10 0 L -8.33 0 L -6.67 0 L -5 0 L -3.33 0 L -1.67 0 L 0 0 L 1.67 0 L 3.33 0 L 5 0 L 6.67 0 L 8.33 0 L 10 0;M -10 0 L -8.33 0 L -6.67 0 L -5 0 L -3.33 0 L -1.67 0 L 0 0 L 1.67 0 L 3.33 0 L 5 0 L 6.67 0 L 8.33 0 L 10 0;M -8 0 L -6.67 2.5 L -5.33 4.3 L -4 5 L -2.67 4.3 L -1.33 2.5 L 0 0 L 1.33 -2.5 L 2.67 -4.3 L 4 -5 L 5.33 -4.3 L 6.67 -2.5 L 8 0;M -6 0 L -5 6.9 L -4 6.9 L -3 0 L -2 -6.9 L -1 -6.9 L 0 0 L 1 6.9 L 2 6.9 L 3 0 L 4 -6.9 L 5 -6.9 L 6 0;M -4 0 L -3.33 11 L -2.67 0 L -2 -11 L -1.33 0 L -0.67 11 L 0 0 L 0.67 -11 L 1.33 0 L 2 11 L 2.67 0 L 3.33 -11 L 4 0;M -3 0 L -2.5 7 L -2 0 L -1.5 -7 L -1 0 L -0.5 7 L 0 0 L 0.5 -7 L 1 0 L 1.5 7 L 2 0 L 2.5 -7 L 3 0;M -2 0 L -1.67 4 L -1.33 0 L -1 -4 L -0.67 0 L -0.33 4 L 0 0 L 0.33 -4 L 0.67 0 L 1 4 L 1.33 0 L 1.67 -4 L 2 0;M -1 0 L -0.83 2 L -0.67 0 L -0.5 -2 L -0.33 0 L -0.17 2 L 0 0 L 0.17 -2 L 0.33 0 L 0.5 2 L 0.67 0 L 0.83 -2 L 1 0;M 0 0 L 0 0 L 0 0 L 0 0 L 0 0 L 0 0 L 0 0 L 0 0 L 0 0 L 0 0 L 0 0 L 0 0 L 0 0"
+                                        keyTimes="0;0.59;0.64;0.68;0.72;0.79;0.86;0.93;1"
+                                        dur="3s"
+                                        repeatCount="indefinite"
+                                    />
+                                </path>
+                            </g>
+                        </svg>
+                        <div class="broken-box broken-app font-mono text-xs uppercase tracking-widest brutalist-border bg-paper px-5 py-2.5">
+                            app
+                        </div>
+                        <div class="broken-box broken-db font-mono text-xs uppercase tracking-widest brutalist-border bg-paper px-5 py-2.5">
+                            db<span class="broken-label broken-label-ok">State saved</span>
+                        </div>
+                        <div class="broken-box broken-kafka font-mono text-xs uppercase tracking-widest brutalist-border bg-paper px-5 py-2.5">
+                            kafka<span class="broken-label broken-label-fail">Publish failed</span>
+                        </div>
+                        <div class="broken-box broken-consumer font-mono text-xs uppercase tracking-widest brutalist-border bg-paper px-5 py-2.5">
+                            consumer<span class="broken-label broken-label-fail">No events</span>
+                        </div>
+                    </div>
+                </div>
+                <p class="font-mono text-[11px] uppercase tracking-widest border-t-2 border-ink px-5 py-3 bg-muted">
+                    Crash between writes ⇒ DB and Kafka disagree.
+                </p>
+            </div>
+        </section>
+    ) : (
+        <section class="guided-home-flow" aria-label="Transactional outbox flow">
+            <div class="brutalist-border brutalist-shadow-yellow bg-paper flex flex-col">
+                <div class="flex items-center justify-between border-b-2 border-ink px-5 py-3 bg-ink text-paper">
+                    <h3 class="font-display text-lg font-bold tracking-tight">One write + outbox</h3>
+                    <span class="font-mono text-[10px] uppercase tracking-widest px-2 py-1 bg-yellow text-ink">
+                        ✓ Ekbatan
+                    </span>
+                </div>
+                <div class="p-8 space-y-4 min-h-[280px] flex flex-col justify-center text-center flex-1">
+                    <div class="mx-auto inline-flex font-mono text-xs uppercase tracking-widest brutalist-border bg-paper px-5 py-2.5 flow-box flow-box-eq">
+                        app
+                    </div>
+                    <svg class="flow-wire" viewBox="-10 0 50 70" aria-hidden="true">
+                        <defs>
+                            <filter id="guided-fw-glow-1" x="-500%" y="-2000%" width="1100%" height="4100%">
+                                <feDropShadow
+                                    dx="0"
+                                    dy="0"
+                                    stdDeviation="2"
+                                    flood-color="#22c55e"
+                                    flood-opacity="1"
+                                />
+                                <feDropShadow
+                                    dx="0"
+                                    dy="0"
+                                    stdDeviation="5"
+                                    flood-color="#22c55e"
+                                    flood-opacity="1"
+                                />
+                            </filter>
+                        </defs>
+                        <line x1="15" y1="0" x2="15" y2="70" class="wire" />
+                        <rect x="-10" y="-1.5" width="20" height="3" class="signal" filter="url(#guided-fw-glow-1)">
+                            <animateMotion
+                                dur="3s"
+                                repeatCount="indefinite"
+                                rotate="auto"
+                                keyTimes="0; 0.333; 1"
+                                keyPoints="0; 1; 1"
+                                calcMode="linear"
+                                path="M 15 -10 L 15 80"
+                            />
+                        </rect>
+                    </svg>
+                    <div class="brutalist-border bg-yellow p-3 flow-box">
+                        <div class="font-mono text-[10px] uppercase tracking-widest text-center mb-2">
+                            database (one tx)
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 font-mono text-xs">
+                            <div class="brutalist-border bg-paper py-2 text-center">state</div>
+                            <div class="brutalist-border bg-paper py-2 text-center">events</div>
+                        </div>
+                    </div>
+                    <svg class="flow-wire" viewBox="-10 0 50 70" aria-hidden="true">
+                        <defs>
+                            <filter id="guided-fw-glow-2" x="-500%" y="-2000%" width="1100%" height="4100%">
+                                <feDropShadow
+                                    dx="0"
+                                    dy="0"
+                                    stdDeviation="2"
+                                    flood-color="#22c55e"
+                                    flood-opacity="1"
+                                />
+                                <feDropShadow
+                                    dx="0"
+                                    dy="0"
+                                    stdDeviation="5"
+                                    flood-color="#22c55e"
+                                    flood-opacity="1"
+                                />
+                            </filter>
+                        </defs>
+                        <line x1="15" y1="0" x2="15" y2="70" class="wire" />
+                        <rect x="-10" y="-1.5" width="20" height="3" class="signal" filter="url(#guided-fw-glow-2)">
+                            <animateMotion
+                                dur="3s"
+                                repeatCount="indefinite"
+                                rotate="auto"
+                                keyTimes="0; 0.333; 0.666; 1"
+                                keyPoints="0; 0; 1; 1"
+                                calcMode="linear"
+                                path="M 15 -10 L 15 80"
+                            />
+                        </rect>
+                    </svg>
+                    <div class="mx-auto inline-flex font-mono text-xs uppercase tracking-widest brutalist-border bg-paper px-5 py-2.5 flow-box flow-box-eq">
+                        Kafka
+                    </div>
+                    <svg class="flow-wire" viewBox="-10 0 50 70" aria-hidden="true">
+                        <defs>
+                            <filter id="guided-fw-glow-pub" x="-500%" y="-2000%" width="1100%" height="4100%">
+                                <feDropShadow
+                                    dx="0"
+                                    dy="0"
+                                    stdDeviation="2"
+                                    flood-color="#a855f7"
+                                    flood-opacity="1"
+                                />
+                                <feDropShadow
+                                    dx="0"
+                                    dy="0"
+                                    stdDeviation="5"
+                                    flood-color="#a855f7"
+                                    flood-opacity="1"
+                                />
+                            </filter>
+                        </defs>
+                        <line x1="15" y1="0" x2="15" y2="70" class="wire" />
+                        <rect
+                            x="-10"
+                            y="-1.5"
+                            width="20"
+                            height="3"
+                            class="signal-publish"
+                            filter="url(#guided-fw-glow-pub)"
+                        >
+                            <animateMotion
+                                dur="3s"
+                                repeatCount="indefinite"
+                                rotate="auto"
+                                keyTimes="0; 0.666; 1"
+                                keyPoints="0; 0; 1"
+                                calcMode="linear"
+                                path="M 15 -10 L 15 80"
+                            />
+                        </rect>
+                    </svg>
+                    <div class="mx-auto inline-flex font-mono text-xs uppercase tracking-widest brutalist-border bg-paper px-5 py-2.5 flow-box flow-box-eq">
+                        consumer
+                    </div>
+                </div>
+                <p class="font-mono text-[11px] uppercase tracking-widest border-t-2 border-ink px-5 py-3 bg-muted">
+                    CDC tails the outbox — events ship later, always in sync.
+                </p>
+            </div>
+        </section>
+    )
+}
+
+<style>
+    .guided-home-flow {
+        display: block;
+        margin: 2rem 0;
+    }
+
+    .guided-home-flow > div {
+        min-width: 0;
+    }
+
+    :global(.doc-prose .guided-home-flow h3),
+    :global(.doc-prose .guided-home-flow p) {
+        margin: 0;
+    }
+
+    :global(.doc-prose .guided-home-flow .brutalist-border.bg-paper) {
+        margin-block: 0;
+    }
+
+    :global(.doc-prose .guided-home-flow .flow-box-eq.brutalist-border.bg-paper) {
+        margin-inline: auto !important;
+        margin-block: 0 !important;
+    }
+
+    :global(.doc-prose .guided-home-flow h3) {
+        font-size: 1.125rem;
+        line-height: 1.2;
+        letter-spacing: -0.025em;
+    }
+
+    .broken-layout {
+        position: relative;
+        width: 100%;
+        max-width: 360px;
+        aspect-ratio: 360 / 410;
+    }
+
+    .broken-wires {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+    }
+
+    .broken-box {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 8rem;
+    }
+
+    .broken-app {
+        left: 50%;
+        top: 10%;
+    }
+
+    .broken-db {
+        left: 19%;
+        top: 50%;
+    }
+
+    .broken-kafka {
+        left: 81%;
+        top: 50%;
+    }
+
+    .broken-consumer {
+        left: 81%;
+        top: 82%;
+    }
+
+    .broken-label {
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-top: 8px;
+        white-space: nowrap;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+
+    .broken-label-ok {
+        color: var(--ink, #0a0a0a);
+    }
+
+    .broken-label-fail {
+        color: #ef4444;
+        background: var(--brand-yellow);
+        padding: 1px 5px;
+    }
+
+    .broken-wires .wire,
+    .flow-wire .wire {
+        stroke: var(--ink, #0a0a0a);
+        stroke-width: 2;
+        fill: none;
+    }
+
+    .flow-wire {
+        width: 50px;
+        height: 70px;
+        display: block;
+        margin: -1rem auto 0 !important;
+        overflow: visible;
+    }
+
+    .flow-box {
+        position: relative;
+        z-index: 1;
+    }
+
+    .flow-box-eq {
+        width: 8rem;
+        justify-content: center;
+    }
+
+    .broken-wires .signal,
+    .flow-wire .signal {
+        fill: #22c55e;
+    }
+
+    .flow-wire .signal-publish {
+        fill: #a855f7;
+    }
+
+    .broken-wires .signal-fail {
+        fill: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .broken-wires .signal {
+            display: none;
+        }
+    }
+</style>

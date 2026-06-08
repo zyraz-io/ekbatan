@@ -1,0 +1,362 @@
+---
+// Stack/build picker for the native-image learning page.
+//
+// Native-image setup differs mostly by framework and build tool. The database
+// choice is kept so the example row can point to the matching native project.
+
+const rows = [
+    {
+        label: "Stack",
+        dim: "stack",
+        options: [
+            { id: "spring", label: "Spring Boot" },
+            { id: "quarkus", label: "Quarkus" },
+            { id: "micronaut", label: "Micronaut" },
+            { id: "plain", label: "Plain Java" },
+        ],
+    },
+    {
+        label: "Build",
+        dim: "build",
+        options: [
+            { id: "gradle", label: "Gradle" },
+            { id: "maven", label: "Maven" },
+        ],
+    },
+    {
+        label: "Database",
+        dim: "db",
+        options: [
+            { id: "pg", label: "PostgreSQL" },
+            { id: "mariadb", label: "MariaDB" },
+            { id: "mysql", label: "MySQL" },
+        ],
+    },
+] as const;
+
+const examples = [
+    {
+        stack: "spring",
+        build: "gradle",
+        db: "pg",
+        links: [
+            "spring-boot-wallet-rest-gradle-native-pg",
+        ],
+    },
+    {
+        stack: "spring",
+        build: "gradle",
+        db: "mariadb",
+        links: [
+            "spring-boot-wallet-rest-gradle-native-mariadb",
+        ],
+    },
+    {
+        stack: "spring",
+        build: "gradle",
+        db: "mysql",
+        links: [
+            "spring-boot-wallet-rest-gradle-native-mysql",
+        ],
+    },
+    {
+        stack: "spring",
+        build: "maven",
+        db: "pg",
+        links: [
+            "spring-boot-wallet-rest-maven-native-pg",
+        ],
+    },
+    {
+        stack: "spring",
+        build: "maven",
+        db: "mariadb",
+        links: [
+            "spring-boot-wallet-rest-maven-native-mariadb",
+        ],
+    },
+    {
+        stack: "spring",
+        build: "maven",
+        db: "mysql",
+        links: [
+            "spring-boot-wallet-rest-maven-native-mysql",
+        ],
+    },
+    {
+        stack: "quarkus",
+        build: "gradle",
+        db: "pg",
+        links: [
+            "quarkus-wallet-rest-gradle-native-pg",
+        ],
+    },
+    {
+        stack: "quarkus",
+        build: "gradle",
+        db: "mariadb",
+        links: [
+            "quarkus-wallet-rest-gradle-native-mariadb",
+        ],
+    },
+    {
+        stack: "quarkus",
+        build: "gradle",
+        db: "mysql",
+        links: [
+            "quarkus-wallet-rest-gradle-native-mysql",
+        ],
+    },
+    {
+        stack: "quarkus",
+        build: "maven",
+        db: "pg",
+        links: [
+            "quarkus-wallet-rest-maven-native-pg",
+        ],
+    },
+    {
+        stack: "quarkus",
+        build: "maven",
+        db: "mariadb",
+        links: [
+            "quarkus-wallet-rest-maven-native-mariadb",
+        ],
+    },
+    {
+        stack: "quarkus",
+        build: "maven",
+        db: "mysql",
+        links: [
+            "quarkus-wallet-rest-maven-native-mysql",
+        ],
+    },
+    {
+        stack: "micronaut",
+        build: "gradle",
+        db: "pg",
+        links: [
+            "micronaut-wallet-rest-gradle-native-pg",
+        ],
+    },
+    {
+        stack: "micronaut",
+        build: "gradle",
+        db: "mariadb",
+        links: [
+            "micronaut-wallet-rest-gradle-native-mariadb",
+        ],
+    },
+    {
+        stack: "micronaut",
+        build: "gradle",
+        db: "mysql",
+        links: [
+            "micronaut-wallet-rest-gradle-native-mysql",
+        ],
+    },
+    {
+        stack: "micronaut",
+        build: "maven",
+        db: "pg",
+        links: [
+            "micronaut-wallet-rest-maven-native-pg",
+        ],
+    },
+    {
+        stack: "micronaut",
+        build: "maven",
+        db: "mariadb",
+        links: [
+            "micronaut-wallet-rest-maven-native-mariadb",
+        ],
+    },
+    {
+        stack: "micronaut",
+        build: "maven",
+        db: "mysql",
+        links: [
+            "micronaut-wallet-rest-maven-native-mysql",
+        ],
+    },
+] as const;
+---
+
+<div class="native-picker-sentinel" aria-hidden="true"></div>
+
+<aside
+    class="brutalist-border bg-paper sticky"
+    aria-label="Native stack picker"
+>
+    <div class="container-px max-w-7xl mx-auto py-3 grid gap-2">
+        {
+            rows.map((row) => (
+                <div class="flex items-center gap-4 flex-wrap">
+                    <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground w-20 shrink-0">
+                        {row.label}
+                    </span>
+                    <div class="flex gap-0 brutalist-border min-w-0 overflow-x-auto picker-row-scroll">
+                        {row.options.map((opt, i) => (
+                            <button
+                                type="button"
+                                data-picker-dim={row.dim}
+                                data-picker-value={opt.id}
+                                class:list={[
+                                    "font-mono text-[10px] uppercase tracking-widest px-2.5 py-1 bg-paper text-ink shrink-0",
+                                    i < row.options.length - 1 && "border-r-2 border-ink",
+                                ]}
+                                aria-pressed="false"
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ))
+        }
+        <div class="flex items-center gap-4 flex-wrap example-row">
+            <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground w-20 shrink-0">
+                Example
+            </span>
+            <span class="font-mono text-[10px] leading-relaxed">
+                {examples.map((e) => (
+                    <span data-stack={e.stack} data-build={e.build} data-db={e.db}>
+                        {e.links.map((slug, i) => (
+                            <>
+                                {i > 0 && " / "}
+                                <a href={`https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/${slug}`}>{slug}</a>
+                            </>
+                        ))}
+                    </span>
+                ))}
+                <span data-stack="plain">
+                    no scaffolded native example - see <a href={`${import.meta.env.BASE_URL}reference/di/without-di/`}>Plain Java wiring</a> and <a href={`${import.meta.env.BASE_URL}reference/runtime/native-image/`}>native-image reference</a>
+                </span>
+            </span>
+        </div>
+    </div>
+</aside>
+
+<style>
+    aside {
+        top: 57px;
+        z-index: 40;
+    }
+    aside.brutalist-border.is-stuck {
+        border-color: transparent;
+    }
+    aside.is-stuck::before {
+        content: "";
+        position: absolute;
+        top: -2px;
+        bottom: -2px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100vw;
+        background: var(--paper, #fafafa);
+        border-top: 2px solid var(--ink, #0a0a0a);
+        border-bottom: 2px solid var(--ink, #0a0a0a);
+        z-index: -1;
+        pointer-events: none;
+    }
+    .native-picker-sentinel {
+        height: 1px;
+        margin-bottom: -1px;
+        pointer-events: none;
+    }
+    .picker-row-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(10, 10, 10, 0.25) transparent;
+    }
+    .picker-row-scroll::-webkit-scrollbar {
+        height: 6px;
+    }
+    .picker-row-scroll::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .picker-row-scroll::-webkit-scrollbar-thumb {
+        background: rgba(10, 10, 10, 0.25);
+        border-radius: 3px;
+    }
+    .picker-row-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(10, 10, 10, 0.45);
+    }
+    :global(html),
+    :global(body) {
+        overflow-x: clip;
+    }
+</style>
+
+<script is:inline>
+    (function () {
+        const DIMS = ["stack", "build", "db"];
+        const DEFAULTS = { stack: "spring", build: "gradle", db: "pg" };
+        const STORAGE_KEY = "ekbatan.stackPicker";
+
+        function read() {
+            try {
+                return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") };
+            } catch {
+                return { ...DEFAULTS };
+            }
+        }
+        function write(state) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+        function apply(state) {
+            for (const d of DIMS) {
+                document.body.dataset["active" + d[0].toUpperCase() + d.slice(1)] = state[d];
+            }
+            document.querySelectorAll("[data-picker-dim]").forEach((btn) => {
+                const dim = btn.getAttribute("data-picker-dim");
+                const val = btn.getAttribute("data-picker-value");
+                const active = state[dim] === val;
+                btn.classList.toggle("bg-ink", active);
+                btn.classList.toggle("text-paper", active);
+                btn.classList.toggle("bg-paper", !active);
+                btn.classList.toggle("text-ink", !active);
+                btn.setAttribute("aria-pressed", String(active));
+            });
+            document.querySelectorAll("[data-stack],[data-build],[data-db]").forEach((el) => {
+                let visible = true;
+                for (const d of DIMS) {
+                    const want = el.getAttribute("data-" + d);
+                    if (want && want !== state[d]) {
+                        visible = false;
+                        break;
+                    }
+                }
+                el.toggleAttribute("hidden", !visible);
+            });
+        }
+
+        const state = read();
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", () => apply(state));
+        } else {
+            apply(state);
+        }
+        document.addEventListener("click", (e) => {
+            const btn = e.target instanceof Element ? e.target.closest("[data-picker-dim]") : null;
+            if (!btn) return;
+            const dim = btn.getAttribute("data-picker-dim");
+            const val = btn.getAttribute("data-picker-value");
+            if (!dim || !val) return;
+            state[dim] = val;
+            write(state);
+            apply(state);
+        });
+
+        const picker = document.querySelector('aside[aria-label="Native stack picker"]');
+        const sentinel = document.querySelector(".native-picker-sentinel");
+        if (picker && sentinel && "IntersectionObserver" in window) {
+            const stickyObserver = new IntersectionObserver(
+                ([entry]) => {
+                    picker.classList.toggle("is-stuck", !entry.isIntersecting);
+                },
+                { rootMargin: "-57px 0px 0px 0px" },
+            );
+            stickyObserver.observe(sentinel);
+        }
+    })();
+</script>

@@ -1,6 +1,6 @@
 # MariaDB
 
-MariaDB 10.7+ is a comfortable middle ground: native `UUID` (no converter needed for IDs) and modern `JSON`, but no partial indexes and no real schemas — what Postgres calls a *schema* becomes a separate *database*. This page is the one-stop setup reference. Cross-dialect background: [Multi-database](multi-database.md). Logical outbox shape: [Outbox schema](outbox-schema.md).
+MariaDB 10.7+ is a comfortable middle ground: native `UUID` (no converter needed for IDs) and modern `JSON`, but no partial indexes and no real schemas — what Postgres calls a *schema* becomes a separate *database*. This page is the one-stop setup reference. Cross-dialect background: [Multi-database](multi-database.md). Framework table reference: [Framework tables](tables.md).
 
 ## Quick reference
 
@@ -247,7 +247,7 @@ dependencies {
 ## See also
 
 - [Multi-database](multi-database.md) — cross-dialect background, column-type cheatsheet, init scripts, repository field-definition pattern
-- [Outbox schema](outbox-schema.md) — the logical shape of `eventlog.events`
+- [`eventlog.events`](tables/events.md) — the logical shape of the event table
 - [Repositories on JOOQ](repositories.md) — how `AbstractRepository` consumes the generated classes
 - [JOOQ codegen](jooq-codegen.md) — what codegen generates, the converters, per-dialect modeling rationale
 - [JOOQ codegen on Gradle](../gradle/jooq-codegen.md) — the full `build.gradle.kts` reference for all dialects

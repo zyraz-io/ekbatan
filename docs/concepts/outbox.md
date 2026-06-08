@@ -43,7 +43,7 @@ var executor = ActionExecutor.Builder.actionExecutor()
 
 `event_type` is the event class's simple name, e.g. `WalletMoneyDepositedEvent`, not the fully-qualified package name. This keeps package moves from changing the wire/database contract. The default persister guards that contract at runtime: if one service emits two different event classes with the same simple name, it throws instead of writing ambiguous rows.
 
-The on-disk shape of the outbox — the SQL DDL, the dialect-specific column types, the `delivered` column written on every insert, the `event_notifications` table the local-event-handler path adds for in-process dispatch, the indexes — lives in **[Outbox schema](../database/outbox-schema.md)**.
+The on-disk shape of the event tables — the SQL DDL, the dialect-specific column types, the `delivered` column written on every insert, the `event_notifications` table the local-event-handler path adds for in-process dispatch, the indexes — lives in **[Framework tables](../database/tables.md)**.
 
 ## Two consumer paths
 
@@ -58,7 +58,7 @@ Both can run against the same outbox simultaneously. The in-process fan-out flip
 
 - [Actions, ActionPlan, ActionExecutor](actions.md) — what stages the events that end up in the outbox
 - [Models and Entities](models-and-entities.md) — only Models emit events
-- [Outbox schema](../database/outbox-schema.md) — the SQL tables, columns, indexes, dialect specifics
+- [Framework tables](../database/tables.md) — the SQL tables, columns, indexes, dialect specifics
 - [Sharding](../database/sharding.md) — how the outbox interacts with shard routing (each shard gets its own copy of cross-shard events)
 - [Listen-to-yourself](../events/local-event-handler.md) — the in-process consumer path
 - [Streaming via Debezium → Kafka](../events/event-streaming.md) — the CDC consumer path

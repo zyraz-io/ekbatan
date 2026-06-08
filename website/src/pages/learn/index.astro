@@ -15,7 +15,7 @@ const lessons = [
     {
         href: "/learn/getting-started/",
         title: "Getting started",
-        blurb: "Add Ekbatan to a new or existing project. Walks through the build descriptor (Gradle or Maven) and the framework's DI wiring (Spring Boot, Quarkus, Micronaut, or plain Java).",
+        blurb: "Start here. Follow one wallet change through the dual-write problem, Model events, Action staging, executor commit, and post-commit consumption.",
         status: "ready",
     },
     {
@@ -27,7 +27,7 @@ const lessons = [
     {
         href: "/learn/consuming-events/",
         title: "Consuming events",
-        blurb: "Two paths: an in-process EventHandler (no broker) and Debezium → Kafka with the OutboxToAvro SMT. Run both side by side against the same outbox.",
+        blurb: "Handle committed outbox rows inside the same service, publish from a handler, stream with CDC, or route one raw stream into many broker topics.",
         status: "ready",
     },
     {
@@ -42,12 +42,18 @@ const lessons = [
         blurb: "Add the ekbatan-native dependency, declare your scan packages, include migration resources, and run the native build/test path for your stack.",
         status: "ready",
     },
+    {
+        href: "/learn/complete-project-setup/",
+        title: "Complete project setup",
+        blurb: "The full stack/build/database setup matrix: scaffold, dependencies, Flyway migrations, jOOQ codegen, DB config, startup migrator, examples, and verification.",
+        status: "ready",
+    },
 ] as const;
 ---
 
 <BaseLayout
     title="Learn · Ekbatan"
-    description="Step-by-step tutorials. Pick your stack, build tool, and database once — the snippets follow you across every lesson."
+    description="A progressive learning path first, then the full setup matrix when you are ready to wire a real project."
     activeSection="learn"
 >
     <section class="border-b-2 border-ink">
@@ -56,15 +62,14 @@ const lessons = [
                 <span class="text-yellow">§</span><span>Learn</span>
             </div>
             <h1 class="font-display font-bold text-5xl md:text-7xl tracking-tight max-w-4xl text-balance mt-6 leading-[0.95]">
-                Pick your stack.
-                <span class="bg-orange text-paper px-2">Once.</span>
+                Learn the model.
+                <span class="bg-orange text-paper px-2">Then build.</span>
             </h1>
             <p class="mt-6 max-w-2xl text-lg leading-relaxed">
-                Every lesson uses the same picker. Choose
-                <span class="font-mono bg-yellow px-1">Spring Boot · Gradle · Postgres</span>
-                (or any of the 24 combinations) and every code block in every
-                lesson re-renders to match — no need to mentally translate
-                snippets, and no need to read 24 forks of the same tutorial.
+                Start here, then write an Action, consume the
+                outbox, add a shard, and look at native-image. When you are
+                ready to wire a real application, the complete setup guide keeps
+                the stack/build/database matrix in one place.
             </p>
             <div class="mt-14 grid md:grid-cols-2 gap-5">
                 {

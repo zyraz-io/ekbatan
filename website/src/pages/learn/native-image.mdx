@@ -2,16 +2,35 @@
 layout: ../../layouts/DocLayout.astro
 title: 'Compiling to a native binary'
 activeSection: learn
-lead: 'Build the same Ekbatan wallet app as a GraalVM native executable. The domain model, actions, repositories, outbox writes, and event handlers stay the same; the native work is mostly build configuration and runtime metadata.'
+lead: 'Build the same Ekbatan wallet app as a GraalVM native executable. Your domain model, Actions, repositories, event rows, and handlers stay the same. Native-image only changes packaging and build-time metadata.'
 ---
 
-import StackPicker from '../../components/StackPicker.astro';
-
-<StackPicker />
+import NativeStackPicker from '../../components/NativeStackPicker.astro';
+import LearnPager from '../../components/LearnPager.astro';
 
 A GraalVM native image is an ahead-of-time compiled executable for your JVM app. You still write normal Java, but the build turns your application, dependencies, and enough of the JDK into one binary. Startup is much faster and there is no JVM to install on the target machine, but the build is slower and native-image must know up front about reflection, resources, and dynamic library behavior.
 
 For Ekbatan users, the important point is simple: **native-image does not change Ekbatan's persistence model**. Your action still commits domain rows and `eventlog.events` rows in one transaction. Native-image only changes how the application is packaged and how reflection/resource metadata is supplied to GraalVM.
+
+Feel free to skip this lesson if you do not need native builds or native-image packaging. Ekbatan works normally on the JVM, and the rest of the learning path does not depend on this page.
+
+## What Native-Image Needs To Know
+
+Native-image freezes more things at build time than a normal JVM run. If code discovers something dynamically at runtime, the native build may need a hint ahead of time.
+
+For an Ekbatan application, there are three important categories:
+
+- **Application types** — action params, event payloads, records, builders, and generated jOOQ classes that Jackson or the framework may need to construct reflectively.
+- **SQL resources** — Flyway migrations and init SQL files that must be bundled into the native executable.
+- **Your stack's native build pipeline** — Spring Boot, Quarkus, Micronaut, Gradle, and Maven use different native build plugins and command names.
+
+The sections below add those pieces one by one.
+
+## Choose Your Stack
+
+Pick the stack, build tool, and database you are using. Most native-image settings are shared across PostgreSQL, MariaDB, and MySQL, but the example row points to the matching native project.
+
+<NativeStackPicker />
 
 ## The Short Version
 
@@ -19,7 +38,7 @@ For Ekbatan users, the important point is simple: **native-image does not change
 2. Start from the matching `*-native-*` wallet example if possible.
 3. Add `io.github.zyraz-io:ekbatan-native`.
 4. Tell native-image which application packages to scan.
-5. Make sure migrations and init SQL files are included as native resources.
+5. Make migrations work in the native binary: run Flyway through `FlywayMigrator` and include SQL resources.
 6. Run JVM tests frequently, and run native tests/builds in heavier verification.
 
 ## 1. Install GraalVM
@@ -40,7 +59,7 @@ The native examples are the cleanest source of truth because they include the st
 
 <div data-stack="spring" data-build="gradle">
 
-Use `spring-boot-wallet-rest-gradle-native-{pg,mariadb,mysql}`. It is the same Spring Boot wallet app as the JVM sibling, with the GraalVM Build Tools plugin and native metadata added. For sharded Spring Boot native coverage, use `spring-boot-wallet-rest-gradle-native-sharded-pg`.
+Use `spring-boot-wallet-rest-gradle-native-{pg,mariadb,mysql}`. It is the same Spring Boot wallet app as the JVM sibling, with the GraalVM Build Tools plugin and native metadata added.
 
 </div>
 
@@ -178,9 +197,16 @@ Quarkus uses commas to separate build args, so escape the comma inside the prope
 
 If you forget this, the usual failure is a native runtime error around missing record reflection, often for an action params record or event payload record.
 
-## 5. Flyway On Native
+## 5. Make Migrations Work In The Native Binary
 
-Flyway is the one native-image topic where stack behavior differs. Use the pattern your stack example uses:
+There are two separate requirements:
+
+1. The migration SQL files must be bundled into the native executable.
+2. Flyway should run through `FlywayMigrator.migrate(shardingConfig)`, so the same migrations are applied to every configured shard.
+
+Spring Boot, Quarkus, and Micronaut can still keep their Flyway integration dependencies. Those dependencies provide Flyway and stack-specific native-image support. Ekbatan's startup migrator decides which shard datasources Flyway runs against.
+
+Use the pattern your stack example uses:
 
 | Stack | Migration pattern in the native examples |
 |---|---|
@@ -191,9 +217,7 @@ Flyway is the one native-image topic where stack behavior differs. Use the patte
 
 `FlywayMigrator` is a thin wrapper. On the JVM it behaves like normal `Flyway.configure().dataSource(...).load().migrate()`. In a native image it installs Ekbatan's internal resource scanner so Flyway can find `classpath:db/migration`.
 
-## 6. Include SQL Resources
-
-Native-image only bundles resources that are explicitly included. If your app runs Flyway from classpath SQL files, include the migrations:
+Native-image only bundles resources that are explicitly included. If your app runs Flyway from classpath SQL files, include the migrations in the native build:
 
 <div data-build="gradle">
 
@@ -220,7 +244,7 @@ graalvmNative {
 
 If migrations live somewhere else, add that path instead.
 
-## 7. Build And Verify
+## 6. Build And Verify
 
 Use JVM tests for normal development. Native builds are slower and should be treated as pre-release or heavier CI verification.
 
@@ -292,7 +316,7 @@ Use the GraalVM Build Tools `nativeCompile` / `nativeTest` tasks or `native-mave
 
 ## What Just Happened
 
-- The business code did not change. Native-image did not alter `ActionExecutor`, repository routing, optimistic locking, or outbox persistence.
+- The business code did not change. Native-image did not alter `ActionExecutor`, repository routing, optimistic locking, or event persistence.
 - `ekbatan-native` registered the reflection metadata that Ekbatan's Jackson 3 event serialization and generated builders need.
 - Your build included SQL resources so Flyway can still find migrations after the app is compiled into a binary.
 - Native verification moved to the slower path. This is why Ekbatan has a separate Heavy Verification workflow instead of running every native test after every push.
@@ -303,6 +327,8 @@ Use the GraalVM Build Tools `nativeCompile` / `nativeTest` tasks or `native-mave
 - **Missing scan package.** If native runtime cannot deserialize your params/events, check `io.ekbatan.graalvm.scan.packages`.
 - **Missing SQL resources.** If Flyway finds no migrations on native, check resource inclusion.
 - **Stack-specific plugins.** Spring, Quarkus, and Micronaut each have their own native pipeline. Copy the matching example instead of mixing snippets across stacks.
+
+<LearnPager current="native-image" />
 
 ## See Also
 
