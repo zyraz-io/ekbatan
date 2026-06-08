@@ -243,7 +243,7 @@ For a one-shot test that exercises every step but uploads nothing, JReleaser sup
 | Step | Recoverable?                                    |
 |---|-------------------------------------------------|
 | `SNAPSHOT` versions on Central Portal's snapshot endpoint | yes — each push overwrites                      |
-| Tag pushed to git | yes — `git push --delete origin v0.2.0` removes |
+| Tag pushed to git | yes — `git push --delete origin v0.2.1` removes |
 | Release staged on Central Portal, not yet Published | yes — click "Drop" in the Portal UI             |
 | Release **Published** to Maven Central | **no — permanent**                              |
 | GitHub Release (the SMT shadow jars) | yes — edit or delete via GitHub UI              |
