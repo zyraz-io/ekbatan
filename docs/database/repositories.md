@@ -124,10 +124,12 @@ protected DSLContext txDbElseDb(ShardIdentifier shard);
 | Use the default repository read behavior | Inherited CRUD reads (`findById`, `getById`, `findAllWhere`, `count`, etc.) — primary-consistent by design |
 | Write a custom primary-consistent read | `db(...)` / `dbs()` — pulls from primary |
 | Write a custom eventually-consistent read | `readonlyDb(...)` / `readonlyDbs()` — pulls from the replica |
-| Read rows that *must* reflect uncommitted writes from the current action | `txDbElseDb(...)` — reuses the action's transactional connection if one is open |
-| Insert / update / delete | `txDbElseDb(...)` — atomically joins the action's transaction when called from inside `Action.perform()` or `tm.inTransaction(...)`; falls back to primary outside |
+| Read rows that *must* reflect uncommitted writes from the current transaction | `txDbElseDb(...)` — reuses the bound transaction connection if one is open; otherwise falls back to primary |
+| Insert / update / delete | `txDbElseDb(...)` — joins the open `TransactionManager` transaction when one is bound, such as the executor's persistence phase or `tm.inTransaction(...)`; falls back to primary outside |
 | Scatter-gather a query across every shard | `readonlyDbs()` (or `dbs()` for primary), then `.flatMap` over the resulting `Collection<DSLContext>` |
 | Assert "we must already be in a transaction" and fail loudly otherwise | `txDb(...).orElseThrow(...)` |
+
+> **Important:** `Action.perform()` itself is not transactional. The executor opens the transaction after `perform()` returns and then persists the staged `ActionPlan`. Do not run custom `txDbElseDb(...)` writes from `perform()` expecting them to join the action commit; with no transaction bound, they fall back to primary and write immediately. Inside `perform()`, stage domain changes with `plan().add(...)` / `plan().update(...)` instead.
 
 ### Examples
 
@@ -142,7 +144,7 @@ public List<Wallet> findAllByOwnerId(UUID ownerId) {
 }
 ```
 
-A custom batch update — uses `txDbElseDb` so it joins the action's transaction when called from inside one, and goes to primary otherwise:
+A custom batch update — uses `txDbElseDb` so it joins an open transaction when the caller has one, and goes to primary otherwise:
 
 ```java
 public void markAllSettled(Collection<UUID> walletIds) {

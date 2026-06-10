@@ -1,9 +1,11 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: 'The outbox: atomic state + events'
-activeSection: concepts
+activeSection: learn
 lead: 'The framework''s central guarantee. Every action''s commit is a single database transaction that touches as many domain tables as the action needs <strong>plus</strong> the <code>eventlog.events</code> outbox. They land together, or none of them do.'
 ---
+
+import LearnPager from '../../components/LearnPager.astro';
 
 ```
 ┌──────────────────  ONE DATABASE TRANSACTION  ──────────────────────┐
@@ -93,10 +95,12 @@ These paths can coexist because they all start from the same durable source: `ev
 
 For the practical choices, read [Consuming events](/learn/consuming-events/).
 
+<LearnPager current="outbox" />
+
 ## See also
 
-- [Models and Entities](/concepts/models-and-entities/) — only Models emit events
-- [Actions, ActionPlan, ActionExecutor](/concepts/actions/) — what stages and commits the changes
+- [Models and Entities](/learn/models-and-entities/) — only Models emit events
+- [Actions, ActionPlan, ActionExecutor](/learn/actions/) — what stages and commits the changes
 - [Framework tables](/reference/tables/) — the SQL tables, columns, indexes, dialect specifics
 - [Consuming events](/learn/consuming-events/) — local handlers, broker publishing, CDC, and routing
 - [Listen-to-yourself](/reference/events/local-event-handler/) — the in-process consumer path

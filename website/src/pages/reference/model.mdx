@@ -40,7 +40,7 @@ The three type parameters use CRTP (Curiously-Recurring Template Pattern) so con
 | Parameter | Meaning | Typical value |
 |---|---|---|
 | `MODEL` | The concrete subclass | `Wallet`, `Order`, `Subscription` |
-| `ID` | The identifier type | [`Id<T>`](/reference/) or [`ShardedId<T>`](/concepts/sharding/) |
+| `ID` | The identifier type | [`Id<T>`](/reference/) or [`ShardedId<T>`](/learn/sharding-strategies/) |
 | `STATE` | A state-enum for the model's lifecycle | `WalletState` (`OPEN`, `CLOSED`, ...); default `GenericState` |
 
 The companion shape, [`Entity`](/reference/entity/), is for state the persistence layer needs to track but whose changes don't belong in the event stream (caches, lookup tables, audit-only side-effects).
@@ -113,8 +113,8 @@ The base `Model.Builder` provides:
 
 ## See also
 
-- [Concepts → Models and Entities](/concepts/models-and-entities/) — why two shapes, when to use each
+- [Learn → Models and Entities](/learn/models-and-entities/) — why two shapes, when to use each
 - [Entity](/reference/entity/) — the sibling shape that doesn't emit events
 - [ModelEvent](/reference/model-event/) — the event payload type attached via `withEvent`
-- [Concepts → The outbox: atomic state + events](/concepts/outbox/) — how attached events become outbox rows
+- [Learn → The outbox: atomic state + events](/learn/outbox/) — how attached events become outbox rows
 - Source: [`ekbatan-core/src/main/java/io/ekbatan/core/domain/Model.java`](https://github.com/zyraz-io/ekbatan/blob/main/ekbatan-core/src/main/java/io/ekbatan/core/domain/Model.java)

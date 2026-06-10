@@ -1,9 +1,11 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: 'Models and Entities'
-activeSection: concepts
+activeSection: learn
 lead: 'Two flavors of persistable domain object. Both are immutable, both are version-tracked, both end up in tables with a <code>state</code> column that supports soft delete. The difference is whether mutations to them produce events.'
 ---
+
+import LearnPager from '../../components/LearnPager.astro';
 
 |                                                          | `Model` | `Entity` |
 |----------------------------------------------------------|:-------:|:--------:|
@@ -156,7 +158,7 @@ SET balance = ?, version = ?
 WHERE id = ? AND version = ?
 ```
 
-If another transaction got there first, zero rows are affected and Ekbatan throws `StaleRecordException`. The action's transaction unwinds. The default `ExecutionConfiguration` retries the whole action once with a 100ms delay (tunable — see [Actions](/concepts/actions/#retries-on-optimistic-lock-conflicts)).
+If another transaction got there first, zero rows are affected and Ekbatan throws `StaleRecordException`. The action's transaction unwinds. The default `ExecutionConfiguration` retries the whole action once with a 100ms delay (tunable — see [Actions](/learn/actions/#retries-on-optimistic-lock-conflicts)).
 
 The framework's own write path takes **no pessimistic row locks**. Concurrent conflicts surface as `StaleRecordException` rather than blocked threads. When pessimistic locking is genuinely required, use [`KeyedLockProvider`](/reference/keyed-locks/), or issue `SELECT ... FOR UPDATE` directly through the `DSLContext`.
 
@@ -243,8 +245,10 @@ Both `Model.Builder` and `Entity.Builder` provide a shared set of methods on the
 - **Event class** — `<Model><Verb>Event`: `WalletCreatedEvent`, `WalletMoneyDepositedEvent`, `OrderShippedEvent`. (Matches the `[Verb]ed` convention — events describe something that already happened.)
 - **Action class** — `<Model><Verb>Action`: `WalletCreateAction`, `WalletDepositMoneyAction`, `OrderShipAction`. (Note: action verbs are imperative — they describe intent, not history.)
 
+<LearnPager current="models-and-entities" />
+
 ## See also
 
-- [Actions, ActionPlan, ActionExecutor](/concepts/actions/) — how Models and Entities flow through `perform()` into the database
+- [Actions, ActionPlan, ActionExecutor](/learn/actions/) — how Models and Entities flow through `perform()` into the database
 - [Repositories on JOOQ](/reference/repository/) — how a Model becomes a row and back
-- [The outbox: atomic state + events](/concepts/outbox/) — where the events emitted by Models end up
+- [The outbox: atomic state + events](/learn/outbox/) — where the events emitted by Models end up

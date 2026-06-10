@@ -116,11 +116,11 @@ var config = ExecutionConfiguration.Builder.executionConfiguration()
 executor.execute(principal, WalletTransferAction.class, params, config);
 ```
 
-The executor then opens one transaction per shard, in deterministic order, and rolls each back independently on failure. This is not a distributed transaction: one shard can commit while another fails. Treat `allowCrossShard(true)` as an escape hatch, prefer the per-call override, and use an executor default only for a dedicated executor whose actions are designed for per-shard commits and eventual consistency. There is no action-level `@EkbatanAction` switch. See [Sharding](/reference/sharding/) for the consistency caveats and [Sagas](/concepts/sagas/) for the compensation pattern.
+The executor then opens one transaction per shard, in deterministic order, and rolls each back independently on failure. This is not a distributed transaction: one shard can commit while another fails. Treat `allowCrossShard(true)` as an escape hatch, prefer the per-call override, and use an executor default only for a dedicated executor whose actions are designed for per-shard commits and eventual consistency. There is no action-level `@EkbatanAction` switch. See [Sharding](/reference/sharding/) for the consistency caveats and [Sagas](/learn/sagas/) for the compensation pattern.
 
 ## See also
 
 - [ActionPlan](/reference/action-plan/) — the staging API
 - [ActionExecutor](/reference/action-executor/) — how Phase 2 actually runs
-- [Concepts → Actions, ActionPlan, ActionExecutor](/concepts/actions/) — the WHY behind this shape
+- [Learn → Actions, ActionPlan, ActionExecutor](/learn/actions/) — the WHY behind this shape
 - Source: [`ekbatan-core/src/main/java/io/ekbatan/core/action/Action.java`](https://github.com/zyraz-io/ekbatan/blob/main/ekbatan-core/src/main/java/io/ekbatan/core/action/Action.java)

@@ -295,11 +295,11 @@ public class Application {
 |---|---|---|
 | 1. Datasources | `DataSourceConfig` carries the Hikari knobs and resolves the dialect from the JDBC URL | [Sharding](/reference/sharding/) covers the broader topology |
 | 2. Migrations | `FlywayMigrator.migrate(...)` runs Flyway, native-image-aware | [Native image](/reference/runtime/native-image/) |
-| 3. TM + registry | One `TransactionManager` per shard; `DatabaseRegistry` indexes them by `ShardIdentifier` | [The outbox](/concepts/outbox/), [Sharding](/reference/sharding/) |
+| 3. TM + registry | One `TransactionManager` per shard; `DatabaseRegistry` indexes them by `ShardIdentifier` | [The outbox](/learn/outbox/), [Sharding](/reference/sharding/) |
 | 4. Repositories | One repository instance per persistable type, registered into a `RepositoryRegistry` | [Repositories](/reference/repository/) |
-| 5. Actions | One `Action` instance per concrete subclass — they're singletons, per-call state lives on the plan | [Actions](/concepts/actions/) |
+| 5. Actions | One `Action` instance per concrete subclass — they're singletons, per-call state lives on the plan | [Actions](/learn/actions/) |
 | 6. Event handlers | Built into an `EventHandlerRegistry` consumed by the fan-out + handling jobs | [Local event handler](/reference/events/local-event-handler/) |
-| 7. `ActionExecutor` | The framework's central entry point — wraps every call in one transaction | [Actions](/concepts/actions/), [The outbox](/concepts/outbox/) |
+| 7. `ActionExecutor` | The framework's central entry point — wraps every call in one transaction | [Actions](/learn/actions/), [The outbox](/learn/outbox/) |
 | 8. `JobRegistry` | db-scheduler facade. The fan-out and handling jobs are themselves `DistributedJob`s registered here. Calling `.start()` is what kicks the schedulers off. | [Distributed jobs](/reference/jobs/distributed-jobs/) |
 | 9. Use it | Application code calls `executor.execute(...)` exactly the same way regardless of how the executor was wired. | — |
 
@@ -320,7 +320,7 @@ Most of the wiring above (datasources, registry construction, lifecycle) is mech
 ## See also
 
 - [Wiring with DI](with-di.md) — the same end state, in roughly 10% of the code
-- [Actions](/concepts/actions/) — what `ActionExecutor` actually does when you call `execute(...)`
+- [Actions](/learn/actions/) — what `ActionExecutor` actually does when you call `execute(...)`
 - [Sharding](/reference/sharding/) — extending block 3 to multiple shards
 - [Local event handler](/reference/events/local-event-handler/) — the fan-out / dispatch jobs registered in block 8
 - [Distributed jobs](/reference/jobs/distributed-jobs/) — `JobRegistry` and `DistributedJob`

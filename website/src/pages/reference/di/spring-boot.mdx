@@ -287,7 +287,7 @@ Each auto-config is `@ConditionalOnMissingBean`-gated, so you can override any b
 
 ### Why actions aren't Spring beans
 
-Action subclasses must not have mutable instance state — per-call state is bound by the framework via `ScopedValue` (see [docs/concepts/actions.md](/concepts/actions/)). The `EkbatanCoreConfiguration` resolves the set of `@EkbatanAction` classes (from AOT or runtime scan), instantiates each via `AutowireCapableBeanFactory.createBean(Class)` so constructor injection still works, but registers them only into `ActionRegistry` — not into the Spring bean container. This prevents accidental injection of an `Action` into application code, which would invite the wrong usage pattern.
+Action subclasses must not have mutable instance state — per-call state is bound by the framework via `ScopedValue` (see [Actions, ActionPlan, ActionExecutor](/learn/actions/)). The `EkbatanCoreConfiguration` resolves the set of `@EkbatanAction` classes (from AOT or runtime scan), instantiates each via `AutowireCapableBeanFactory.createBean(Class)` so constructor injection still works, but registers them only into `ActionRegistry` — not into the Spring bean container. This prevents accidental injection of an `Action` into application code, which would invite the wrong usage pattern.
 
 ### AOT / native-image
 
@@ -433,7 +433,7 @@ All rows above also accept camelCase aliases: `ekbatan.localEventHandler.*`, `fa
 
 - [Wiring without DI](/reference/di/without-di/) — what's hiding behind the auto-config
 - [Wiring with Quarkus](/reference/di/quarkus/) / [Wiring with Micronaut](/reference/di/micronaut/) — same end state in the other DI frameworks
-- [Actions, ActionPlan, ActionExecutor](/concepts/actions/) — what `executor.execute(...)` runs on your behalf
+- [Actions, ActionPlan, ActionExecutor](/learn/actions/) — what `executor.execute(...)` runs on your behalf
 - [Listen-to-yourself: in-process event handlers](/reference/events/local-event-handler/) — what `@EkbatanEventHandler` consumes
 - [Distributed background jobs](/reference/jobs/distributed-jobs/) — what `@EkbatanDistributedJob` schedules
 - [GraalVM native-image](/reference/runtime/native-image/) — Spring AOT specifics

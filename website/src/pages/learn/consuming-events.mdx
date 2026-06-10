@@ -180,7 +180,7 @@ After that deploy, old rows with `handler_name = 'wallet-money-deposited-notifie
 
 The [Local event handler reference](/reference/events/local-event-handler/) has an animated walkthrough that shows this rename mechanism: old rows routing through `aliases()`, and new rows routing through the current `name()`.
 
-Per the [listen-to-yourself pattern](/reference/events/local-event-handler/), the handler can dispatch its own actions via an injected `ActionExecutor`, and those actions persist their own resulting events through the normal action flow. That same shape is used for [sagas](/concepts/sagas/) when one committed action should trigger the next committed action.
+Per the [listen-to-yourself pattern](/reference/events/local-event-handler/), the handler can dispatch its own actions via an injected `ActionExecutor`, and those actions persist their own resulting events through the normal action flow. That same shape is used for [sagas](/learn/sagas/) when one committed action should trigger the next committed action.
 
 ### A.3 Run
 
@@ -312,7 +312,7 @@ If you start with local consumption and later add CDC, **no application code cha
 
 ## See also
 
-- [Concepts → The outbox: atomic state + events](/concepts/outbox/) — why the durable outbox exists
+- [Learn → The outbox: atomic state + events](/learn/outbox/) — why the durable outbox exists
 - [Reference → Local event handler](/reference/events/local-event-handler/) — `EventHandler` API, retry/expiry config, `EventEnvelope` shape
 - [Reference → Streaming (Debezium)](/reference/events/streaming/) — `OutboxToAvro` / `OutboxToProtobuf` SMT options, topic naming, snapshot modes
 - [Reference -> Framework tables](/reference/tables/) — table map plus full DDL for `eventlog.events` and `eventlog.event_notifications`

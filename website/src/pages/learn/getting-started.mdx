@@ -33,7 +33,7 @@ That is the dual-write problem.
 
 If an event must describe committed database state, the event needs to be saved with the database change. Publishing it as a separate operation can fail independently.
 
-For the full motivation, read [The dual-write trap](/concepts/the-dual-write-trap/).
+For the full motivation, read [The dual-write trap](/learn/the-dual-write-trap/).
 
 ## 2. The First Fix
 
@@ -56,7 +56,7 @@ The database is the transactional boundary. Either the state row and event row b
 
 Publishing happens after the database commit by reading the committed event row.
 
-For the conceptual version, read [The outbox: atomic state + events](/concepts/outbox/).
+For the conceptual version, read [The outbox: atomic state + events](/learn/outbox/).
 
 ## 3. Where The Event Comes From
 
@@ -85,7 +85,7 @@ The event is not a Kafka message. It is a domain fact: "money was deposited into
 
 The event is created next to the state change, inside the domain model, before any code publishes anything to a broker.
 
-For the deeper model rules, read [Models and Entities](/concepts/models-and-entities/).
+For the deeper model rules, read [Models and Entities](/learn/models-and-entities/).
 
 ## 4. What An Action Does
 
@@ -115,7 +115,7 @@ The important part is what does **not** happen here:
 
 `perform()` describes the state change. `ActionExecutor` persists the staged objects and events atomically.
 
-For the full lifecycle, read [Actions, ActionPlan, ActionExecutor](/concepts/actions/).
+For the full lifecycle, read [Actions, ActionPlan, ActionExecutor](/learn/actions/).
 
 ## 5. What The Executor Commits
 
@@ -200,9 +200,11 @@ business state + event row commit together
 
 If you want to keep learning the model:
 
-1. [Your first Action](/learn/your-first-action/) — write the wallet deposit action and inspect the outbox row.
-2. [Consuming events](/learn/consuming-events/) — turn the row into local work or broker messages.
-3. [Adding a shard](/learn/sharding/) — see the same model work across two databases.
+1. [The dual-write trap](/learn/the-dual-write-trap/) — understand the failure mode Ekbatan removes.
+2. [The outbox: atomic state + events](/learn/outbox/) — see why state and event rows commit together.
+3. [Models and Entities](/learn/models-and-entities/) — learn which objects emit events and which do not.
+4. [Actions, ActionPlan, ActionExecutor](/learn/actions/) — understand the two-phase lifecycle before writing your first action.
+5. [Your first Action](/learn/your-first-action/) — write the wallet deposit action and inspect the event row.
 
 If you are ready to wire a real project:
 

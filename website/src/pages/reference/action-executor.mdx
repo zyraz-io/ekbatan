@@ -59,9 +59,9 @@ Set `ExecutionConfiguration.allowCrossShard` to `true` to opt in to per-shard co
 LOG.warn("{} spans {} shards: {} [allowCrossShard=true]", actionName, shards.size(), shards);
 ```
 
-Treat this as an escape hatch. Prefer passing `allowCrossShard(true)` for one explicit `execute(...)` call, not enabling it as a broad executor default. If partial commits would need compensation, use a [saga](/concepts/sagas/) instead of one cross-shard action.
+Treat this as an escape hatch. Prefer passing `allowCrossShard(true)` for one explicit `execute(...)` call, not enabling it as a broad executor default. If partial commits would need compensation, use a [saga](/learn/sagas/) instead of one cross-shard action.
 
-See [Concepts → Sharding strategies → Cross-shard actions](/concepts/sharding/#cross-shard-actions-one-transaction-per-shard-never-atomic-across) for the consistency model and the saga mitigation pattern.
+See [Learn → Sharding strategies → Cross-shard actions](/learn/sharding-strategies/#cross-shard-actions-one-transaction-per-shard-never-atomic-across) for the consistency model and the saga mitigation pattern.
 
 ## Retries
 
@@ -107,7 +107,7 @@ The default is `SingleTableJsonEventPersister`; override via the builder if you 
 
 ## See also
 
-- [Concepts → Actions, ActionPlan, ActionExecutor](/concepts/actions/) — the conceptual two-phase lifecycle
+- [Learn → Actions, ActionPlan, ActionExecutor](/learn/actions/) — the conceptual two-phase lifecycle
 - [Action](/reference/action/) — the units this executor dispatches
 - [ActionPlan](/reference/action-plan/) — what `perform()` writes to
 - [TransactionManager](/reference/transaction-manager/) — the per-shard machinery the executor calls into
