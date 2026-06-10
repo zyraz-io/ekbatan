@@ -153,7 +153,7 @@ registry.transactionManager(MEXICO_SHARD).inTransactionChecked(_ -> { /* work B 
 // If work B fails, work A is already committed.
 ```
 
-Treat this as an escape hatch. If partial commits would require compensation, use a [saga](/concepts/sagas/) instead of trying to make two shard transactions behave like one.
+Treat this as an escape hatch. If partial commits would require compensation, use a [saga](/learn/sagas/) instead of trying to make two shard transactions behave like one.
 
 For the much more common single-shard case, just pick the right `TransactionManager` from the registry and you're done.
 
@@ -163,7 +163,7 @@ For the much more common single-shard case, just pick the right `TransactionMana
 
 ## See also
 
-- [Actions](/concepts/actions/) — the recommended path for business operations; uses `TransactionManager` internally
+- [Actions](/learn/actions/) — the recommended path for business operations; uses `TransactionManager` internally
 - [Repositories on JOOQ](/reference/repository/) — `db()` / `readonlyDb()` / `txDb()` / `txDbElseDb()`, which interact with whatever transaction is currently open
 - [Sharding](/reference/sharding/) — `DatabaseRegistry` indexes one `TransactionManager` per shard
 - [Observability](/reference/runtime/observability/) — the `ekbatan.transaction` span

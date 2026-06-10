@@ -1,10 +1,12 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: "Sagas: chaining committed actions"
-activeSection: concepts
+activeSection: learn
 description: "How to model cross-shard or multi-step workflows as committed actions chained by outbox events, with forward-only compensation."
 lead: "A saga is a way to model one business workflow as a sequence of smaller, independently committed actions. Use it when the workflow cannot honestly fit inside one database transaction."
 ---
+
+import LearnPager from '../../components/LearnPager.astro';
 
 Ekbatan does **not** include a central saga orchestrator. Instead, it gives you the two pieces a saga needs:
 
@@ -169,9 +171,11 @@ What it gives you is a workflow that can survive crashes and still converge:
 
 That is usually the right trade-off when `allowCrossShard(true)` would otherwise hide a partial-commit risk.
 
+<LearnPager current="sagas" />
+
 ## See also
 
 - [Listen-to-yourself: in-process event handlers](/reference/events/local-event-handler/) - the local handler pipeline used by the example
-- [Sharding strategies](/concepts/sharding/) - why cross-shard actions are rejected by default
-- [The outbox: atomic state + events](/concepts/outbox/) - why each saga step gets a durable event
-- [Actions, ActionPlan, ActionExecutor](/concepts/actions/) - why actions are not nested inside `perform()`
+- [Sharding strategies](/learn/sharding-strategies/) - why cross-shard actions are rejected by default
+- [The outbox: atomic state + events](/learn/outbox/) - why each saga step gets a durable event
+- [Actions, ActionPlan, ActionExecutor](/learn/actions/) - why actions are not nested inside `perform()`

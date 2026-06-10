@@ -1,9 +1,7 @@
 ---
-// /learn/ — step-by-step tutorial. One narrative per topic; per-stack
-// snippets driven by the global StackPicker. Source material is mostly
-// docs/gradle/getting-started.md + docs/maven/getting-started.md +
-// docs/wiring/*.md, plus the runnable wallet examples in
-// ../../../../ekbatan-examples/ that back the code samples.
+// /learn/ — the main reading path. Starts with the guided introduction,
+// then moves through the core model, practical tutorials, and finally the
+// full project setup guide.
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import SectionCard from "../../components/SectionCard.astro";
 
@@ -19,21 +17,57 @@ const lessons = [
         status: "ready",
     },
     {
+        href: "/learn/the-dual-write-trap/",
+        title: "The dual-write trap",
+        blurb: "Why writing to a database and to Kafka separately creates silent drift, and why the event must be stored with the state first.",
+        status: "ready",
+    },
+    {
+        href: "/learn/outbox/",
+        title: "The outbox: atomic state + events",
+        blurb: "How Ekbatan commits domain rows and event rows together, so the database contains both the state and the fact that changed it.",
+        status: "ready",
+    },
+    {
+        href: "/learn/models-and-entities/",
+        title: "Models and Entities",
+        blurb: "Models emit events when they change; Entities don't. Learn which shape to use and how immutable mutations work.",
+        status: "ready",
+    },
+    {
+        href: "/learn/actions/",
+        title: "Actions, ActionPlan, ActionExecutor",
+        blurb: "The two-phase lifecycle: build the new state first, then let the executor commit domain rows and event rows in one transaction.",
+        status: "ready",
+    },
+    {
         href: "/learn/your-first-action/",
         title: "Your first Action",
-        blurb: "Build a wallet deposit Action end-to-end: define the Model, attach an Event, wire the Action, run it inside an ActionExecutor. See the outbox row appear in eventlog.events.",
+        blurb: "Build a wallet deposit Action end-to-end: define the Model, attach an Event, wire the Action, run it through an ActionExecutor.",
         status: "ready",
     },
     {
         href: "/learn/consuming-events/",
         title: "Consuming events",
-        blurb: "Handle committed outbox rows inside the same service, publish from a handler, stream with CDC, or route one raw stream into many broker topics.",
+        blurb: "Use persisted events after commit: handle them in the same service, publish from a handler, stream with CDC, or route one raw stream into many broker topics.",
         status: "ready",
     },
     {
         href: "/learn/sharding/",
         title: "Adding a shard",
         blurb: "Take a single-database service to two shards using EmbeddedBitsShardingStrategy. Your action signatures don't change.",
+        status: "ready",
+    },
+    {
+        href: "/learn/sharding-strategies/",
+        title: "Sharding strategies",
+        blurb: "The deeper model behind groups, members, embedded-bits IDs, custom routing, and why cross-shard actions need care.",
+        status: "ready",
+    },
+    {
+        href: "/learn/sagas/",
+        title: "Sagas",
+        blurb: "Split multi-step workflows into committed actions chained by events, with explicit compensation when a later step fails.",
         status: "ready",
     },
     {
@@ -66,10 +100,11 @@ const lessons = [
                 <span class="bg-orange text-paper px-2">Then build.</span>
             </h1>
             <p class="mt-6 max-w-2xl text-lg leading-relaxed">
-                Start here, then write an Action, consume the
-                outbox, add a shard, and look at native-image. When you are
-                ready to wire a real application, the complete setup guide keeps
-                the stack/build/database matrix in one place.
+                Start with the problem Ekbatan solves, then learn the core
+                model, write an Action, consume persisted events, add sharding,
+                and look at native-image. When you are ready to wire a real
+                application, the complete setup guide keeps the detailed project
+                setup in one place.
             </p>
             <div class="mt-14 grid md:grid-cols-2 gap-5">
                 {

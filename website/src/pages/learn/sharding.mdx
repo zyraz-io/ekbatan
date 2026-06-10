@@ -33,7 +33,7 @@ The important part is when the decision happens. A wallet chooses its shard once
 
 In Ekbatan, a shard is addressed as `(group, member)`. The `group` is the business or policy boundary, such as `global` or `mexico`. The `member` is the database inside that group. This lesson uses one member in each group, so the two databases are `(0, 0)` and `(1, 0)`.
 
-We'll use `EmbeddedBitsShardingStrategy`, Ekbatan's default strategy for sharded IDs. It stores the shard `(group, member)` inside the wallet UUID, so any code with a `Wallet` ID can route to the right database without a lookup table. You can also provide your own `ShardingStrategy` when the shard should be resolved in a different way. The deeper model behind groups, members, and other sharding strategies lives in [Concepts → Sharding strategies](/concepts/sharding/).
+We'll use `EmbeddedBitsShardingStrategy`, Ekbatan's default strategy for sharded IDs. It stores the shard `(group, member)` inside the wallet UUID, so any code with a `Wallet` ID can route to the right database without a lookup table. You can also provide your own `ShardingStrategy` when the shard should be resolved in a different way. The deeper model behind groups, members, and other sharding strategies lives in [Learn → Sharding strategies](/learn/sharding-strategies/).
 
 ## 1. Change the model's ID type
 
@@ -54,7 +54,7 @@ public final class Wallet extends Model<Wallet, ShardedId<Wallet>, WalletState> 
 }
 ```
 
-`ShardedId<T>` extends `Id<T>`, so existing call sites that took `Id<Wallet>` keep compiling. The difference: `ShardedId.generate(Wallet.class, shard)` encodes the shard `(group, member)` into the UUID's `rand_b` bits — see [Concepts → Sharding § Self-describing IDs](/concepts/sharding/#three-strategies-in-order-of-weight) for the bit layout.
+`ShardedId<T>` extends `Id<T>`, so existing call sites that took `Id<Wallet>` keep compiling. The difference: `ShardedId.generate(Wallet.class, shard)` encodes the shard `(group, member)` into the UUID's `rand_b` bits — see [Learn → Sharding § Self-describing IDs](/learn/sharding-strategies/#three-strategies-in-order-of-weight) for the bit layout.
 
 ## 2. Pick the shard at creation
 
@@ -154,7 +154,7 @@ docker run --rm -d --name wallet-mexico \
   postgres:17
 ```
 
-(For real deployments, this is a separate RDS instance / VPC / region — that's exactly the [policy axis](/concepts/sharding/#two-reasons-to-shard-two-axes) the group is for.)
+(For real deployments, this is a separate RDS instance / VPC / region — that's exactly the [policy axis](/learn/sharding-strategies/#two-reasons-to-shard-two-axes) the group is for.)
 
 ## 5. Run it
 
@@ -218,7 +218,7 @@ var config = ExecutionConfiguration.Builder.executionConfiguration()
 executor.execute(principal, WalletTransferAction.class, params, config);
 ```
 
-**Watch the consistency model carefully**: per-shard atomicity, NOT global atomicity. The source-shard transaction can commit while the destination-shard one rolls back. For real transfers, use a [saga](/concepts/sagas/) — split into `InitiateTransferAction` (source only) + `CompleteTransferAction` (dest only), chained by `@EkbatanEventHandler`, with `RefundTransferAction` as compensation if the dest leg fails. The runnable example: [`ekbatan-examples/spring-boot-wallet-saga-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-saga-gradle-pg).
+**Watch the consistency model carefully**: per-shard atomicity, NOT global atomicity. The source-shard transaction can commit while the destination-shard one rolls back. For real transfers, use a [saga](/learn/sagas/) — split into `InitiateTransferAction` (source only) + `CompleteTransferAction` (dest only), chained by `@EkbatanEventHandler`, with `RefundTransferAction` as compensation if the dest leg fails. The runnable example: [`ekbatan-examples/spring-boot-wallet-saga-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-saga-gradle-pg).
 
 ## What just happened
 
@@ -229,13 +229,13 @@ executor.execute(principal, WalletTransferAction.class, params, config);
 
 ## Next
 
-→ **[Compiling to a native binary](/learn/native-image/)** — take the same wallet code and package it as a GraalVM native executable.
+→ **[Sharding strategies](/learn/sharding-strategies/)** — go deeper into groups, members, embedded-bits IDs, and cross-shard trade-offs.
 
 <LearnPager current="sharding" />
 
 ## See also
 
-- [Concepts → Sharding strategies](/concepts/sharding/) — the conceptual model behind the two axes and the three strategies
+- [Learn → Sharding strategies](/learn/sharding-strategies/) — the conceptual model behind the two axes and the three strategies
 - [Reference → Sharding](/reference/sharding/) — `ShardedUUID` bit layout, `DatabaseRegistry.effectiveShard`, `ShardingStrategy` API, declarative config
 - [Reference → Multi-database](/reference/multi-database/) — dialect-specific column types and converters
 - [`ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) — the runnable two-shard wallet this lesson is distilled from

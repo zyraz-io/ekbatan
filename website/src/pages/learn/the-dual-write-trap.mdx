@@ -1,10 +1,12 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: "The dual-write trap"
-activeSection: concepts
+activeSection: learn
 description: "Why writing to a database and to Kafka separately is the bug your monitoring will eventually find for you — and what an outbox-pattern-by-construction framework looks like instead."
 lead: "Every business change produces two things at once — a new state, and an event that records how it got there. Persisting them as separate writes is where systems start to drift out of sync."
 ---
+
+import LearnPager from '../../components/LearnPager.astro';
 
 ## The shape of the bug
 
@@ -49,11 +51,13 @@ The outbox pattern is well-known. Most teams that need it bolt it on: add an `ou
 
 Ekbatan makes it impossible to forget. The framework's `ActionExecutor` writes the outbox row for you — every action, every commit, automatically. Your code stages a `WalletDepositAction`; the executor opens the transaction, writes the wallet row, writes the matching `WalletMoneyDepositedEvent` to `eventlog.events`, commits. There is no second table you have to remember to write to, because the framework writes it.
 
-That's the whole pitch. The rest of the [Concepts](/concepts/) section explains how the pieces fit together to make that guarantee structural — not a convention you have to police.
+That's the whole pitch. The rest of the [Learn](/learn/) section explains how the pieces fit together to make that guarantee structural — not a convention you have to police.
+
+<LearnPager current="the-dual-write-trap" />
 
 ## See also
 
-- [The outbox: atomic state + events](/concepts/outbox/) — the schema and the persistence path
-- [Actions, ActionPlan, ActionExecutor](/concepts/actions/) — the two-phase lifecycle that makes this automatic
-- [Sagas: chaining committed actions](/concepts/sagas/) — how to coordinate multi-step workflows without pretending they are one transaction
+- [The outbox: atomic state + events](/learn/outbox/) — the schema and the persistence path
+- [Actions, ActionPlan, ActionExecutor](/learn/actions/) — the two-phase lifecycle that makes this automatic
+- [Sagas: chaining committed actions](/learn/sagas/) — how to coordinate multi-step workflows without pretending they are one transaction
 - [Learn → Consuming events](/learn/consuming-events/) — what to do with the outbox rows once they're there

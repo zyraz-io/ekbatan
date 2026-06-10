@@ -1,9 +1,11 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: 'Actions, ActionPlan, ActionExecutor'
-activeSection: concepts
+activeSection: learn
 lead: 'An <strong>Action</strong> is a unit of business work — <code>WalletDepositAction</code>, <code>OrderShipAction</code>, <code>SubscriptionRenewAction</code>. It does <strong>not</strong> write to the database directly. Instead, it stages new and updated domain objects onto its <code>ActionPlan</code>. Only after the action''s <code>perform(...)</code> returns does the <strong><code>ActionExecutor</code></strong> open a single transaction, flush every staged change, write the outbox rows, and commit.'
 ---
+
+import LearnPager from '../../components/LearnPager.astro';
 
 This split is what makes the outbox pattern implicit: domain rows and event rows are written together, atomically, by the framework — never by your code.
 
@@ -141,7 +143,7 @@ Actions must **not** invoke other actions inside `perform()`. The framework inte
 
 If two operations must happen together, they belong in a single action. If they are independent, execute them separately from the caller. If one must follow the other, orchestrate the sequence at the service / application layer above the framework.
 
-The exception is post-commit chaining: a local-event-handler `EventHandler`, broker consumer, or worker can react after the source action has committed and start the next action or service step. This is the shape used by [sagas](/concepts/sagas/): one committed action emits an event, and a post-commit consumer starts the next step in its own transaction.
+The exception is post-commit chaining: a local-event-handler `EventHandler`, broker consumer, or worker can react after the source action has committed and start the next action or service step. This is the shape used by [sagas](/learn/sagas/): one committed action emits an event, and a post-commit consumer starts the next step in its own transaction.
 
 ## Retries on optimistic-lock conflicts
 
@@ -173,15 +175,17 @@ executor.execute(principal, MyAction.class, params, config);
 
 When enabled, each involved shard gets its own transaction (commits independently — there is no 2PC), and the action's row in `eventlog.events` is duplicated to every shard with the same UUID so each shard contains the full action context.
 
-Treat `allowCrossShard(true)` as an escape hatch, not as a normal transfer primitive. The default rejection is intentional: once multiple shards are involved, Ekbatan cannot guarantee one all-or-nothing commit. Prefer the per-call override so the risk is visible at the call site. Use an executor default only for a dedicated executor whose actions are all designed for per-shard commits and eventual consistency. If partial commits would require compensation, model the workflow as a [saga](/concepts/sagas/) instead of one cross-shard action.
+Treat `allowCrossShard(true)` as an escape hatch, not as a normal transfer primitive. The default rejection is intentional: once multiple shards are involved, Ekbatan cannot guarantee one all-or-nothing commit. Prefer the per-call override so the risk is visible at the call site. Use an executor default only for a dedicated executor whose actions are all designed for per-shard commits and eventual consistency. If partial commits would require compensation, model the workflow as a [saga](/learn/sagas/) instead of one cross-shard action.
 
 See [Sharding](/reference/sharding/) for the full picture.
 
+<LearnPager current="actions" />
+
 ## See also
 
-- [Models and Entities](/concepts/models-and-entities/) — what `plan().add(...)` and `plan().update(...)` consume
+- [Models and Entities](/learn/models-and-entities/) — what `plan().add(...)` and `plan().update(...)` consume
 - [Repositories on JOOQ](/reference/repository/) — how reads inside `perform()` work
-- [The outbox: atomic state + events](/concepts/outbox/) — what Phase 2 writes
-- [Sagas: chaining committed actions](/concepts/sagas/) — multi-step workflows and compensation
+- [The outbox: atomic state + events](/learn/outbox/) — what Phase 2 writes
+- [Sagas: chaining committed actions](/learn/sagas/) — multi-step workflows and compensation
 - [Sharding](/reference/sharding/) — cross-shard behavior
 - [OpenTelemetry tracing](/reference/runtime/observability/) — the spans the executor produces

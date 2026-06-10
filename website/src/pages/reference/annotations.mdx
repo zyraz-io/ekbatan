@@ -18,7 +18,7 @@ What each DI container does *under the hood* to find these annotated classes —
 
 All four are pure markers (`@Target(TYPE) @Retention(RUNTIME)`, no parameters) defined in `io.ekbatan.di:annotations`. They carry no behavior themselves; they exist so each DI integration can find your classes without classpath scanning every type.
 
-> `@AutoBuilder` (used on `Model`/`Entity` subclasses) is *not* one of the `@Ekbatan*` DI annotations — it's a compile-time builder generator, completely independent of DI. See [Models and Entities → @AutoBuilder](/concepts/models-and-entities/#autobuilder--generated-builders).
+> `@AutoBuilder` (used on `Model`/`Entity` subclasses) is *not* one of the `@Ekbatan*` DI annotations — it's a compile-time builder generator, completely independent of DI. See [Models and Entities → @AutoBuilder](/learn/models-and-entities/#autobuilder--generated-builders).
 
 ## The five domain classes
 
@@ -232,8 +232,8 @@ The `Action` instances are intentionally **not** exposed as DI beans — see the
 - [Wiring with Quarkus](/reference/di/quarkus/) — Quarkus-specific (Jandex, build steps, classloader safety, HikariCP RMR)
 - [Wiring with Micronaut](/reference/di/micronaut/) — Micronaut-specific (`EkbatanStereotypeVisitor`, transitive-jar processing)
 - [Wiring without DI](/reference/di/without-di/) — the same domain classes wired manually, no annotations needed
-- [Models and Entities](/concepts/models-and-entities/) — the framework concepts behind `@AutoBuilder`, mutations, events
-- [Actions, ActionPlan, ActionExecutor](/concepts/actions/) — what `@EkbatanAction` classes do
+- [Models and Entities](/learn/models-and-entities/) — the framework concepts behind `@AutoBuilder`, mutations, events
+- [Actions, ActionPlan, ActionExecutor](/learn/actions/) — what `@EkbatanAction` classes do
 - [Repositories on JOOQ](/reference/repository/) — what `@EkbatanRepository` classes do
 - [Listen-to-yourself: in-process event handlers](/reference/events/local-event-handler/) — what `@EkbatanEventHandler` consumes
 - [Distributed background jobs](/reference/jobs/distributed-jobs/) — what `@EkbatanDistributedJob` schedules

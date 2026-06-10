@@ -1,10 +1,12 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: "Sharding strategies"
-activeSection: concepts
+activeSection: learn
 description: "Single-database, embedded-bits UUID, policy-axis routing — what each strategy costs and when each is appropriate. The conceptual model behind Ekbatan's two-axis sharding."
 lead: "Sharding is opt-in and has zero overhead when disabled. When you do need it, Ekbatan separates two reasons to shard — policy and capacity — and gives each its own axis. Your action and model code stays sharding-agnostic; the routing happens at the edges."
 ---
+
+import LearnPager from '../../components/LearnPager.astro';
 
 ## Two reasons to shard, two axes
 
@@ -71,7 +73,7 @@ executor.execute(principal, WalletTransferAction.class, params, config);
 
 This buys you cross-shard workflows (e.g. a wallet-to-wallet transfer where source and destination live on different shards) at the price of:
 
-- **Per-shard atomicity, not global atomicity.** Shard A's commit can succeed while shard B's rolls back. You're back in dual-write territory for that specific action — except now the dual write is between two shards of your own database, not between a database and a broker. The mitigation pattern is the [saga](/concepts/sagas/) — split the cross-shard work into one action per shard, chained via outbox events, with a compensation action that runs if the destination action fails.
+- **Per-shard atomicity, not global atomicity.** Shard A's commit can succeed while shard B's rolls back. You're back in dual-write territory for that specific action — except now the dual write is between two shards of your own database, not between a database and a broker. The mitigation pattern is the [saga](/learn/sagas/) — split the cross-shard work into one action per shard, chained via outbox events, with a compensation action that runs if the destination action fails.
 - **No cross-shard reads inside a single transaction.** Joins between rows on different shards happen in application code, after each shard's transaction commits.
 
 The good news: most actions don't need cross-shard at all. Routing customers to the same shard as their wallets, and orders to the same shard as their customer, eliminates most cross-shard pressure for free.
@@ -86,11 +88,13 @@ Sharding is a write-throughput-and-policy tool. It does not:
 
 If you reach for sharding to solve a *read latency* problem, you're probably reaching for the wrong tool — caching, read replicas, and CQRS materializations are usually the right answer.
 
+<LearnPager current="sharding-strategies" />
+
 ## See also
 
 - [Reference → Sharding](/reference/sharding/) — APIs, configuration schema, `ShardedUUID` bit layout, `DatabaseRegistry.effectiveShard`, declarative `application.yml`
-- [Concepts → Sagas](/concepts/sagas/) — how to split multi-step workflows into committed actions and compensation steps
-- [Concepts → The dual-write trap](/concepts/the-dual-write-trap/) — why cross-shard actions are conceptually a dual write
-- [Concepts → Actions, ActionPlan, ActionExecutor](/concepts/actions/) — the per-shard transaction grouping happens inside Phase 2
+- [Learn → Sagas](/learn/sagas/) — how to split multi-step workflows into committed actions and compensation steps
+- [Learn → The dual-write trap](/learn/the-dual-write-trap/) — why cross-shard actions are conceptually a dual write
+- [Learn → Actions, ActionPlan, ActionExecutor](/learn/actions/) — the per-shard transaction grouping happens inside Phase 2
 - [`ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) — a runnable two-shard wallet using `EmbeddedBitsShardingStrategy`
 - [`ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg) — the same sharded wallet with GraalVM `nativeTest` coverage
