@@ -35,10 +35,20 @@ class TestcontainersConfiguration {
             @Qualifier("globalDatabaseContainer") PostgreSQLContainer global,
             @Qualifier("mexicoDatabaseContainer") PostgreSQLContainer mexico) {
         return registry -> {
-            registerShard(registry, "ekbatan.sharding.groups[0].members[0]", global::getJdbcUrl, global::getUsername,
-                    global::getPassword, "org.postgresql.Driver");
-            registerShard(registry, "ekbatan.sharding.groups[1].members[0]", mexico::getJdbcUrl, mexico::getUsername,
-                    mexico::getPassword, "org.postgresql.Driver");
+            registerShard(
+                    registry,
+                    "ekbatan.sharding.groups[0].members[0]",
+                    global::getJdbcUrl,
+                    global::getUsername,
+                    global::getPassword,
+                    "org.postgresql.Driver");
+            registerShard(
+                    registry,
+                    "ekbatan.sharding.groups[1].members[0]",
+                    mexico::getJdbcUrl,
+                    mexico::getUsername,
+                    mexico::getPassword,
+                    "org.postgresql.Driver");
         };
     }
 

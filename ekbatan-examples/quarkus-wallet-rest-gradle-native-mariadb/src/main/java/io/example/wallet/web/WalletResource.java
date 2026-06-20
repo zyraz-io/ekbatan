@@ -1,6 +1,7 @@
 package io.example.wallet.web;
 
 import io.ekbatan.core.action.ActionExecutor;
+import io.ekbatan.core.concurrent.KeyedLockProvider;
 import io.ekbatan.core.domain.ShardedId;
 import io.ekbatan.core.shard.ShardedUUID;
 import io.example.wallet.action.WalletCloseAction;
@@ -18,6 +19,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Currency;
 import java.util.UUID;
 
@@ -28,6 +30,9 @@ public class WalletResource {
 
     @Inject
     ActionExecutor executor;
+
+    @Inject
+    KeyedLockProvider lockProvider;
 
     @Inject
     WalletRepository walletRepository;
@@ -77,11 +82,13 @@ public class WalletResource {
     @POST
     @Path("/{id}/deposits")
     public WalletResponse deposit(@PathParam("id") UUID id, DepositRequest body) throws Exception {
-        final var updated = executor.execute(
-                () -> "rest-user",
-                WalletDepositMoneyAction.class,
-                new WalletDepositMoneyAction.Params(toShardedId(id), body.amount(), body.recipient()));
-        return WalletResponse.from(updated);
+        try (var lease = lockProvider.acquire("wallet:" + id, Duration.ofSeconds(10))) {
+            final var updated = executor.execute(
+                    () -> "rest-user",
+                    WalletDepositMoneyAction.class,
+                    new WalletDepositMoneyAction.Params(toShardedId(id), body.amount(), body.recipient()));
+            return WalletResponse.from(updated);
+        }
     }
 
     @POST

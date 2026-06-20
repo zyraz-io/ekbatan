@@ -77,14 +77,24 @@ class WalletControllerIntegrationTest implements TestPropertyProvider {
         props.put("ekbatan.sharding.groups[0].name", "global");
         props.put("ekbatan.sharding.groups[0].members[0].member", "0");
         props.put("ekbatan.sharding.groups[0].members[0].name", "global");
-        registerShard(props, "ekbatan.sharding.groups[0].members[0]", global.getJdbcUrl(), global.getUsername(),
-                global.getPassword(), "org.mariadb.jdbc.Driver");
+        registerShard(
+                props,
+                "ekbatan.sharding.groups[0].members[0]",
+                global.getJdbcUrl(),
+                global.getUsername(),
+                global.getPassword(),
+                "org.mariadb.jdbc.Driver");
         props.put("ekbatan.sharding.groups[1].group", "1");
         props.put("ekbatan.sharding.groups[1].name", "mexico");
         props.put("ekbatan.sharding.groups[1].members[0].member", "0");
         props.put("ekbatan.sharding.groups[1].members[0].name", "mexico");
-        registerShard(props, "ekbatan.sharding.groups[1].members[0]", mexico.getJdbcUrl(), mexico.getUsername(),
-                mexico.getPassword(), "org.mariadb.jdbc.Driver");
+        registerShard(
+                props,
+                "ekbatan.sharding.groups[1].members[0]",
+                mexico.getJdbcUrl(),
+                mexico.getUsername(),
+                mexico.getPassword(),
+                "org.mariadb.jdbc.Driver");
         return props;
     }
 
@@ -161,8 +171,7 @@ class WalletControllerIntegrationTest implements TestPropertyProvider {
                 .toBlocking()
                 .exchange(
                         HttpRequest.POST(
-                                "/wallets/" + walletId + "/deposits",
-                                Map.of("amount", amount, "recipient", recipient)),
+                                "/wallets/" + walletId + "/deposits", Map.of("amount", amount, "recipient", recipient)),
                         Map.class);
     }
 
@@ -171,7 +180,11 @@ class WalletControllerIntegrationTest implements TestPropertyProvider {
     }
 
     private static void registerShard(
-            Map<String, String> props, String prefix, String jdbcUrl, String username, String password,
+            Map<String, String> props,
+            String prefix,
+            String jdbcUrl,
+            String username,
+            String password,
             String driverClassName) {
         addDataSource(props, prefix + ".configs.primaryConfig", jdbcUrl, username, password, driverClassName, "5");
         addDataSource(props, prefix + ".configs.jobsConfig", jdbcUrl, username, password, driverClassName, "4");
@@ -180,8 +193,13 @@ class WalletControllerIntegrationTest implements TestPropertyProvider {
     }
 
     private static void addDataSource(
-            Map<String, String> props, String prefix, String jdbcUrl, String username, String password,
-            String driverClassName, String maximumPoolSize) {
+            Map<String, String> props,
+            String prefix,
+            String jdbcUrl,
+            String username,
+            String password,
+            String driverClassName,
+            String maximumPoolSize) {
         props.put(prefix + ".jdbcUrl", jdbcUrl);
         props.put(prefix + ".username", username);
         props.put(prefix + ".password", password);

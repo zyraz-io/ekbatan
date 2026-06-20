@@ -21,7 +21,8 @@ class TestcontainersConfiguration {
                 .withUsername("wallet")
                 .withPassword("wallet")
                 .withEnv("TZ", "UTC")
-                .withCopyFileToContainer(initScript("mariadb_init.sql"), "/docker-entrypoint-initdb.d/mariadb_init.sql");
+                .withCopyFileToContainer(
+                        initScript("mariadb_init.sql"), "/docker-entrypoint-initdb.d/mariadb_init.sql");
     }
 
     @Bean(name = "mexicoDatabaseContainer", initMethod = "start", destroyMethod = "stop")
@@ -31,7 +32,8 @@ class TestcontainersConfiguration {
                 .withUsername("wallet")
                 .withPassword("wallet")
                 .withEnv("TZ", "UTC")
-                .withCopyFileToContainer(initScript("mariadb_init.sql"), "/docker-entrypoint-initdb.d/mariadb_init.sql");
+                .withCopyFileToContainer(
+                        initScript("mariadb_init.sql"), "/docker-entrypoint-initdb.d/mariadb_init.sql");
     }
 
     @Bean
@@ -39,10 +41,20 @@ class TestcontainersConfiguration {
             @Qualifier("globalDatabaseContainer") MariaDBContainer global,
             @Qualifier("mexicoDatabaseContainer") MariaDBContainer mexico) {
         return registry -> {
-            registerShard(registry, "ekbatan.sharding.groups[0].members[0]", global::getJdbcUrl, global::getUsername,
-                    global::getPassword, "org.mariadb.jdbc.Driver");
-            registerShard(registry, "ekbatan.sharding.groups[1].members[0]", mexico::getJdbcUrl, mexico::getUsername,
-                    mexico::getPassword, "org.mariadb.jdbc.Driver");
+            registerShard(
+                    registry,
+                    "ekbatan.sharding.groups[0].members[0]",
+                    global::getJdbcUrl,
+                    global::getUsername,
+                    global::getPassword,
+                    "org.mariadb.jdbc.Driver");
+            registerShard(
+                    registry,
+                    "ekbatan.sharding.groups[1].members[0]",
+                    mexico::getJdbcUrl,
+                    mexico::getUsername,
+                    mexico::getPassword,
+                    "org.mariadb.jdbc.Driver");
         };
     }
 

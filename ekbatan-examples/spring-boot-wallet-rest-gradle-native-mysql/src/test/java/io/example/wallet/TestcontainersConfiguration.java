@@ -39,10 +39,20 @@ class TestcontainersConfiguration {
             @Qualifier("globalDatabaseContainer") MySQLContainer global,
             @Qualifier("mexicoDatabaseContainer") MySQLContainer mexico) {
         return registry -> {
-            registerShard(registry, "ekbatan.sharding.groups[0].members[0]", global::getJdbcUrl, global::getUsername,
-                    global::getPassword, "com.mysql.cj.jdbc.Driver");
-            registerShard(registry, "ekbatan.sharding.groups[1].members[0]", mexico::getJdbcUrl, mexico::getUsername,
-                    mexico::getPassword, "com.mysql.cj.jdbc.Driver");
+            registerShard(
+                    registry,
+                    "ekbatan.sharding.groups[0].members[0]",
+                    global::getJdbcUrl,
+                    global::getUsername,
+                    global::getPassword,
+                    "com.mysql.cj.jdbc.Driver");
+            registerShard(
+                    registry,
+                    "ekbatan.sharding.groups[1].members[0]",
+                    mexico::getJdbcUrl,
+                    mexico::getUsername,
+                    mexico::getPassword,
+                    "com.mysql.cj.jdbc.Driver");
         };
     }
 

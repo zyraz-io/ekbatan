@@ -31,6 +31,13 @@ ekbatan:
                 password: wallet
                 driverClassName: org.postgresql.Driver
                 maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet_global
+                username: wallet
+                password: wallet
+                driverClassName: org.postgresql.Driver
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
       - group: 1
         name: mexico
         members:
@@ -49,6 +56,13 @@ ekbatan:
                 password: wallet
                 driverClassName: org.postgresql.Driver
                 maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5433/wallet_mexico
+                username: wallet
+                password: wallet
+                driverClassName: org.postgresql.Driver
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
   local-event-handler:
     handling:
       enabled: true

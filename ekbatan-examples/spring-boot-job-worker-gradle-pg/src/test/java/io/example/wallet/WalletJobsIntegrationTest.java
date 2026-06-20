@@ -64,10 +64,14 @@ class WalletJobsIntegrationTest {
                 WalletCreateAction.class,
                 new WalletCreateAction.Params("MX", UUID.randomUUID(), Currency.getInstance("MXN"), BigDecimal.ZERO));
 
-        assertThat(walletRepository.existsOnShard(GLOBAL_SHARD, globalWallet.id.getValue())).isTrue();
-        assertThat(walletRepository.existsOnShard(MEXICO_SHARD, globalWallet.id.getValue())).isFalse();
-        assertThat(walletRepository.existsOnShard(MEXICO_SHARD, mexicoWallet.id.getValue())).isTrue();
-        assertThat(walletRepository.existsOnShard(GLOBAL_SHARD, mexicoWallet.id.getValue())).isFalse();
+        assertThat(walletRepository.existsOnShard(GLOBAL_SHARD, globalWallet.id.getValue()))
+                .isTrue();
+        assertThat(walletRepository.existsOnShard(MEXICO_SHARD, globalWallet.id.getValue()))
+                .isFalse();
+        assertThat(walletRepository.existsOnShard(MEXICO_SHARD, mexicoWallet.id.getValue()))
+                .isTrue();
+        assertThat(walletRepository.existsOnShard(GLOBAL_SHARD, mexicoWallet.id.getValue()))
+                .isFalse();
 
         await().atMost(Duration.ofSeconds(20))
                 .pollInterval(Duration.ofMillis(300))
@@ -81,8 +85,10 @@ class WalletJobsIntegrationTest {
                     final var mexicoNotifications = notificationRepository.findAllByWalletId(mexico.id.getValue());
                     assertThat(globalNotifications).isNotEmpty();
                     assertThat(mexicoNotifications).isNotEmpty();
-                    assertThat(globalNotifications).allSatisfy(n -> assertThat(n.kind).isEqualTo(NotificationKind.MONEY_DEPOSITED));
-                    assertThat(mexicoNotifications).allSatisfy(n -> assertThat(n.kind).isEqualTo(NotificationKind.MONEY_DEPOSITED));
+                    assertThat(globalNotifications)
+                            .allSatisfy(n -> assertThat(n.kind).isEqualTo(NotificationKind.MONEY_DEPOSITED));
+                    assertThat(mexicoNotifications)
+                            .allSatisfy(n -> assertThat(n.kind).isEqualTo(NotificationKind.MONEY_DEPOSITED));
                 });
     }
 }

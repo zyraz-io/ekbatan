@@ -107,7 +107,8 @@ class WalletControllerIntegrationTest {
         assertThat(parse(get("/wallets/" + walletId))).containsEntry("state", "CLOSED");
     }
 
-    private HttpResponse<String> createWallet(String countryCode, String currency, String initialBalance) throws Exception {
+    private HttpResponse<String> createWallet(String countryCode, String currency, String initialBalance)
+            throws Exception {
         return post(
                 "/wallets",
                 Map.of(

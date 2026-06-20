@@ -28,6 +28,12 @@ ekbatan:
                 username: wallet
                 password: wallet
                 maximumPoolSize: 5
+              lockConfig:
+                jdbcUrl: jdbc:postgresql://localhost:5432/wallet
+                username: wallet
+                password: wallet
+                maximumPoolSize: 30
+                leakDetectionThreshold: 0
   # The whole saga choreography depends on the local-event-handler running — every step except
   # the first is triggered by an in-process event handler picking up the previous step's event
   # and invoking the next action.

@@ -1,6 +1,7 @@
 package io.example.wallet.web;
 
 import io.ekbatan.core.action.ActionExecutor;
+import io.ekbatan.core.concurrent.KeyedLockProvider;
 import io.ekbatan.core.domain.Id;
 import io.example.wallet.action.InitiateTransferAction;
 import io.example.wallet.action.WalletCloseAction;
@@ -9,6 +10,7 @@ import io.example.wallet.action.WalletDepositMoneyAction;
 import io.example.wallet.model.Wallet;
 import io.example.wallet.repository.WalletRepository;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Currency;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -25,10 +27,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class WalletController {
 
     private final ActionExecutor executor;
+    private final KeyedLockProvider lockProvider;
     private final WalletRepository walletRepository;
 
-    public WalletController(ActionExecutor executor, WalletRepository walletRepository) {
+    public WalletController(
+            ActionExecutor executor, KeyedLockProvider lockProvider, WalletRepository walletRepository) {
         this.executor = executor;
+        this.lockProvider = lockProvider;
         this.walletRepository = walletRepository;
     }
 
@@ -60,11 +65,13 @@ public class WalletController {
 
     @PostMapping("/{id}/deposits")
     public WalletResponse deposit(@PathVariable UUID id, @RequestBody DepositRequest body) throws Exception {
-        final var updated = executor.execute(
-                () -> "rest-user",
-                WalletDepositMoneyAction.class,
-                new WalletDepositMoneyAction.Params(Id.of(Wallet.class, id), body.amount()));
-        return WalletResponse.from(updated);
+        try (var lease = lockProvider.acquire("wallet:" + id, Duration.ofSeconds(10))) {
+            final var updated = executor.execute(
+                    () -> "rest-user",
+                    WalletDepositMoneyAction.class,
+                    new WalletDepositMoneyAction.Params(Id.of(Wallet.class, id), body.amount()));
+            return WalletResponse.from(updated);
+        }
     }
 
     /**

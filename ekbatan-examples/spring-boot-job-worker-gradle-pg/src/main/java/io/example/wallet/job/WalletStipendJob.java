@@ -4,11 +4,13 @@ import com.github.kagkarlsson.scheduler.task.ExecutionContext;
 import com.github.kagkarlsson.scheduler.task.schedule.FixedDelay;
 import com.github.kagkarlsson.scheduler.task.schedule.Schedule;
 import io.ekbatan.core.action.ActionExecutor;
+import io.ekbatan.core.concurrent.KeyedLockProvider;
 import io.ekbatan.di.EkbatanDistributedJob;
 import io.ekbatan.distributedjobs.DistributedJob;
 import io.example.wallet.action.WalletDepositMoneyAction;
 import io.example.wallet.repository.WalletRepository;
 import java.math.BigDecimal;
+import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,10 +49,13 @@ public class WalletStipendJob extends DistributedJob {
     private static final BigDecimal STIPEND = new BigDecimal("10.00");
 
     private final ActionExecutor executor;
+    private final KeyedLockProvider lockProvider;
     private final WalletRepository walletRepository;
 
-    public WalletStipendJob(ActionExecutor executor, WalletRepository walletRepository) {
+    public WalletStipendJob(
+            ActionExecutor executor, KeyedLockProvider lockProvider, WalletRepository walletRepository) {
         this.executor = executor;
+        this.lockProvider = lockProvider;
         this.walletRepository = walletRepository;
     }
 
@@ -74,7 +79,7 @@ public class WalletStipendJob extends DistributedJob {
         }
         LOG.info("WalletStipendJob: depositing {} to {} wallet(s)", STIPEND, underFunded.size());
         for (var wallet : underFunded) {
-            try {
+            try (var lease = lockProvider.acquire("wallet:" + wallet.id.getValue(), Duration.ofSeconds(10))) {
                 executor.execute(
                         () -> "wallet-stipend-job",
                         WalletDepositMoneyAction.class,

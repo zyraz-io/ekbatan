@@ -36,6 +36,9 @@ class TestcontainersConfiguration {
             registry.add("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.jdbcUrl", postgres::getJdbcUrl);
             registry.add("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.username", postgres::getUsername);
             registry.add("ekbatan.sharding.groups[0].members[0].configs.jobsConfig.password", postgres::getPassword);
+            registry.add("ekbatan.sharding.groups[0].members[0].configs.lockConfig.jdbcUrl", postgres::getJdbcUrl);
+            registry.add("ekbatan.sharding.groups[0].members[0].configs.lockConfig.username", postgres::getUsername);
+            registry.add("ekbatan.sharding.groups[0].members[0].configs.lockConfig.password", postgres::getPassword);
         };
     }
 }

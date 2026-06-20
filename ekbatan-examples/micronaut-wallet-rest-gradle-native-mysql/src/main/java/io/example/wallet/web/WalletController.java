@@ -1,6 +1,7 @@
 package io.example.wallet.web;
 
 import io.ekbatan.core.action.ActionExecutor;
+import io.ekbatan.core.concurrent.KeyedLockProvider;
 import io.ekbatan.core.domain.ShardedId;
 import io.ekbatan.core.shard.ShardedUUID;
 import io.example.wallet.action.WalletCloseAction;
@@ -17,6 +18,7 @@ import io.micronaut.http.annotation.PathVariable;
 import io.micronaut.http.annotation.Post;
 import io.micronaut.serde.annotation.Serdeable;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Currency;
 import java.util.UUID;
 
@@ -24,10 +26,13 @@ import java.util.UUID;
 public class WalletController {
 
     private final ActionExecutor executor;
+    private final KeyedLockProvider lockProvider;
     private final WalletRepository walletRepository;
 
-    public WalletController(ActionExecutor executor, WalletRepository walletRepository) {
+    public WalletController(
+            ActionExecutor executor, KeyedLockProvider lockProvider, WalletRepository walletRepository) {
         this.executor = executor;
+        this.lockProvider = lockProvider;
         this.walletRepository = walletRepository;
     }
 
@@ -76,11 +81,13 @@ public class WalletController {
 
     @Post(value = "/{id}/deposits", consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
     public WalletResponse deposit(@PathVariable UUID id, @Body DepositRequest body) throws Exception {
-        final var updated = executor.execute(
-                () -> "rest-user",
-                WalletDepositMoneyAction.class,
-                new WalletDepositMoneyAction.Params(toShardedId(id), body.amount(), body.recipient()));
-        return WalletResponse.from(updated);
+        try (var lease = lockProvider.acquire("wallet:" + id, Duration.ofSeconds(10))) {
+            final var updated = executor.execute(
+                    () -> "rest-user",
+                    WalletDepositMoneyAction.class,
+                    new WalletDepositMoneyAction.Params(toShardedId(id), body.amount(), body.recipient()));
+            return WalletResponse.from(updated);
+        }
     }
 
     @Post(value = "/{id}/close", produces = MediaType.APPLICATION_JSON)
