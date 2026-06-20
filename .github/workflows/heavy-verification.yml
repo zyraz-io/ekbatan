@@ -6,6 +6,15 @@ on:
     # the previous UTC day.
     - cron: "17 0 * * *"
   workflow_dispatch:
+    inputs:
+      run_mode:
+        description: "Manual run mode"
+        required: true
+        type: choice
+        default: respect-recent-activity
+        options:
+          - respect-recent-activity
+          - force
 
 permissions:
   contents: read
@@ -37,11 +46,15 @@ jobs:
         id: activity
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" != "schedule" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.run_mode }}" == "force" ]]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "reason=manual trigger" >> "$GITHUB_OUTPUT"
-            echo "Heavy verification was manually triggered." >> "$GITHUB_STEP_SUMMARY"
+            echo "reason=manual force run" >> "$GITHUB_OUTPUT"
+            echo "Heavy verification was manually triggered with run_mode=force." >> "$GITHUB_STEP_SUMMARY"
             exit 0
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "Manual run requested run_mode=respect-recent-activity; applying the recent-activity gate." >> "$GITHUB_STEP_SUMMARY"
           fi
 
           git fetch --no-tags --prune origin +refs/heads/main:refs/remotes/origin/main
