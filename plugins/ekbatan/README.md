@@ -1,6 +1,13 @@
 # Ekbatan Claude Code Plugin
 
-This plugin packages Claude Code skills for working on the Ekbatan Java persistence/action framework.
+Ekbatan is an event-driven Java persistence/action framework for building
+applications that persist domain state and domain events atomically. It uses
+immutable Models and Entities, JOOQ repositories, optimistic locking, an
+eventlog/outbox table, keyed locks, distributed jobs, and Spring Boot, Quarkus,
+Micronaut, and plain Java wiring.
+
+This plugin packages Claude Code skills for learning, using, maintaining, and
+verifying the Ekbatan framework and its example application matrix.
 
 ## Included Skills
 

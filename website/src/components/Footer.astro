@@ -4,6 +4,7 @@
 // Lifted from the original landing page's <footer>. Keeping it identical to
 // preserve the brutalist identity end-to-end — same ink background, paper
 // text, yellow accent headings, mono uppercase tracking-widest.
+const privacyHref = `${import.meta.env.BASE_URL}privacy/`;
 ---
 
 <footer class="bg-ink text-paper">
@@ -61,6 +62,13 @@
                         >Apache License 2.0</a
                     >
                 </li>
+                <li>
+                    <a
+                        href={privacyHref}
+                        class="hover:bg-yellow hover:text-ink px-1 transition-colors"
+                        >Privacy</a
+                    >
+                </li>
             </ul>
         </div>
         <div>
@@ -78,10 +86,15 @@
     </div>
     <div class="border-t-2 border-paper/20">
         <div
-            class="container-px max-w-7xl mx-auto py-4 font-mono text-[10px] uppercase tracking-widest text-paper/50 flex justify-between"
+            class="container-px max-w-7xl mx-auto py-4 font-mono text-[10px] uppercase tracking-widest text-paper/50 flex flex-wrap gap-3 justify-between"
         >
             <span>© 2026 zyraz.io</span>
-            <span>made with conviction</span>
+            <span class="flex gap-3">
+                <a href={privacyHref} class="hover:text-yellow transition-colors"
+                    >Privacy</a
+                >
+                <span>made with conviction</span>
+            </span>
         </div>
     </div>
 </footer>
