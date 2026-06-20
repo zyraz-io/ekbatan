@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ekbatan Verification"
+  short_description: "Run Ekbatan verification suites."
+  default_prompt: "Use the Ekbatan verification skill to choose and run the right tests."

@@ -1,9 +1,19 @@
-# Claude Code
-.claude/
+# Claude Code local state is private, but publish Ekbatan's shared skills.
+.claude/*
+!.claude/
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/ekbatan-*/
+!.claude/skills/ekbatan-*/**
 
 # Codex / local agent tooling
 .codex/
-.agents/
+.agents/*
+!.agents/
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/ekbatan-*/
+!.agents/skills/ekbatan-*/**
 
 # OpenSpec
 openspec/

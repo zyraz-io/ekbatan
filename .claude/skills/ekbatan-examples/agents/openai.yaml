@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ekbatan Examples"
+  short_description: "Maintain Ekbatan example projects."
+  default_prompt: "Use the Ekbatan examples skill to update or verify example applications."

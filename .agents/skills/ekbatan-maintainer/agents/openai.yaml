@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ekbatan Maintainer"
+  short_description: "Develop Ekbatan framework changes."
+  default_prompt: "Use the Ekbatan maintainer skill to implement or review a framework change."

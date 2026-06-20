@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "ekbatan",
+  "version": "0.2.1",
+  "description": "Claude Code skills for developing, testing, documenting, and using the Ekbatan Java persistence/action framework.",
+  "author": {
+    "name": "Zyraz"
+  },
+  "homepage": "https://github.com/zyraz-io/ekbatan",
+  "repository": "https://github.com/zyraz-io/ekbatan",
+  "license": "Apache-2.0",
+  "skills": [
+    "./skills"
+  ]
+}
