@@ -1,6 +1,6 @@
 # Listen-to-yourself: in-process event handlers
 
-For applications that don't need to fan events out to separate services — small monoliths, internal tools, or anywhere a Kafka cluster would be overkill — the `ekbatan-events:local-event-handler` module consumes the same `eventlog.events` outbox **inside the same JVM** via two background jobs. Same outbox row, same atomic-with-the-action guarantee, no broker.
+For applications that don't need to fan events out to separate services — small monoliths, internal tools, or anywhere a Kafka cluster would be overkill — the `ekbatan-events:local-event-handler` module delivers events to handlers registered in your application via two background jobs that poll the same `eventlog.events` outbox. Handlers feel like simple callbacks but inherit the full outbox guarantee: delivery survives restarts, retries on failure, and works correctly across multiple instances of the same service — no broker required.
 
 ```
 Your App

@@ -92,7 +92,7 @@ Do **not** call another action from inside `Action.perform()`. That would hide a
 
 The safe boundary is: **after the previous action has committed and its event is being consumed**. That consumer can be:
 
-- a local-event-handler `EventHandler` in the same JVM,
+- a local-event-handler `EventHandler` running in your application (database-backed, restart-safe, any instance),
 - a Kafka/Pulsar/RabbitMQ/SQS consumer fed by Debezium or by a broker-publishing handler,
 - a separate worker process that polls or streams the outbox,
 - or a service-level coordinator that reacts to a committed event and starts the next application step.

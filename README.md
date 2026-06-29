@@ -243,7 +243,7 @@ public class DailyWalletReportJob extends DistributedJob {
 
 ### Event Handler
 
-An **Event Handler** reacts to a specific event in the same JVM after the action commits - for sending notifications, writing audit rows, or triggering downstream workflows. The framework's fan-out and dispatch jobs deliver each committed event with retry and at-least-once semantics:
+An **Event Handler** reacts to a specific event after the action commits - for sending notifications, writing audit rows, or triggering downstream workflows. It feels like an in-process callback but is fully backed by the database: the framework's fan-out and dispatch jobs pick up committed events and deliver them with retry and at-least-once semantics, surviving restarts and running on whichever service instance holds the job lease:
 
 ```java
 @EkbatanEventHandler

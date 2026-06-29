@@ -2,7 +2,7 @@
 layout: ../../../layouts/DocLayout.astro
 title: 'Listen-to-yourself: in-process event handlers'
 activeSection: reference
-lead: 'For applications that don''t need to fan events out to separate services — small monoliths, internal tools, or anywhere a Kafka cluster would be overkill — the <code>ekbatan-events:local-event-handler</code> module consumes the same <code>eventlog.events</code> outbox <strong>inside the same JVM</strong> via two background jobs. Same outbox row, same atomic-with-the-action guarantee, no broker.'
+lead: 'For applications that don''t need to fan events out to separate services — small monoliths, internal tools, or anywhere a Kafka cluster would be overkill — the <code>ekbatan-events:local-event-handler</code> module delivers events to handlers registered in your application via two background jobs that poll the same <code>eventlog.events</code> outbox. Handlers feel like simple callbacks but inherit the full outbox guarantee: delivery survives restarts, retries on failure, and works correctly across multiple instances of the same service — no broker required.'
 ---
 
 import AliasRenameFlow from '../../../components/AliasRenameFlow.astro';

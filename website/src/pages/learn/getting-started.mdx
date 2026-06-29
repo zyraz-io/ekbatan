@@ -160,7 +160,7 @@ After commit, `eventlog.events` contains a durable row. From there, you choose h
 ```text
 eventlog.events
       |
-      +--> local event handler in the same JVM
+      +--> local event handler (database-backed, any service instance)
       |
       +--> handler that manually publishes to Kafka / Pulsar / RabbitMQ / ...
       |
