@@ -24,25 +24,29 @@ TransactionManager mexico = databaseRegistry.transactionManager(MEXICO_SHARD);
 Two flavors, mirrored for `Function` (returning a value) and `Consumer` (no return), checked-vs-unchecked variants:
 
 ```java
-// Returns a value, propagates RuntimeException
-<R> R inTransaction(Function<Transaction, R> work);
-   void inTransaction(Consumer<Transaction> work);
+// Returns a value, wraps checked exceptions in RuntimeException
+<R> R inTransaction(Function<DSLContext, R> block);
+   void inTransaction(Consumer<DSLContext> block);
 
 // Returns a value, allows the block to throw checked exceptions
-<R> R inTransactionChecked(CheckedFunction<Transaction, R> work) throws Exception;
-   void inTransactionChecked(CheckedConsumer<Transaction> work) throws Exception;
+<R> R inTransactionChecked(CheckedFunction<DSLContext, R> block) throws Exception;
+   void inTransactionChecked(CheckedConsumer<DSLContext> block) throws Exception;
 ```
+
+**The block receives a jOOQ `DSLContext`, not a `Transaction`.** `Transaction` is package-private
+framework internals — it is not reachable from application code, and you never need it: the
+`DSLContext` you are handed is already bound to the transaction's connection.
 
 What each call does, in order:
 
 1. Borrow a `Connection` from the **primary** `ConnectionProvider`.
 2. Save its current `autoCommit`, set `autoCommit = false`.
-3. Build a JOOQ `DSLContext` over the connection and bind it (along with the `Connection`) into the `ScopedValue<Transaction>`.
-4. Run your lambda with the bound `Transaction` as argument.
+3. Build a JOOQ `DSLContext` over the connection and bind it (along with the `Connection`) into the internal `ScopedValue<Transaction>`.
+4. Run your lambda, passing that `DSLContext` as its argument.
 5. On normal return: `commit()`, restore `autoCommit`, release the connection back to the pool.
 6. On exception: `rollback()` (errors during rollback are logged but don't mask the original throwable), restore `autoCommit`, release the connection, rethrow.
 
-There is **no nesting**. Calling `tm.inTransaction(...)` from inside an already-open `inTransaction(...)` on the same `tm` will throw — the framework deliberately doesn't simulate nested transactions or savepoints. If you need composition, structure your code to do all the work inside one outer block.
+**Do not nest.** The framework does not simulate nested transactions or savepoints. A nested `inTransaction(...)` on the same `tm` does not fail loudly — `ScopedValue` rebinding shadows the outer transaction, so the inner block quietly runs on a *second* pooled connection with its own commit boundary. That is almost never what you want. Structure your code to do all the work inside one outer block.
 
 ## Direct usage — a worked example
 
@@ -52,8 +56,8 @@ A backfill script that adds a default currency to wallets that don't have one ye
 DatabaseRegistry registry = …;          // wired by DI or by hand
 TransactionManager tm = registry.defaultTransactionManager();
 
-tm.inTransactionChecked(transaction -> {
-    DSLContext db = transaction.dslContext();
+tm.inTransactionChecked(db -> {
+    // `db` is the transaction-bound DSLContext
 
     // Find wallets missing a currency
     List<UUID> orphans = db.select(WALLETS.ID)
@@ -78,7 +82,7 @@ tm.inTransactionChecked(transaction -> {
 
 Either both writes commit together, or neither does. Same atomicity guarantee an Action gives you, with none of the Action machinery (no `ActionPlan`, no `eventlog.events` row, no retries on `StaleRecordException`).
 
-The lambda receives a `Transaction` value. From it you can pull the `DSLContext` (`transaction.dslContext()`) for raw JOOQ, or the underlying `Connection` (`transaction.connection()`) if you genuinely need JDBC.
+The lambda receives the transaction-bound `DSLContext` directly — use it for raw jOOQ. If you genuinely need the JDBC `Connection`, reach it through jOOQ (`db.configuration().connectionProvider()`); the framework's `Transaction` type is internal and not exposed.
 
 ## Repository writes join automatically
 
@@ -87,9 +91,9 @@ Because the open transaction is bound into a `ScopedValue<Transaction>`, inherit
 ```java
 WalletRepository walletRepository = …;
 
-tm.inTransactionChecked(transaction -> {
+tm.inTransactionChecked(db -> {
     // Inherited reads use primary connections by design. If this read
-    // must see uncommitted writes from this block, use transaction.dslContext()
+    // must see uncommitted writes from this block, use `db` directly
     // or a custom repository query that uses txDbElseDb(...).
     Wallet wallet = walletRepository.getById(walletId);
 
@@ -97,15 +101,14 @@ tm.inTransactionChecked(transaction -> {
     walletRepository.markAllSettled(List.of(walletId));
 
     // Direct JOOQ on the same DSLContext — same connection.
-    transaction.dslContext()
-            .update(WALLETS)
+    db.update(WALLETS)
             .set(WALLETS.STATE, "ARCHIVED")
             .where(WALLETS.ID.eq(walletId))
             .execute();
 });
 ```
 
-This is what makes the "use repositories outside actions" path painless. You don't *have* to drop into raw JOOQ for writes; inherited write methods and custom `txDbElseDb(...)` writes participate in the same transaction. Reads are a choice: inherited reads use primary committed state, `readonlyDb(...)` is for explicit replica reads, and `txDbElseDb(...)` or `transaction.dslContext()` is for custom reads that must see the current transaction.
+This is what makes the "use repositories outside actions" path painless. You don't *have* to drop into raw JOOQ for writes; inherited write methods and custom `txDbElseDb(...)` writes participate in the same transaction. Reads are a choice: inherited reads use primary committed state, `readonlyDb(...)` is for explicit replica reads, and `txDbElseDb(...)` or the `DSLContext` handed to the block is for custom reads that must see the current transaction.
 
 ## When NOT to use it directly
 
@@ -131,11 +134,12 @@ If you find yourself reaching for `tm.inTransaction(...)` for normal business wo
 If you only need to read, you don't have to open a transaction at all. `DatabaseRegistry` exposes `DSLContext`s directly:
 
 ```java
-// Replica reads — for list / search queries that tolerate replication lag
-DSLContext readonly = registry.readonlyDb(shard);    // or readonlyDb() for the default shard
+// DatabaseRegistry exposes per-shard DSLContexts as maps, not accessor methods.
+DSLContext replica = registry.secondary.get(shard);   // replica reads, tolerates lag
+DSLContext primary = registry.primary.get(shard);     // freshest committed state
 
-// Primary reads — for queries that must see the freshest committed state
-DSLContext primary  = registry.primaryDb(shard);
+// For the default shard:
+DSLContext defaultPrimary = registry.primary.get(registry.defaultShard);
 ```
 
 These are bare connections from the pool — no transaction is opened, no `ScopedValue` is bound. Use them when nothing about your read needs the all-or-nothing semantics.

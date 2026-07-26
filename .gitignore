@@ -15,8 +15,15 @@
 !.agents/skills/ekbatan-*/
 !.agents/skills/ekbatan-*/**
 
-# OpenSpec
-openspec/
+# OpenSpec: change proposals, designs, and the live spec set are durable project
+# artifacts - design.md is this repo's ADR practice, so it has to be reviewable and
+# survive a machine. Anything else under openspec/ stays local.
+openspec/*
+!openspec/config.yaml
+!openspec/specs/
+!openspec/specs/**
+!openspec/changes/
+!openspec/changes/**
 
 # Gradle files
 .gradle/

@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.ekbatan.core.action.ActionExecutor;
 import io.ekbatan.core.config.DataSourceConfig;
+import io.ekbatan.core.repository.exception.StaleRecordException;
 import io.ekbatan.core.shard.CrossShardException;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
@@ -102,6 +103,9 @@ public class ShardedWalletIntegrationTest {
         var actionRegistry = actionRegistry()
                 .withAction(WalletCreateAction.class, new WalletCreateAction(clock))
                 .withAction(WalletCreateMultiShardAction.class, new WalletCreateMultiShardAction(clock))
+                .withAction(
+                        WalletCreateThenFailMultiShardAction.class,
+                        new WalletCreateThenFailMultiShardAction(clock, walletRepo))
                 .build();
 
         executor = actionExecutor()
@@ -248,6 +252,32 @@ public class ShardedWalletIntegrationTest {
         var globalIds = fetchActionEventIds(GLOBAL_SHARD);
         var mexicoIds = fetchActionEventIds(MEXICO_SHARD);
         assertThat(globalIds).containsAnyElementsOf(mexicoIds);
+    }
+
+    @Test
+    void cross_shard_partial_commit_keeps_committed_shard_and_rolls_back_the_failing_one() throws Exception {
+        // GIVEN - an existing wallet on MEXICO_SHARD for the action to stale-update
+        var mexicoWallet =
+                executor.execute(() -> "test-user", WalletCreateAction.class, new WalletCreateAction.Params("MX"));
+        var beforeGlobalWallets = countWallets(GLOBAL_SHARD);
+        var beforeMexicoWallets = countWallets(MEXICO_SHARD);
+
+        // AND - cross-shard allowed, retries off so the action runs exactly once
+        var config = executionConfiguration().allowCrossShard(true).noRetry().build();
+
+        // WHEN - GLOBAL_SHARD commits, then MEXICO_SHARD fails its optimistic-lock check
+        assertThatThrownBy(() -> executor.execute(
+                        () -> "test-user",
+                        WalletCreateThenFailMultiShardAction.class,
+                        new WalletCreateThenFailMultiShardAction.Params(mexicoWallet.id.getValue()),
+                        config))
+                .isInstanceOf(StaleRecordException.class);
+
+        // THEN - the already-committed shard stays committed; there is no cross-shard rollback
+        assertThat(countWallets(GLOBAL_SHARD)).isEqualTo(beforeGlobalWallets + 1);
+
+        // AND - the failing shard rolled back
+        assertThat(countWallets(MEXICO_SHARD)).isEqualTo(beforeMexicoWallets);
     }
 
     // --- Effective shard fallback tests (unregistered shard -> default) ---

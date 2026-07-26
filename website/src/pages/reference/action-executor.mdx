@@ -100,7 +100,8 @@ In a DI-managed app (Spring Boot, Quarkus, Micronaut) the starter wires this for
 
 ```java
 // inside a backfill job — write events directly without staging an action
-executor.eventPersister.persistEvents(namespace, sourceAction, params, startedAt, events, shard, actionId);
+executor.eventPersister.persistActionEvents(
+        namespace, sourceActionName, startedAt, completionAt, params, events, shard, actionId);
 ```
 
 The default is `SingleTableJsonEventPersister`; override via the builder if you need encrypted payloads or a custom table layout.

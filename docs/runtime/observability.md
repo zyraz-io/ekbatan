@@ -30,12 +30,12 @@ A single action that touches one shard produces one of each span. A cross-shard 
 | `ekbatan.shard.cross_shard` | boolean | action.persist | Present (and `true`) when changes span multiple shards |
 | `ekbatan.shard.group` | long | transaction | Shard group identifier |
 | `ekbatan.shard.member` | long | transaction | Shard member identifier |
-| `db.operation.name` | string | repository | `"INSERT"` or `"UPDATE"`. Follows OTel semantic conventions. |
+| `db.operation.name` | string | repository | `"BATCH_INSERT"` or `"BATCH_UPDATE"` — set by `addAllNoResult` / `updateAllNoResult`, which are the only repository methods the executor calls. |
 | `ekbatan.entity.type` | string | repository | Simple class name of the domain object |
 | `ekbatan.batch.size` | long | repository | Number of records in the batch |
 | `ekbatan.event.count` | long | event.persist | Number of model events persisted |
 
-`db.operation.name` follows OTel semantic conventions. All others use the `ekbatan.*` namespace.
+`db.operation.name` uses the OTel semantic-convention *key*, but its values are Ekbatan-specific (`BATCH_INSERT` / `BATCH_UPDATE`) because the executor always writes through the batch methods. All other attributes use the `ekbatan.*` namespace.
 
 ## Retry events
 

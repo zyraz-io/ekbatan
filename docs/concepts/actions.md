@@ -106,9 +106,9 @@ Per-execution mutable state — specifically the `ActionPlan` — is bound by th
 - **Action subclasses must not have mutable instance state.** Anything beyond what's set in the constructor breaks under concurrency.
 - **`plan()` must be called from the thread that invoked `perform()`.** Spawning a child thread inside `perform()` does not inherit the scoped binding; calling `plan()` from there throws `IllegalStateException`.
 
-## Plan is single-writer; spawning threads is fine
+## Plan is single-writer; spawning threads is allowed but not encouraged
 
-Spawning parallel threads inside `Action.perform()` is **allowed** — the action's *plan* is single-writer, not the action itself. The two hard rules:
+Spawning parallel threads inside `Action.perform()` is **allowed but not encouraged** — the action's *plan* is single-writer, not the action itself. Prefer fanning out *before* `executor.execute(...)` (see the end of this section). If you do spawn threads, two hard rules apply:
 
 1. **Only the main thread (the one that invoked `perform()`) may call `plan().add(...)` or `plan().update(...)`.** `ActionPlan` is a plain `LinkedHashMap` internally — concurrent mutations from spawned threads are a data race. Even a single read from a spawned thread is unsupported because the `ScopedValue` binding doesn't propagate, so `plan()` will throw `IllegalStateException`.
 2. **Don't share the action's transactional `Connection` across threads.** The `TransactionManager` binds it via `ScopedValue` to the main thread; spawned children don't see it (and a JDBC `Connection` isn't thread-safe anyway).

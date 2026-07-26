@@ -21,6 +21,7 @@ import java.security.Principal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -233,20 +234,41 @@ public class ActionExecutor {
             }
 
             var actionEventId = java.util.UUID.randomUUID();
+            var committedShards = new ArrayList<ShardIdentifier>();
 
             for (var entry : changesByShard.entrySet()) {
                 var shard = entry.getKey();
                 var shardChanges = entry.getValue();
-                databaseRegistry.transactionManager(shard).inTransactionChecked(_ -> {
-                    changePersister.persist(
-                            namespace,
-                            action.getClass().getSimpleName(),
-                            params,
-                            actionStartDate,
-                            shardChanges,
-                            shard,
-                            actionEventId);
-                });
+                try {
+                    databaseRegistry.transactionManager(shard).inTransactionChecked(_ -> {
+                        changePersister.persist(
+                                namespace,
+                                action.getClass().getSimpleName(),
+                                params,
+                                actionStartDate,
+                                shardChanges,
+                                shard,
+                                actionEventId);
+                    });
+                    committedShards.add(shard);
+                } catch (Exception e) {
+                    if (!committedShards.isEmpty()) {
+                        LOG.error(
+                                "CRITICAL: Cross-shard action {} PARTIALLY COMMITTED! "
+                                        + "Committed shards: {}, Failed shard: {}. Error: {}: {}. "
+                                        + "Data on committed shards remains persisted and will NOT roll back automatically.",
+                                action.getClass().getSimpleName(),
+                                committedShards,
+                                shard,
+                                e.getClass().getSimpleName(),
+                                e.getMessage(),
+                                e);
+                        persistSpan.setAttribute("ekbatan.shard.partial_commit_failure", true);
+                        persistSpan.setAttribute("ekbatan.shard.committed_shards", committedShards.toString());
+                        persistSpan.setAttribute("ekbatan.shard.failed_shard", shard.toString());
+                    }
+                    throw e;
+                }
             }
         } catch (Exception e) {
             persistSpan.setStatus(StatusCode.ERROR, e.getMessage());

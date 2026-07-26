@@ -7,8 +7,11 @@ import java.security.NoSuchAlgorithmException;
 
 /**
  * Derives a stable 64-bit identifier from a string key, used by the keyed-lock providers
- * to feed Postgres {@code pg_advisory_xact_lock(bigint)} and MySQL/MariaDB
- * {@code GET_LOCK}.
+ * to feed Postgres's session-scoped {@code pg_advisory_lock(bigint)} /
+ * {@code pg_try_advisory_lock(bigint)} and MySQL/MariaDB {@code GET_LOCK}. Note the providers
+ * use the <em>session</em>-scoped advisory locks, not the transaction-scoped
+ * {@code pg_advisory_xact_lock} variant - a lease deliberately outlives any transaction on the
+ * borrowed connection.
  *
  * <p>The current implementation is SHA-256 truncated to its first 8 bytes, read as a
  * big-endian {@code long}. SHA-256 is more than the use case strictly needs - we want

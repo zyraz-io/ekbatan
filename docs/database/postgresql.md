@@ -121,7 +121,7 @@ CREATE INDEX priority_execution_time_idx ON scheduled_tasks (priority desc, exec
 
 ## Domain tables
 
-`AbstractRepository` requires every domain table to carry five columns. Startup fails if any is missing. Reads automatically filter `state <> 'DELETED'`; updates carry `WHERE version = ?` and increment.
+`AbstractRepository` requires two columns on every domain table — `version` and `state` — and fails at construction if either is missing. `ModelRepository` additionally requires `created_date` and `updated_date`; an `Entity` table backed by `EntityRepository` needs neither, since the framework does not track timestamps for entities. Reads automatically filter `state <> 'DELETED'`; updates carry `WHERE version = ?` and increment.
 
 | Column | Type | Role |
 |---|---|---|

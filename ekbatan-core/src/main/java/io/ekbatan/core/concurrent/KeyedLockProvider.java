@@ -52,6 +52,27 @@ import java.util.Optional;
  * best-effort fairness and accepts the operational realities of network partitions and clock
  * drift. Always check the documentation of the specific implementation before relying on a
  * particular property.
+ *
+ * <h2>How the SQL-backed implementations wait</h2>
+ *
+ * <p>{@code InProcessKeyedLockProvider} and {@code RedisKeyedLockProvider} block on primitives
+ * that respond to {@link Thread#interrupt()} directly. The SQL-backed providers cannot: a single
+ * unbounded {@code pg_advisory_lock} / {@code GET_LOCK} call parks the thread inside a JDBC
+ * socket read, which no interrupt can break. They therefore wait in bounded segments (five
+ * seconds) and check for interruption between them.
+ *
+ * <p>Two consequences: interrupt latency is up to one segment rather than immediate, and
+ * <b>fairness is weaker under contention</b>. During a segment the waiter is genuinely queued
+ * inside the database, so hand-off from a releasing holder stays immediate - but each new segment
+ * re-enters that queue at the back, so a long-waiting thread repeatedly yields position to newer
+ * arrivals. Only the in-process implementation promises FIFO; if you are contending hard enough
+ * for this to matter, prefer optimistic locking.
+ *
+ * <h2>Failure vs contention</h2>
+ *
+ * <p>A backend failure raises {@link LockAcquisitionException}. Contention never does: a lock held
+ * elsewhere is {@link Optional#empty()} from {@link #tryAcquire}, and simply more waiting in
+ * {@link #acquire}.
  */
 public interface KeyedLockProvider extends AutoCloseable {
 
@@ -83,11 +104,19 @@ public interface KeyedLockProvider extends AutoCloseable {
      * watchdog continues to govern the hold limit. See {@link KeyedLockProvider} class docs for
      * the full reentrancy contract.
      *
+     * <p><b>Interruption is not guaranteed mid-wait.</b> The in-process and Redis implementations
+     * respond to {@link Thread#interrupt()} immediately, but the SQL-backed ones hand
+     * {@code maxWait} to the database and block in a JDBC socket read that no interrupt can
+     * break. The wait is always bounded by {@code maxWait}, so the call still returns - it just
+     * may not return early. Use {@link #acquire} when you need the wait itself to be
+     * interruptible.
+     *
      * @param key the lock key.
      * @param maxWait maximum time to wait for the lock; pass {@link Duration#ZERO} for non-blocking.
      * @param maxHold maximum time the lock can be held before the watchdog force-releases it.
      * @return a {@link Lease}, or {@link Optional#empty()} if the wait elapsed.
-     * @throws InterruptedException if the calling thread is interrupted while waiting.
+     * @throws InterruptedException if the calling thread is interrupted while waiting; see the
+     *     note above on which implementations can actually deliver this.
      */
     Optional<Lease> tryAcquire(String key, Duration maxWait, Duration maxHold) throws InterruptedException;
 

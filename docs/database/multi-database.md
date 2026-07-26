@@ -38,7 +38,7 @@ MariaDB stores `JSON` as `LONGTEXT` with a CHECK constraint internally, and the 
 
 ### Why MySQL UUID converter is `CHAR(36)`-shaped, not `BINARY(16)`
 
-Ekbatan picks the human-readable form to keep query logs, raw JDBC dumps, and cross-dialect IDs grep-able. The `BINARY(16)` form would be more compact but isn't currently used anywhere in the project (a `UuidBinaryConverter` exists in the codebase as dead code).
+Ekbatan picks the human-readable form to keep query logs, raw JDBC dumps, and cross-dialect IDs grep-able. The `BINARY(16)` form is more compact but is not the framework's default. `UuidBinaryConverter` ships as a supported opt-in for applications that want it — it is public API under `io.ekbatan.core.persistence.jooq.converter.mysql` and covered by tests; it simply isn't wired into any of the framework's own migrations.
 
 ## Schema vs database
 

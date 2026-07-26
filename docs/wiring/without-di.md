@@ -4,7 +4,7 @@ Ekbatan does not require Spring, Quarkus, Micronaut, or any DI container. Everyt
 
 This page walks through the **complete** wiring of one running app. Domain classes (the Wallet model, three actions, the repository) are taken straight from [`postgres-simple`](../../ekbatan-integration-tests/postgres-simple); the wiring step at the end is what you'd typically run from `main()` or from a once-per-startup hook in your own framework.
 
-If you'd rather have most of this generated for you, jump to [Wiring with DI](with-di.md).
+If you'd rather have most of this generated for you, jump to your stack's guide: [Spring Boot](spring.md), [Quarkus](quarkus.md), or [Micronaut](micronaut.md).
 
 ## What we're wiring
 
@@ -312,11 +312,11 @@ The 9 blocks are arranged so you can drop any **optional** piece by deleting a s
 
 ## Same thing with less code
 
-Most of the wiring above (datasources, registry construction, lifecycle) is mechanical glue your application doesn't really care about. If you're already running on Spring Boot, Quarkus, or Micronaut, the framework's DI integration replaces blocks 1–8 with a small dependency block and four `@Ekbatan*` annotations on the classes you write. See [Wiring with DI](with-di.md).
+Most of the wiring above (datasources, registry construction, lifecycle) is mechanical glue your application doesn't really care about. If you're already running on Spring Boot, Quarkus, or Micronaut, the framework's DI integration replaces blocks 1–8 with a small dependency block and four `@Ekbatan*` annotations on the classes you write. See [Spring Boot](spring.md), [Quarkus](quarkus.md), or [Micronaut](micronaut.md).
 
 ## See also
 
-- [Wiring with DI](with-di.md) — the same end state, in roughly 10% of the code
+- [Wiring with Spring Boot](spring.md) / [Quarkus](quarkus.md) / [Micronaut](micronaut.md) — the same end state, in roughly 10% of the code
 - [Actions](../concepts/actions.md) — what `ActionExecutor` actually does when you call `execute(...)`
 - [Sharding](../database/sharding.md) — extending block 3 to multiple shards
 - [Local event handler](../events/local-event-handler.md) — the fan-out / dispatch jobs registered in block 8

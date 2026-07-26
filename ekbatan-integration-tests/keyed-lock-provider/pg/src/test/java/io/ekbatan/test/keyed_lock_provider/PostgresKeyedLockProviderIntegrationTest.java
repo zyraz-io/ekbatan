@@ -245,6 +245,79 @@ class PostgresKeyedLockProviderIntegrationTest {
         assertThat(counter.get()).isEqualTo(threads * iterations);
     }
 
+    // ----- Interruptible blocking acquire -----
+
+    @Test
+    void blocked_acquire_should_be_released_by_interrupt() throws Exception {
+        // GIVEN - this thread holds the key, so a second thread will block in acquire()
+        var key = uniqueKey();
+        var entered = new CountDownLatch(1);
+        var interrupted = new AtomicBoolean(false);
+        var acquired = new AtomicBoolean(false);
+
+        try (var held = lock.acquire(key, FIVE_MIN)) {
+            assertThat(held.isHeld()).isTrue();
+
+            var waiter = new Thread(() -> {
+                entered.countDown();
+                try (var ignored = lock.acquire(key, FIVE_MIN)) {
+                    acquired.set(true);
+                } catch (InterruptedException e) {
+                    interrupted.set(true);
+                } catch (Exception e) {
+                    // any other failure leaves both flags false and fails the assertions below
+                }
+            });
+            waiter.start();
+            assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
+
+            // WHEN - the waiter is interrupted while parked inside acquire()
+            Thread.sleep(500);
+            waiter.interrupt();
+
+            // THEN - it unwinds instead of waiting out the holder. Allow more than one segment
+            // so the assertion is about escaping at all, not about sub-segment latency.
+            waiter.join(Duration.ofSeconds(30).toMillis());
+            assertThat(waiter.isAlive()).isFalse();
+            assertThat(interrupted).isTrue();
+            assertThat(acquired).isFalse();
+        }
+
+        // AND - the interrupted waiter left nothing behind; the key is still acquirable
+        try (var after = lock.acquire(key, FIVE_MIN)) {
+            assertThat(after.isHeld()).isTrue();
+        }
+    }
+
+    @Test
+    void blocked_acquire_should_still_acquire_when_holder_releases() throws Exception {
+        // GIVEN - a holder that releases after a delay longer than one wait segment, so the
+        // waiter has to cross a segment boundary before succeeding
+        var key = uniqueKey();
+        var acquired = new AtomicBoolean(false);
+        var holderReleased = new CountDownLatch(1);
+
+        var held = lock.acquire(key, FIVE_MIN);
+        var waiter = new Thread(() -> {
+            try (var ignored = lock.acquire(key, FIVE_MIN)) {
+                acquired.set(true);
+            } catch (Exception e) {
+                // leaves acquired false
+            }
+        });
+        waiter.start();
+
+        // WHEN - the holder releases after ~7s (one full 5s segment has already elapsed)
+        Thread.sleep(7_000);
+        held.close();
+        holderReleased.countDown();
+
+        // THEN - the waiter still gets the lock; segmenting did not break the blocking contract
+        waiter.join(Duration.ofSeconds(30).toMillis());
+        assertThat(waiter.isAlive()).isFalse();
+        assertThat(acquired).isTrue();
+    }
+
     // ----- Reentrancy -----
 
     @Test

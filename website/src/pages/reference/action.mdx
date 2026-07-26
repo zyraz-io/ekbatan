@@ -16,7 +16,7 @@ public abstract class Action<P, R> {
     protected Action(Clock clock);
 
     /** Phase 1 — read, build, stage. No DB writes. */
-    protected abstract R perform(Principal principal, P params);
+    protected abstract R perform(Principal principal, P params) throws Exception;
 
     /** Access the ActionPlan to stage adds/updates. */
     protected final ActionPlan plan();

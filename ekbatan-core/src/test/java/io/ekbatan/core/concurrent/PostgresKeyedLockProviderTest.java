@@ -133,12 +133,45 @@ class PostgresKeyedLockProviderTest {
         var lock = newLock(provider);
 
         assertThatThrownBy(() -> lock.acquire("k", ONE_HOUR))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Failed to acquire advisory lock for key k")
+                .isInstanceOf(LockAcquisitionException.class)
+                .hasMessageContaining("Failed to acquire lock for key k")
                 .hasCauseInstanceOf(SQLException.class);
 
         verify(provider).release(jdbc.connection);
         verify(provider, never()).evict(any());
+    }
+
+    @Test
+    void acquire_should_wait_in_bounded_segments_not_forever() throws Exception {
+        // The indefinite-block semantic is preserved by looping, not by one unbounded
+        // pg_advisory_lock call. Each segment sets a finite lock_timeout so the loop can
+        // observe interruption between segments.
+        var jdbc = new JdbcMocks();
+        var provider = newProvider(jdbc.connection);
+        var lock = newLock(provider);
+
+        var lease = lock.acquire("k", ONE_HOUR);
+
+        verify(jdbc.setStmt).execute("SET lock_timeout = 5000");
+
+        lease.close();
+    }
+
+    @Test
+    void acquire_should_throw_when_already_interrupted() throws Exception {
+        var jdbc = new JdbcMocks();
+        var provider = newProvider(jdbc.connection);
+        var lock = newLock(provider);
+
+        Thread.currentThread().interrupt();
+        try {
+            assertThatThrownBy(() -> lock.acquire("k", ONE_HOUR)).isInstanceOf(InterruptedException.class);
+
+            // AND - no backend call was made, and no holder state was left behind
+            verify(jdbc.lockStmt, never()).execute();
+        } finally {
+            Thread.interrupted(); // clear for subsequent tests
+        }
     }
 
     @Test
@@ -407,6 +440,26 @@ class PostgresKeyedLockProviderTest {
 
     private static PostgresKeyedLockProvider newLock(ConnectionProvider provider) {
         return postgresKeyedLockProvider().connectionProvider(provider).build();
+    }
+
+    @Test
+    void acquire_failure_should_not_be_masked_by_connection_release_failure() throws Exception {
+        // Returning a broken connection can itself throw - and that is exactly this path.
+        // The SQL error that explains the failed acquisition must survive; the cleanup
+        // failure rides along as a suppressed exception.
+        var jdbc = new JdbcMocks();
+        doThrow(new SQLException("boom")).when(jdbc.lockStmt).execute();
+        var provider = newProvider(jdbc.connection);
+        doThrow(new RuntimeException("pool exploded")).when(provider).release(any());
+        var lock = newLock(provider);
+
+        assertThatThrownBy(() -> lock.acquire("k", ONE_HOUR))
+                .isInstanceOf(LockAcquisitionException.class)
+                .hasCauseInstanceOf(SQLException.class)
+                .satisfies(thrown -> {
+                    assertThat(thrown.getSuppressed()).hasSize(1);
+                    assertThat(thrown.getSuppressed()[0]).hasMessageContaining("pool exploded");
+                });
     }
 
     private static ConnectionProvider newProvider(Connection conn) {

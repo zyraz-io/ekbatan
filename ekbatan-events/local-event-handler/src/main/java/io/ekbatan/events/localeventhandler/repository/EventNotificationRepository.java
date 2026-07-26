@@ -124,48 +124,20 @@ public final class EventNotificationRepository {
         this.databaseRegistry = Validate.notNull(databaseRegistry, "databaseRegistry cannot be null");
     }
 
-    // --- db() variants - primary connection ---
-
-    private DSLContext db() {
-        return databaseRegistry.primary.get(databaseRegistry.defaultShard);
-    }
+    // Only the shard-qualified accessors exist here. A standalone repository has no
+    // ShardingStrategy to derive a default shard from, so every caller passes one explicitly -
+    // see AGENTS.md, "Repository connection helpers".
+    //
+    // Note there is deliberately no readonlyDb(...): dispatch must read due notifications from
+    // primary (see the class javadoc), and a replica accessor sitting here would be an easy way
+    // to reintroduce delivery of rows that were already marked complete.
 
     private DSLContext db(ShardIdentifier shard) {
         return databaseRegistry.primary.get(shard);
     }
 
-    private Collection<DSLContext> dbs() {
-        return databaseRegistry.primary.values();
-    }
-
-    // --- readonlyDb() variants - replica/secondary connection ---
-
-    private DSLContext readonlyDb() {
-        return databaseRegistry.secondary.get(databaseRegistry.defaultShard);
-    }
-
-    private DSLContext readonlyDb(ShardIdentifier shard) {
-        return databaseRegistry.secondary.get(shard);
-    }
-
-    private Collection<DSLContext> readonlyDbs() {
-        return databaseRegistry.secondary.values();
-    }
-
-    // --- txDb() variants - currently-open transaction's connection, if any ---
-
-    private Optional<DSLContext> txDb() {
-        return databaseRegistry.defaultTransactionManager().currentTransactionDbContext();
-    }
-
     private Optional<DSLContext> txDb(ShardIdentifier shard) {
         return databaseRegistry.transactionManager(shard).currentTransactionDbContext();
-    }
-
-    // --- txDbElseDb() variants - transaction connection if open, primary otherwise ---
-
-    private DSLContext txDbElseDb() {
-        return txDb().orElseGet(this::db);
     }
 
     private DSLContext txDbElseDb(ShardIdentifier shard) {

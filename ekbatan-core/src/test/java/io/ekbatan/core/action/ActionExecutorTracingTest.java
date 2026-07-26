@@ -7,6 +7,7 @@ import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
@@ -17,12 +18,14 @@ import io.ekbatan.core.domain.GenericState;
 import io.ekbatan.core.domain.Id;
 import io.ekbatan.core.domain.Model;
 import io.ekbatan.core.domain.ModelEvent;
+import io.ekbatan.core.domain.Persistable;
 import io.ekbatan.core.persistence.ConnectionProvider;
 import io.ekbatan.core.persistence.TransactionManager;
 import io.ekbatan.core.repository.Repository;
 import io.ekbatan.core.repository.exception.StaleRecordException;
 import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.ShardIdentifier;
+import io.ekbatan.core.shard.ShardingStrategy;
 import io.ekbatan.testsupport.time.VirtualClock;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.StatusCode;
@@ -34,6 +37,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.jooq.DSLContext;
 import org.jooq.SQLDialect;
@@ -55,6 +60,12 @@ class ActionExecutorTracingTest {
 
     @RegisterExtension
     static final OpenTelemetryExtension otelTesting = OpenTelemetryExtension.create();
+
+    /** Commits normally in the two-shard tests below. */
+    private static final ShardIdentifier SHARD_A = ShardIdentifier.of(0, 0);
+
+    /** Always fails in the two-shard tests below. */
+    private static final ShardIdentifier SHARD_B = ShardIdentifier.of(1, 0);
 
     // --- Test setup ---
 
@@ -94,6 +105,55 @@ class ActionExecutorTracingTest {
                 .eventPersister(new RecordingEventPersister())
                 .clock(clock)
                 .build();
+    }
+
+    /**
+     * Builds an executor over two shards: {@link #SHARD_A} commits, {@link #SHARD_B} always fails.
+     * Items are routed by name prefix (see {@link NamePrefixShardingStrategy}), so a single action
+     * can decide which shards it touches and in what order.
+     */
+    private ActionExecutor buildTwoShardExecutor(ActionRegistry actionRegistry) throws Exception {
+        var shardA = spy(transactionManagerFor(SHARD_A));
+        var shardB = spy(transactionManagerFor(SHARD_B));
+
+        doAnswer(invocation -> {
+                    TransactionManager.CheckedConsumer<DSLContext> consumer = invocation.getArgument(0);
+                    consumer.accept(null);
+                    return null;
+                })
+                .when(shardA)
+                .inTransactionChecked(ArgumentMatchers.<TransactionManager.CheckedConsumer<DSLContext>>any());
+
+        // IllegalStateException rather than StaleRecordException on purpose: the default retry
+        // policy only replays StaleRecordException, and a replay would run the partial-commit
+        // path a second time and make the span assertions ambiguous.
+        doThrow(new IllegalStateException("shard B unavailable"))
+                .when(shardB)
+                .inTransactionChecked(ArgumentMatchers.<TransactionManager.CheckedConsumer<DSLContext>>any());
+
+        return actionExecutor()
+                .namespace("test.namespace")
+                .databaseRegistry(databaseRegistry()
+                        .withDefaultDatabase(shardA)
+                        .withDatabase(shardB)
+                        .build())
+                .objectMapper(new ObjectMapper())
+                .repositoryRegistry(repositoryRegistry()
+                        .withModelRepository(Item.class, new ShardRoutingRepository())
+                        .build())
+                .actionRegistry(actionRegistry)
+                .eventPersister(new RecordingEventPersister())
+                .clock(clock)
+                .build();
+    }
+
+    private static TransactionManager transactionManagerFor(ShardIdentifier shard) {
+        var primaryProvider = mock(ConnectionProvider.class);
+        var secondaryProvider = mock(ConnectionProvider.class);
+        var dataSource = mock(HikariDataSource.class);
+        when(primaryProvider.getDataSource()).thenReturn(dataSource);
+        when(secondaryProvider.getDataSource()).thenReturn(dataSource);
+        return new TransactionManager(primaryProvider, secondaryProvider, SQLDialect.POSTGRES, shard);
     }
 
     // --- Helpers ---
@@ -291,6 +351,62 @@ class ActionExecutorTracingTest {
         assertThat(result.name).isEqualTo("wallet");
     }
 
+    @Test
+    void partial_cross_shard_failure_is_recorded_on_persist_span() throws Exception {
+        // GIVEN - an action staging one item per shard, with cross-shard explicitly allowed
+        var config = ExecutionConfiguration.Builder.executionConfiguration()
+                .allowCrossShard(true)
+                .build();
+        var executor = buildTwoShardExecutor(actionRegistry()
+                .withAction(CreateOnBothShardsAction.class, new CreateOnBothShardsAction(clock))
+                .build());
+
+        // WHEN - shard A commits, then shard B fails
+        assertThatThrownBy(() -> executor.execute(
+                        () -> "user", CreateOnBothShardsAction.class, new CreateOnBothShardsAction.Params(), config))
+                .isInstanceOf(IllegalStateException.class);
+
+        // THEN - the persist span is flagged as a partial commit
+        var persistSpan = findSpan("ekbatan.action.persist");
+        assertThat(persistSpan.getAttributes().get(AttributeKey.booleanKey("ekbatan.shard.partial_commit_failure")))
+                .isTrue();
+
+        // AND - it names which shard committed and which one failed
+        assertThat(persistSpan.getAttributes().get(AttributeKey.stringKey("ekbatan.shard.committed_shards")))
+                .contains(SHARD_A.toString())
+                .doesNotContain(SHARD_B.toString());
+        assertThat(persistSpan.getAttributes().get(AttributeKey.stringKey("ekbatan.shard.failed_shard")))
+                .isEqualTo(SHARD_B.toString());
+
+        // AND - the cross-shard flag and error status are set
+        assertThat(persistSpan.getAttributes().get(AttributeKey.booleanKey("ekbatan.shard.cross_shard")))
+                .isTrue();
+        assertThat(persistSpan.getStatus().getStatusCode()).isEqualTo(StatusCode.ERROR);
+    }
+
+    @Test
+    void failure_before_any_shard_commits_is_not_flagged_as_partial() throws Exception {
+        // GIVEN - an action touching only the failing shard, so nothing commits first
+        var executor = buildTwoShardExecutor(actionRegistry()
+                .withAction(CreateOnShardBAction.class, new CreateOnShardBAction(clock))
+                .build());
+
+        // WHEN
+        assertThatThrownBy(() ->
+                        executor.execute(() -> "user", CreateOnShardBAction.class, new CreateOnShardBAction.Params()))
+                .isInstanceOf(IllegalStateException.class);
+
+        // THEN - an ordinary single-shard rollback, not a partial commit
+        var persistSpan = findSpan("ekbatan.action.persist");
+        assertThat(persistSpan.getAttributes().get(AttributeKey.booleanKey("ekbatan.shard.partial_commit_failure")))
+                .isNull();
+        assertThat(persistSpan.getAttributes().get(AttributeKey.stringKey("ekbatan.shard.failed_shard")))
+                .isNull();
+
+        // AND - the span still records the failure
+        assertThat(persistSpan.getStatus().getStatusCode()).isEqualTo(StatusCode.ERROR);
+    }
+
     // --- Test model ---
 
     static class ItemEvent extends ModelEvent<Item> {
@@ -386,6 +502,68 @@ class ActionExecutorTracingTest {
         @Override
         protected Void perform(Principal principal, Params params) {
             throw new IllegalArgumentException("always fails");
+        }
+    }
+
+    static class CreateOnBothShardsAction extends Action<CreateOnBothShardsAction.Params, Void> {
+        record Params() {}
+
+        CreateOnBothShardsAction(java.time.Clock clock) {
+            super(clock);
+        }
+
+        @Override
+        protected Void perform(Principal principal, Params params) {
+            // Staged A first, then B. Additions keep insertion order all the way through
+            // groupChangesByShard, so the executor commits shard A before reaching shard B.
+            plan().add(Item.createItem("a-item", clock.instant()).build());
+            plan().add(Item.createItem("b-item", clock.instant()).build());
+            return null;
+        }
+    }
+
+    static class CreateOnShardBAction extends Action<CreateOnShardBAction.Params, Void> {
+        record Params() {}
+
+        CreateOnShardBAction(java.time.Clock clock) {
+            super(clock);
+        }
+
+        @Override
+        protected Void perform(Principal principal, Params params) {
+            plan().add(Item.createItem("b-item", clock.instant()).build());
+            return null;
+        }
+    }
+
+    // --- Cross-shard routing test doubles ---
+
+    /** Routes items whose name starts with {@code b-} to {@link #SHARD_B}, everything else to {@link #SHARD_A}. */
+    static final class NamePrefixShardingStrategy implements ShardingStrategy<UUID> {
+
+        @Override
+        public boolean usesShardAwareId() {
+            return false;
+        }
+
+        @Override
+        public Optional<ShardIdentifier> resolveShardIdentifierById(UUID id) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<ShardIdentifier> resolveShardIdentifier(Persistable<?> persistable) {
+            if (persistable instanceof Item item) {
+                return Optional.of(item.name.startsWith("b-") ? SHARD_B : SHARD_A);
+            }
+            return Optional.empty();
+        }
+    }
+
+    static final class ShardRoutingRepository extends RecordingRepository {
+        @Override
+        public ShardingStrategy<?> shardingStrategy() {
+            return new NamePrefixShardingStrategy();
         }
     }
 

@@ -55,7 +55,7 @@ The cost is that the ID is no longer self-describing. Any query that starts from
 
 By default, an action's staged changes must all route to a single shard. The framework opens one transaction on that shard, writes everything, commits. This is the only way to keep the outbox guarantee — state + events atomic — intact, because atomic-across-databases doesn't exist.
 
-When the effective `ExecutionConfiguration` has `allowCrossShard(true)`, the executor groups staged changes by shard and opens **one transaction per shard**, in deterministic order, rolling each back independently on failure. Prefer opting in by passing an explicit configuration to one `execute(...)` call. Setting this as the executor default should be reserved for a dedicated executor whose actions are all designed for per-shard commits and eventual consistency:
+When the effective `ExecutionConfiguration` has `allowCrossShard(true)`, the executor groups staged changes by shard and opens **one transaction per shard**, committing each independently. A failure rolls back only the shard it happened on — shards that already committed stay committed, and the framework logs a CRITICAL partial-commit warning naming them. The order is deterministic but incidental: `groupChangesByShard` walks entity classes in plan order and stages all additions before all updates. Prefer opting in by passing an explicit configuration to one `execute(...)` call. Setting this as the executor default should be reserved for a dedicated executor whose actions are all designed for per-shard commits and eventual consistency:
 
 ```java
 var config = ExecutionConfiguration.Builder.executionConfiguration()

@@ -131,8 +131,8 @@ class MySQLKeyedLockProviderTest {
         var lock = newLock(provider);
 
         assertThatThrownBy(() -> lock.acquire("k", ONE_HOUR))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Failed to acquire user lock for key k")
+                .isInstanceOf(LockAcquisitionException.class)
+                .hasMessageContaining("Failed to acquire lock for key k")
                 .hasCauseInstanceOf(SQLException.class);
 
         verify(provider).release(jdbc.connection);
@@ -140,28 +140,33 @@ class MySQLKeyedLockProviderTest {
     }
 
     @Test
-    void acquire_zero_response_should_release_and_throw() throws Exception {
-        var jdbc = new JdbcMocks().getLockReturns(0);
+    void acquire_zero_response_should_retry_until_acquired() throws Exception {
+        // 0 means "the segment timed out", which is the normal path for a lock held by
+        // somebody else - acquire() keeps waiting rather than failing. The second segment
+        // gets it, proving the loop retries instead of surfacing a timeout as an error.
+        var jdbc = new JdbcMocks().getLockReturnsInOrder(0, 1);
         var provider = newProvider(jdbc.connection);
         var lock = newLock(provider);
 
-        assertThatThrownBy(() -> lock.acquire("k", ONE_HOUR))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("server-side disruption");
+        var lease = lock.acquire("k", ONE_HOUR);
 
-        verify(provider).release(jdbc.connection);
-        verify(provider, never()).evict(any());
+        assertThat(lease.isHeld()).isTrue();
+        verify(jdbc.getLockStmt, times(2)).executeQuery();
+
+        lease.close();
     }
 
     @Test
     void acquire_null_response_should_release_and_throw() throws Exception {
+        // NULL is a server-side error, not a timeout. It must not be retried, or acquire()
+        // would spin forever against a broken server.
         var jdbc = new JdbcMocks().getLockReturnsNull();
         var provider = newProvider(jdbc.connection);
         var lock = newLock(provider);
 
         assertThatThrownBy(() -> lock.acquire("k", ONE_HOUR))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("server-side disruption");
+                .isInstanceOf(LockAcquisitionException.class)
+                .hasMessageContaining("server-side error");
 
         verify(provider).release(jdbc.connection);
         verify(provider, never()).evict(any());
@@ -268,14 +273,18 @@ class MySQLKeyedLockProviderTest {
     }
 
     @Test
-    void try_acquire_null_response_should_be_treated_as_not_acquired() throws Exception {
+    void try_acquire_null_response_should_throw() throws Exception {
+        // NULL indicates a server-side error, not contention. Reporting it as "didn't get the
+        // lock" would let a broken server masquerade as a busy one - the caller's fallback
+        // path would run as if another holder were simply ahead of it.
         var jdbc = new JdbcMocks().getLockReturnsNull();
         var provider = newProvider(jdbc.connection);
         var lock = newLock(provider);
 
-        var leaseOpt = lock.tryAcquire("k", ONE_SECOND, ONE_HOUR);
+        assertThatThrownBy(() -> lock.tryAcquire("k", ONE_SECOND, ONE_HOUR))
+                .isInstanceOf(LockAcquisitionException.class)
+                .hasMessageContaining("server-side error");
 
-        assertThat(leaseOpt).isEmpty();
         verify(provider).release(jdbc.connection);
         verify(provider, never()).evict(any());
     }
@@ -338,22 +347,39 @@ class MySQLKeyedLockProviderTest {
         verify(provider, never()).evict(any());
     }
 
-    // ----- acquire() passes -1 (wait forever) -----
+    // ----- acquire() waits in bounded segments -----
 
     @Test
-    void acquire_should_pass_negative_timeout_for_wait_forever() throws Exception {
-        // MySQL still honors negative GET_LOCK timeout as "wait forever," so we use the
-        // historical sentinel directly - no need for the very-large-finite workaround that
-        // the MariaDB impl needs.
+    void acquire_should_wait_in_bounded_segments_not_forever() throws Exception {
+        // The indefinite-block semantic is preserved by looping, not by passing a "wait
+        // forever" sentinel. Each segment is finite so the loop can observe interruption
+        // between them.
         var jdbc = new JdbcMocks().getLockReturns(1);
         var provider = newProvider(jdbc.connection);
         var lock = newLock(provider);
 
         var lease = lock.acquire("k", ONE_HOUR);
 
-        verify(jdbc.getLockStmt).setDouble(2, -1.0);
+        verify(jdbc.getLockStmt).setDouble(2, 5.0);
 
         lease.close();
+    }
+
+    @Test
+    void acquire_should_throw_when_already_interrupted() throws Exception {
+        var jdbc = new JdbcMocks().getLockReturns(1);
+        var provider = newProvider(jdbc.connection);
+        var lock = newLock(provider);
+
+        Thread.currentThread().interrupt();
+        try {
+            assertThatThrownBy(() -> lock.acquire("k", ONE_HOUR)).isInstanceOf(InterruptedException.class);
+
+            // AND - no backend call was made, and no holder state was left behind
+            verify(jdbc.getLockStmt, never()).executeQuery();
+        } finally {
+            Thread.interrupted(); // clear for subsequent tests
+        }
     }
 
     // ----- maxHold expiration -----
@@ -395,6 +421,26 @@ class MySQLKeyedLockProviderTest {
         return mySQLKeyedLockProvider().connectionProvider(provider).build();
     }
 
+    @Test
+    void acquire_failure_should_not_be_masked_by_connection_release_failure() throws Exception {
+        // Returning a broken connection can itself throw - and that is exactly this path.
+        // The SQL error that explains the failed acquisition must survive; the cleanup
+        // failure rides along as a suppressed exception.
+        var jdbc = new JdbcMocks();
+        doThrow(new SQLException("boom")).when(jdbc.getLockStmt).executeQuery();
+        var provider = newProvider(jdbc.connection);
+        doThrow(new RuntimeException("pool exploded")).when(provider).release(any());
+        var lock = newLock(provider);
+
+        assertThatThrownBy(() -> lock.acquire("k", ONE_HOUR))
+                .isInstanceOf(LockAcquisitionException.class)
+                .hasCauseInstanceOf(SQLException.class)
+                .satisfies(thrown -> {
+                    assertThat(thrown.getSuppressed()).hasSize(1);
+                    assertThat(thrown.getSuppressed()[0]).hasMessageContaining("pool exploded");
+                });
+    }
+
     private static ConnectionProvider newProvider(Connection conn) {
         var p = mock(ConnectionProvider.class);
         when(p.acquire()).thenReturn(conn);
@@ -418,6 +464,17 @@ class MySQLKeyedLockProviderTest {
         JdbcMocks getLockReturns(int value) throws SQLException {
             when(getLockResult.next()).thenReturn(true);
             when(getLockResult.getObject(1)).thenReturn(value);
+            return this;
+        }
+
+        /** Answers successive {@code GET_LOCK} calls with the given values, for testing the acquire retry loop. */
+        JdbcMocks getLockReturnsInOrder(int first, int... rest) throws SQLException {
+            when(getLockResult.next()).thenReturn(true);
+            final var remaining = new Object[rest.length];
+            for (var i = 0; i < rest.length; i++) {
+                remaining[i] = rest[i];
+            }
+            when(getLockResult.getObject(1)).thenReturn(first, remaining);
             return this;
         }
 

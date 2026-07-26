@@ -23,7 +23,8 @@ import org.slf4j.LoggerFactory;
  * is left dirty (e.g. {@code SET lock_timeout} reset failed), the provider evicts the
  * connection from the pool instead.
  *
- * <p>Keys are hashed via SipHash-2-4 into Postgres's 64-bit advisory-lock identifier.
+ * <p>Keys are hashed by {@link io.ekbatan.core.internal.LockKeyHash} - SHA-256 truncated to its
+ * first 8 bytes - into Postgres's 64-bit advisory-lock identifier.
  * Collisions are statistically irrelevant for any practical key cardinality. Note that the
  * 64-bit advisory-lock identifier space is shared with anything else in the database using
  * advisory locks - if an external service uses the same Postgres instance with overlapping
@@ -40,6 +41,19 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
 
     private static final String LOCK_NOT_AVAILABLE_SQLSTATE = "55P03";
 
+    /**
+     * How long each segment of a blocking {@link #acquire} waits inside the database before
+     * returning to check for interruption and starting the next segment.
+     *
+     * <p>Five seconds balances two things: interrupt latency stays well inside the 30-second
+     * graceful-shutdown budgets used by Kubernetes and Spring Boot, and the connection sends
+     * traffic often enough that idle-connection reapers never consider it abandoned. The waiter
+     * is genuinely queued inside Postgres for the duration of each segment, so hand-off from a
+     * releasing holder is still immediate; the cost is that each new segment re-enters that
+     * queue at the back.
+     */
+    private static final Duration ACQUIRE_SEGMENT = Duration.ofSeconds(5);
+
     private final ConnectionProvider connectionProvider;
     private final KeyedReentrantHolder<PgPayload> holder = new KeyedReentrantHolder<>("ekbatan-pgkeyedlock-timeout");
 
@@ -48,25 +62,26 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
     }
 
     @Override
-    public Lease acquire(String key, Duration maxHold) {
+    public Lease acquire(String key, Duration maxHold) throws InterruptedException {
         Validate.notBlank(key, "key cannot be blank");
         Validate.notNull(maxHold, "maxHold cannot be null");
         Validate.isTrue(!maxHold.isNegative() && !maxHold.isZero(), "maxHold must be positive");
 
-        var reentered = holder.tryReenter(key);
-        if (reentered.isPresent()) {
-            return reentered.get();
+        // Waiting in bounded segments rather than one unbounded pg_advisory_lock call. A single
+        // blocking call parks the thread inside a JDBC socket read, which Thread.interrupt()
+        // cannot break - so the InterruptedException this method declares could never be thrown.
+        // Segmenting also keeps the connection sending traffic every ACQUIRE_SEGMENT, so idle
+        // connection reapers (NAT, load balancers, PgBouncer) stop silently dropping long waits.
+        // Reentry is handled by tryAcquire's own holder.tryReenter on the first pass.
+        while (true) {
+            if (Thread.interrupted()) {
+                throw new InterruptedException("Interrupted while acquiring lock for key " + key);
+            }
+            final var lease = tryAcquire(key, ACQUIRE_SEGMENT, maxHold);
+            if (lease.isPresent()) {
+                return lease.get();
+            }
         }
-
-        final var hashedKey = hash(key);
-        final var connection = connectionProvider.acquire();
-        try {
-            advisoryLock(connection, hashedKey);
-        } catch (SQLException e) {
-            connectionProvider.release(connection);
-            throw new RuntimeException("Failed to acquire advisory lock for key " + key, e);
-        }
-        return holder.register(key, new PgPayload(key, hashedKey, connection, false), maxHold, this::lockRelease);
     }
 
     @Override
@@ -87,10 +102,10 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
         final var result = tryAdvisoryLock(connection, hashedKey, maxWait);
 
         if (result.error().isPresent()) {
-            releaseOrEvict(connection, result.connectionDirty());
-            throw new RuntimeException(
-                    "Failed to acquire advisory lock for key " + key,
-                    result.error().get());
+            final var failure = new LockAcquisitionException(
+                    key, "advisory lock request failed", result.error().get());
+            releaseOrEvictQuietly(connection, result.connectionDirty(), failure);
+            throw failure;
         }
         if (!result.acquired()) {
             releaseOrEvict(connection, result.connectionDirty());
@@ -179,6 +194,21 @@ public final class PostgresKeyedLockProvider implements KeyedLockProvider {
             connectionProvider.evict(connection);
         } else {
             connectionProvider.release(connection);
+        }
+    }
+
+    /**
+     * Returns the connection while an acquisition failure is being reported. Returning a broken
+     * connection can itself throw - and that is exactly the case this path handles - so the
+     * cleanup failure is attached to {@code failure} rather than replacing it. Without this the
+     * caller would see "Failed to release connection" and lose the SQL error that actually
+     * explains the failed acquisition.
+     */
+    private void releaseOrEvictQuietly(Connection connection, boolean dirty, Throwable failure) {
+        try {
+            releaseOrEvict(connection, dirty);
+        } catch (RuntimeException cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
         }
     }
 

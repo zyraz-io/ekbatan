@@ -45,11 +45,18 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
     private static final Logger LOG = LoggerFactory.getLogger(MySQLKeyedLockProvider.class);
 
     /**
-     * MySQL honors a negative timeout as "wait forever," preserving the historical
-     * GET_LOCK semantics. (MariaDB diverged from this in 12.x - see {@link
-     * MariaDBKeyedLockProvider} for details on that side.)
+     * How long each segment of a blocking {@link #acquire} waits inside the database before
+     * returning to check for interruption and starting the next segment. See
+     * {@link PostgresKeyedLockProvider} for the full rationale behind the five-second choice.
      */
-    private static final double WAIT_FOREVER_SECONDS = -1.0;
+    private static final Duration ACQUIRE_SEGMENT = Duration.ofSeconds(5);
+
+    /** Outcome of one {@code GET_LOCK} call. {@code TIMED_OUT} is retryable; {@code SERVER_ERROR} is not. */
+    private enum LockResult {
+        ACQUIRED,
+        TIMED_OUT,
+        SERVER_ERROR
+    }
 
     private final ConnectionProvider connectionProvider;
     private final KeyedReentrantHolder<MySQLPayload> holder =
@@ -60,34 +67,26 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
     }
 
     @Override
-    public Lease acquire(String key, Duration maxHold) {
+    public Lease acquire(String key, Duration maxHold) throws InterruptedException {
         Validate.notBlank(key, "key cannot be blank");
         Validate.notNull(maxHold, "maxHold cannot be null");
         Validate.isTrue(!maxHold.isNegative() && !maxHold.isZero(), "maxHold must be positive");
 
-        var reentered = holder.tryReenter(key);
-        if (reentered.isPresent()) {
-            return reentered.get();
+        // Waiting in bounded segments rather than one GET_LOCK call with an effectively infinite
+        // timeout. A single blocking call parks the thread inside a JDBC socket read, which
+        // Thread.interrupt() cannot break - so the InterruptedException this method declares could
+        // never be thrown. Segmenting also keeps the connection sending traffic every
+        // ACQUIRE_SEGMENT, so idle connection reapers stop silently dropping long waits.
+        // Reentry is handled by tryAcquire's own holder.tryReenter on the first pass.
+        while (true) {
+            if (Thread.interrupted()) {
+                throw new InterruptedException("Interrupted while acquiring lock for key " + key);
+            }
+            final var lease = tryAcquire(key, ACQUIRE_SEGMENT, maxHold);
+            if (lease.isPresent()) {
+                return lease.get();
+            }
         }
-
-        final var hashedKey = hash(key);
-        final var connection = connectionProvider.acquire();
-        final boolean acquired;
-        try {
-            acquired = getLock(connection, hashedKey, WAIT_FOREVER_SECONDS);
-        } catch (SQLException e) {
-            connectionProvider.release(connection);
-            throw new RuntimeException("Failed to acquire user lock for key " + key, e);
-        }
-        if (!acquired) {
-            // GET_LOCK with a negative timeout normally waits forever; getting a non-1
-            // result means the wait was disrupted (e.g. session killed by the server,
-            // or a server-side error returned NULL).
-            connectionProvider.release(connection);
-            throw new RuntimeException(
-                    "Failed to acquire user lock for key " + key + " (server-side disruption during wait)");
-        }
-        return holder.register(key, new MySQLPayload(key, hashedKey, connection), maxHold, this::backendRelease);
     }
 
     @Override
@@ -105,14 +104,20 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
 
         final var hashedKey = hash(key);
         final var connection = connectionProvider.acquire();
-        final boolean acquired;
+        final LockResult result;
         try {
-            acquired = getLock(connection, hashedKey, toGetLockTimeout(maxWait));
+            result = getLock(connection, hashedKey, toGetLockTimeout(maxWait));
         } catch (SQLException e) {
-            connectionProvider.release(connection);
-            throw new RuntimeException("Failed to acquire user lock for key " + key, e);
+            final var failure = new LockAcquisitionException(key, "GET_LOCK failed", e);
+            releaseQuietly(connection, failure);
+            throw failure;
         }
-        if (!acquired) {
+        if (result == LockResult.SERVER_ERROR) {
+            final var failure = new LockAcquisitionException(key, "GET_LOCK returned NULL (server-side error)");
+            releaseQuietly(connection, failure);
+            throw failure;
+        }
+        if (result == LockResult.TIMED_OUT) {
             connectionProvider.release(connection);
             return Optional.empty();
         }
@@ -138,26 +143,41 @@ public final class MySQLKeyedLockProvider implements KeyedLockProvider {
     }
 
     /**
-     * Calls {@code GET_LOCK} and returns true iff the server returned 1. False covers both
-     * 0 (acquisition didn't succeed within the timeout) and NULL (rare server-side error
-     * such as out-of-memory). NULL is logged at warn level so operational issues remain
-     * observable while keeping the call-site logic simple.
+     * Calls {@code GET_LOCK} and classifies the outcome. {@code 1} is {@link LockResult#ACQUIRED},
+     * {@code 0} is {@link LockResult#TIMED_OUT}, and NULL (or an empty result set) is
+     * {@link LockResult#SERVER_ERROR} - a rare server-side failure such as out-of-memory.
+     *
+     * <p>Timed-out and server-error must stay distinguishable: {@link #acquire} retries the
+     * former segment after segment, and treating a persistent server error the same way would
+     * spin forever instead of failing.
      */
-    private static boolean getLock(Connection conn, String hashedKey, double timeoutSeconds) throws SQLException {
+    private static LockResult getLock(Connection conn, String hashedKey, double timeoutSeconds) throws SQLException {
         try (var stmt = conn.prepareStatement("SELECT GET_LOCK(?, ?)")) {
             stmt.setString(1, hashedKey);
             stmt.setDouble(2, timeoutSeconds);
             try (var rs = stmt.executeQuery()) {
                 if (!rs.next()) {
-                    return false;
+                    return LockResult.SERVER_ERROR;
                 }
                 var value = rs.getObject(1);
                 if (value == null) {
-                    LOG.warn("GET_LOCK for hashedKey {} returned NULL (server-side error)", hashedKey);
-                    return false;
+                    return LockResult.SERVER_ERROR;
                 }
-                return ((Number) value).intValue() == 1;
+                return ((Number) value).intValue() == 1 ? LockResult.ACQUIRED : LockResult.TIMED_OUT;
             }
+        }
+    }
+
+    /**
+     * Returns the connection while an acquisition failure is being reported. Returning a broken
+     * connection can itself throw - exactly the case this path handles - so the cleanup failure
+     * is attached to {@code failure} rather than replacing it.
+     */
+    private void releaseQuietly(Connection connection, Throwable failure) {
+        try {
+            connectionProvider.release(connection);
+        } catch (RuntimeException cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
         }
     }
 

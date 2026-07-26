@@ -55,7 +55,7 @@ ekbatan/
 │   │   └── redis/                         # RedisKeyedLockProvider (Redisson + Redis testcontainer)
 │   ├── distributed-jobs-pg/               # JobRegistry integration tests (PostgreSQL)
 │   └── event-pipeline/                    # Debezium → Kafka JSON/Avro/Protobuf event streaming
-├── buildSrc/                              # Gradle build conventions
+├── build-logic/                           # Gradle build conventions (included build)
 └── config/checkstyle/                     # Checkstyle rules
 ```
 
@@ -86,10 +86,14 @@ JOOQ-based persistence:
 
 Subclasses must implement `fromRecord(RECORD)` and `toRecord(PERSISTABLE)` to map between JOOQ records and domain objects.
 
-Exception hierarchy in `repository/exception/`:
-- `PersistenceException` — Rich hierarchy with `ModelAware`, `ConstraintViolation` interfaces
-- `StaleRecordException` — Optimistic locking failure
-- `EntityNotFoundException` — Lookup miss
+Exceptions in `repository/exception/` — there are exactly two; there is no `PersistenceException`
+base type and no `ModelAware` / `ConstraintViolation` interfaces:
+- `StaleRecordException` — Optimistic locking failure (zero rows matched `WHERE version = ?`)
+- `EntityNotFoundException` — Lookup miss, raised by `getById` (`findById` returns `Optional` instead)
+
+Elsewhere in core: `io.ekbatan.core.shard.CrossShardException` (action spans shards with
+`allowCrossShard=false`) and `io.ekbatan.core.concurrent.LockAcquisitionException`
+(`KeyedLockProvider` backend failure — never contention).
 
 ### Action Layer (`ekbatan-core/...core/action/`)
 
@@ -150,8 +154,34 @@ Wallet updated = wallet.deposit(amount); // returns NEW wallet with event attach
 plan.update(updated);                    // registers for persistence
 ```
 
-### Single-Threaded Action Execution
-Actions execute single-threaded. Do not spawn concurrent threads inside `Action.perform()`. The `TransactionManager` uses `ScopedValue` to bind transaction context, and the underlying JDBC `Connection` is not thread-safe. Concurrent access from child threads would share that connection unsafely. Users needing parallel work should split it into separate action executions or handle concurrency at a layer above the framework. If data from multiple sources needs to be read in parallel, do so before executing the action — fan out the reads, join/aggregate the results, build the action's `Params` from the aggregated data, then execute the action. This keeps actions focused on declaring business intent, with parallelism handled by the caller.
+### Single-Writer Action Execution
+Spawning threads inside `Action.perform()` is **allowed but not encouraged**. The plan is
+single-writer, not the action. Two hard rules make it safe:
+
+1. **Only the thread that invoked `perform()` may call `plan()`.** `ActionPlan` is a plain
+   `LinkedHashMap` internally, so concurrent mutation is a data race. It is also bound via
+   `ScopedValue`, which does not propagate to spawned threads — calling `plan()` from a child
+   thread throws `IllegalStateException` rather than corrupting anything.
+2. **Never share the action's transactional `Connection` across threads.** `TransactionManager`
+   binds it via `ScopedValue` to the invoking thread, and a JDBC `Connection` is not thread-safe.
+
+The supported shape is fan out, **join**, then mutate the plan from the main thread:
+
+```java
+var customerThread = Thread.startVirtualThread(() -> customerService.fetch(params.customerId()));
+var pricingThread  = Thread.startVirtualThread(() -> pricingService.quote(params.lineItems()));
+customerThread.join();
+pricingThread.join();
+
+// back on the invoking thread — only now is it safe to touch the plan
+return plan().add(buildOrder(/* aggregated results */));
+```
+
+**Preferred alternative:** do the parallel fan-out *before* calling `executor.execute(...)`, build
+the action's `Params` from the aggregated data, and keep `perform()` sequential. That uses ordinary
+pool connections rather than the action's transactional one, and keeps actions focused on declaring
+business intent. Inside `perform()`, limit parallelism to work that does not need the action's
+transaction — external API calls, replica-only reads on a fresh `DSLContext`, pure computation.
 
 ### No Composable / Nested Actions
 Actions must **not** invoke other actions within their `perform()` method. The framework intentionally does not support nested or composable action execution. An action is a self-contained unit of business work that produces a single atomic transaction — nesting actions blurs transaction boundaries, creates hidden coupling between business operations, and makes the execution flow harder to reason about. If two operations need to happen together, they belong in a single action. If they are independent, execute them separately from the caller. If one must follow the other, orchestrate that sequence at the service/application layer above the framework.
@@ -511,7 +541,7 @@ Ekbatan instruments its action execution pipeline using the **OpenTelemetry API*
 | `ekbatan.shard.cross_shard` | boolean | action.persist | Present when changes span multiple shards |
 | `ekbatan.shard.group` | long | transaction | Shard group identifier |
 | `ekbatan.shard.member` | long | transaction | Shard member identifier |
-| `db.operation.name` | string | repository | `"INSERT"` or `"UPDATE"` |
+| `db.operation.name` | string | repository | `"BATCH_INSERT"` or `"BATCH_UPDATE"` (set by `addAllNoResult` / `updateAllNoResult`) |
 | `ekbatan.entity.type` | string | repository | Simple class name of the domain object |
 | `ekbatan.batch.size` | long | repository | Number of records in the batch |
 | `ekbatan.event.count` | long | event.persist | Number of model events persisted |
@@ -965,7 +995,7 @@ void retry_recovers_after_transient_failure() throws Exception {
 - **JOOQ Docker Plugin** (Gradle) — Generates type-safe SQL classes from Flyway migrations via Docker
 - **Dependency versions** — Centralized in `gradle.properties`
 
-The framework repo itself is Gradle-only — `buildSrc/` convention plugins, the `ekbatan.publishing` plugin, and the `dev.monosoul.jooq-docker` integration assume Gradle. **Downstream consumers, however, can use either Gradle or Maven** — the 17 published JARs have plain Maven POMs with no Gradle-only metadata. The runnable proof is the Maven wallet matrix under `ekbatan-examples/`: 18 projects covering Spring Boot, Quarkus, and Micronaut across PostgreSQL/MariaDB/MySQL, with JVM and GraalVM native-image variants for each:
+The framework repo itself is Gradle-only — `build-logic/` convention plugins, the `ekbatan.publishing` plugin, and the `dev.monosoul.jooq-docker` integration assume Gradle. **Downstream consumers, however, can use either Gradle or Maven** — the 17 published JARs have plain Maven POMs with no Gradle-only metadata. The runnable proof is the Maven wallet matrix under `ekbatan-examples/`: 18 projects covering Spring Boot, Quarkus, and Micronaut across PostgreSQL/MariaDB/MySQL, with JVM and GraalVM native-image variants for each:
 
 - **Spring Boot:** [`spring-boot-wallet-rest-maven-pg`](./ekbatan-examples/spring-boot-wallet-rest-maven-pg), [`-mariadb`](./ekbatan-examples/spring-boot-wallet-rest-maven-mariadb), [`-mysql`](./ekbatan-examples/spring-boot-wallet-rest-maven-mysql)
 - **Spring Boot + GraalVM native-image:** [`spring-boot-wallet-rest-maven-native-pg`](./ekbatan-examples/spring-boot-wallet-rest-maven-native-pg), [`-mariadb`](./ekbatan-examples/spring-boot-wallet-rest-maven-native-mariadb), [`-mysql`](./ekbatan-examples/spring-boot-wallet-rest-maven-native-mysql)
@@ -1020,7 +1050,7 @@ Ekbatan is published on Maven Central under groupId `io.github.zyraz-io`. Note t
 
 Full release procedure — one-time Sonatype/GPG setup, per-release workflow, troubleshooting, GPG keyring recovery — lives in [RELEASE.md](./RELEASE.md). Load-bearing facts for agents working in the codebase:
 
-- **16 modules are published** (anything applying the `ekbatan.publishing` Gradle convention plugin). The 2 Debezium SMT shadow jars ship via GitHub Releases only, not Maven Central. Adding the `ekbatan.publishing` plugin to a new module makes it part of the published surface.
+- **17 modules are published** (anything applying the `ekbatan.publishing` Gradle convention plugin). The 2 Debezium SMT shadow jars ship via GitHub Releases only, not Maven Central. Adding the `ekbatan.publishing` plugin to a new module makes it part of the published surface.
 - **Tag-driven releases**. Pushing `vX.Y.Z` to `main` fires `.github/workflows/release.yml` → builds → JReleaser signs every artifact and uploads to Sonatype's validation window → **stops there**. A human verifies on `central.sonatype.com` and clicks Publish (or Drop). Controlled by `stage.set(UPLOAD)` in `build.gradle.kts`'s `jreleaser` block; switching to `Stage.FULL` would re-enable auto-publish.
 - **Coordinates are permanent**. Once `<groupId>:<artifactId>:<version>` lands on Maven Central it cannot be removed, modified, or overwritten. Public API changes in a published module are visible to every downstream consumer at that exact coordinate forever — treat each release as final.
 - **Client-side git hooks**. `.githooks/pre-commit` blocks commits when `./gradlew spotlessCheck` fails. `.githooks/pre-push` blocks `vX.Y.Z` tag pushes when `gradle.properties` `version` at the tagged commit doesn't match. Opt in once per clone via `git config core.hooksPath .githooks`; the release workflow re-checks the tag/version condition as a safety net.
