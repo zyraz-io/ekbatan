@@ -250,7 +250,7 @@ The exact set you need:
 | Dialect | Forced types you need |
 |---|---|
 | PostgreSQL | `Instant` (for `TIMESTAMP`) + `ObjectNode` (for `JSONB`) — two entries |
-| MariaDB | `Instant` (for `(?i:DATETIME|TIMESTAMP)`) + `ObjectNode` (for `(?i:JSON)`) — two entries |
+| MariaDB | `Instant` (for `(?i:DATETIME|TIMESTAMP)`) + `ObjectNode` (matched by column name, plus `withName("JSON")` — see below) — two entries |
 | MySQL | `Instant` (for `(?i:DATETIME|TIMESTAMP)`) + `ObjectNode` (for `(?i:JSON)`) + `UUID` (for `CHAR(36)`, name `.*\.id|.*_id`) — **three entries** |
 
 Skip an entry and you get the default jOOQ binding: `LocalDateTime` instead of `Instant`; `JSONB`/`JSON` (jOOQ's wrapper type) instead of `ObjectNode`; `String` instead of `UUID` on MySQL. The repository's `fromRecord` / `toRecord` then has to do the conversion in user code — usually a sign the codegen wasn't configured right.
@@ -273,7 +273,7 @@ The PG block is the cleanest of the three. See [PostgreSQL setup](postgresql.md)
 ### MariaDB — close to PG, with two twists
 
 - **`UUID`** has been native since MariaDB 10.7 — jOOQ maps it directly, **no forced-type entry needed.**
-- **`JSON`** is stored internally as `LONGTEXT` with a CHECK constraint; the JDBC driver reports the type as `JSON`. The case-insensitive regex `(?i:JSON)` is required because driver-reported type names aren't consistent (`JSON` vs `json`).
+- **`JSON`** is stored internally as `LONGTEXT` with a CHECK constraint, and that is what the driver reports - codegen sees `CLOB`, **not** `JSON`. So a type regex cannot match it: `(?i:JSON)` never fires, and `(?i:JSON|LONGTEXT)` fires but then fails to compile, because the shared converters are `Converter<JSON, ..>` and the generated field is `DataType<String>`. Match each JSON column by name via `withIncludeExpression`, and add `withName("JSON")` so the generated type is rewritten and the converter can attach. This is a MariaDB-only wrinkle - MySQL reports `JSON` properly and uses `(?i:JSON)` unchanged.
 - **`DATETIME(6)`** is the canonical six-digit-precision timestamp. The regex `(?i:DATETIME|TIMESTAMP)` covers both column types if you happen to use both.
 - **`eventlog` is a separate database**, not a schema. Adds an init-script step (`mariadb_init.sql`) for the `GRANT`, and `V0000__create_eventlog_database.sql` to create the database before the eventlog tables.
 

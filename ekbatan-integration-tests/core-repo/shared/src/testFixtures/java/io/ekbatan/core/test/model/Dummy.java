@@ -26,12 +26,19 @@ public final class Dummy extends Model<Dummy, Id<Dummy>, DummyState> {
     public final BigDecimal balance;
     public final List<String> aliases;
 
+    /**
+     * Nullable on purpose. A batch write in which every row leaves this null is what exposes an
+     * untyped NULL bind, so nothing here may default it to a non-null value.
+     */
+    public final Integer rewardPoints;
+
     Dummy(DummyBuilder builder) {
         super(builder);
         this.ownerId = Validate.notNull(builder.ownerId, "ownerId cannot be null");
         this.currency = Validate.notNull(builder.currency, "currency cannot be null");
         this.balance = Validate.notNull(builder.balance, "balance cannot be null");
         this.aliases = Objects.requireNonNullElse(builder.aliases, List.of());
+        this.rewardPoints = builder.rewardPoints;
     }
 
     public static DummyBuilder createDummy(UUID ownerId, Currency currency, BigDecimal balance, Instant createdDate) {
@@ -52,7 +59,8 @@ public final class Dummy extends Model<Dummy, Id<Dummy>, DummyState> {
                 .ownerId(ownerId)
                 .currency(currency)
                 .balance(balance)
-                .aliases(aliases);
+                .aliases(aliases)
+                .rewardPoints(rewardPoints);
     }
 
     public Dummy deposit(BigDecimal amount) {

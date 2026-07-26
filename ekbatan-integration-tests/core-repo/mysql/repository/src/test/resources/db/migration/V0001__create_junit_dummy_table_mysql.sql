@@ -8,6 +8,12 @@ CREATE TABLE dummies (
     balance DECIMAL(19, 4) NOT NULL,
     created_date DATETIME(6) NOT NULL,
     updated_date DATETIME(6) NOT NULL,
+    -- Nullable non-text column. Exists so a batch write can carry a column that is NULL in every
+    -- row, which is the shape that exposes an untyped NULL bind.
+    reward_points INT,
+    -- Converted column. Exists so a batch write carries a value whose Java type only reaches the
+    -- database through a jOOQ Converter; binding from the runtime class instead discards it.
+    aliases JSON,
     PRIMARY KEY (id),
     KEY idx_dummies_owner_id (owner_id)
 );

@@ -168,10 +168,13 @@ tasks {
                     .withIncludeTypes("(?i:DATETIME|TIMESTAMP)")
                     .withIncludeExpression(".*"),
                 ForcedType()
+                    // MariaDB reports JSON as LONGTEXT, so codegen sees CLOB. withName rewrites
+                    // the generated type back to JSON so the converter can attach; matching is by
+                    // column name because the reported type is not "JSON".
+                    .withName("JSON")
                     .withUserType("tools.jackson.databind.node.ObjectNode")
                     .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter")
-                    .withIncludeTypes("(?i:JSON)")
-                    .withIncludeExpression(".*"),
+                    .withIncludeExpression(".*\\.my_json_column"),
                 // No UUID forced type needed — MariaDB 10.7+ has a native UUID type and
                 // jOOQ maps it directly. Contrast MySQL, below.
             )
@@ -196,9 +199,11 @@ Three deltas vs. Postgres:
 |---|---|---|
 | `withContainer { image }` | implicit (plugin default) | explicit, with `MARIADB_*` env vars |
 | Instant ForcedType `includeTypes` | `TIMESTAMP` | `(?i:DATETIME|TIMESTAMP)` |
-| JSON ForcedType | `JSONB` + `JSONBObjectNodeConverter` | `(?i:JSON)` + `JSONObjectNodeConverter` (no `B`) |
+| JSON ForcedType | `JSONB` + `JSONBObjectNodeConverter`, matched by type | `withName("JSON")` + `JSONObjectNodeConverter` (no `B`), matched by **column expression** - see below |
 
 **Why the case-insensitive `(?i:...)` regex** — the MariaDB / MySQL JDBC drivers aren't consistent about case in reported type names (`JSON` vs `json`, `DATETIME` vs `datetime`). The case-insensitive group spares you from chasing those.
+
+**Why MariaDB's JSON entry doesn't use a type regex at all** — MariaDB implements `JSON` as an alias for `LONGTEXT`, and that is the type the driver reports, so codegen generates `DataType<String>`. No type regex helps: `(?i:JSON)` never matches, and `(?i:JSON|LONGTEXT)` matches but then fails to compile (`incompatible equality constraints JSON,String`), because `JSONObjectNodeConverter` is a `Converter<JSON, ..>`. Matching the column by name and adding `withName("JSON")` rewrites the generated type so the shared converter attaches. MySQL needs none of this.
 
 **Why no UUID converter on MariaDB** — MariaDB 10.7+ ships a native `UUID` type that jOOQ maps to `java.util.UUID` directly. Contrast with MySQL below, which has no native UUID and needs `CHAR(36)` → `UUID` conversion.
 

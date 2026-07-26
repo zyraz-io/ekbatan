@@ -29,8 +29,8 @@ tasks {
         usingJavaConfig {
             database.withForcedTypes(
                 ForcedType()
-                    .withUserType("com.google.gson.JsonElement")
-                    .withBinding("com.example.PostgresJSONGsonBinding")
+                    .withUserType("tools.jackson.databind.node.ArrayNode")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONBArrayNodeConverter")
                     .withIncludeTypes("JSONB"),
                 ForcedType()
                     .withUserType("java.time.Instant")

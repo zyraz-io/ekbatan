@@ -37,7 +37,21 @@ UUID strings are pure 7-bit ASCII (8-4-4-4-12 hex with hyphens). Pinning the cha
 
 ### Why MariaDB JSON columns still need a converter
 
-MariaDB stores `JSON` as `LONGTEXT` with a CHECK constraint internally, and the JDBC driver reports the type accordingly. The forced-type entry must use `(?i:JSON)` (or `(?i:JSON|LONGTEXT)` if you have legitimate `LONGTEXT` columns) and bind `JSONObjectNodeConverter`. See [JOOQ codegen on Gradle](/learn/complete-project-setup/#jooq-codegen) (for `generateJooqClasses { … }`) or [JOOQ codegen on Maven](/learn/complete-project-setup/#jooq-codegen) (for `<forcedType>`) for the full block.
+MariaDB stores `JSON` as `LONGTEXT` with a CHECK constraint internally, and the JDBC driver reports the type accordingly.
+
+This affects **code generation only**. A hand-declared field such as `SQLDataType.JSON.asConvertedDataType(new JSONObjectNodeConverter())` tells jOOQ the type rather than asking the database, so it is unaffected. Codegen takes the reported type, which on MariaDB is `LONGTEXT` -> `CLOB` -> `DataType<String>`; matching on `(?i:JSON)` therefore never fires, and widening to `(?i:JSON|LONGTEXT)` matches but does not compile, because the shared converters are `Converter<JSON, ..>`.
+
+Add `withName("JSON")` to rewrite the generated type back, and match by column expression:
+
+```kotlin
+ForcedType()
+    .withName("JSON")
+    .withUserType("tools.jackson.databind.node.ObjectNode")
+    .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter")
+    .withIncludeExpression(".*\\.my_json_column")
+```
+
+MariaDB only - MySQL reports `JSON` correctly and keeps `withIncludeTypes("(?i:JSON)")`. See [JOOQ codegen on Gradle](/learn/complete-project-setup/#jooq-codegen) (for `generateJooqClasses { … }`) or [JOOQ codegen on Maven](/learn/complete-project-setup/#jooq-codegen) (for `<forcedType>`) for the full block.
 
 ### Why MySQL UUID converter is `CHAR(36)`-shaped, not `BINARY(16)`
 

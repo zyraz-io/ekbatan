@@ -582,6 +582,144 @@ public abstract class BaseRepositoryTest {
         assertThat(dummy2Fetched.orElseThrow().version).isEqualTo(2);
     }
 
+    /**
+     * Regression guard for the batch-update bind types. The multi-row builders must bind each
+     * value against its target field, so the field's DataType and its Converter survive; binding
+     * from the value's runtime class instead makes jOOQ infer {@code timestamp with time zone}
+     * for an {@link Instant} and the database then shifts it by the session's offset.
+     *
+     * <p>Note this only <em>fails</em> on the defective code when the JVM default zone is not UTC,
+     * because that offset is what does the shifting. See the note on
+     * {@code should_updateAll_and_update_store_identical_timestamps}.
+     */
+    @Test
+    void should_preserve_exact_timestamps_when_updateAll_batches_multiple_rows() {
+        // GIVEN two dummies sharing a fixed created date - two rows, so updateAll cannot take the
+        // single-row short-circuit and must go through the batch builder
+        final var createdDate = Instant.parse("2026-01-01T10:00:00Z");
+        final var dummies = new ArrayList<Dummy>();
+        for (int i = 0; i < 2; i++) {
+            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, createdDate)
+                    .build());
+        }
+        repository.addAll(dummies);
+
+        // WHEN they are updated as a batch
+        repository.updateAll(
+                dummies.stream().map(w -> w.withdraw(BigDecimal.ONE)).toList());
+
+        // THEN the created date round-trips unshifted
+        final var fetchedDummies = repository.findAllByIds(
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
+
+        assertThat(fetchedDummies).hasSize(2);
+        fetchedDummies.forEach(w -> assertThat(w.createdDate).isEqualTo(createdDate));
+    }
+
+    /**
+     * Pins the two write paths together. {@code updateAll} short-circuits a single-element
+     * collection to the single-row {@code update}, so a defect confined to the batch builder is
+     * invisible unless the two are compared directly on the same input.
+     *
+     * <p>Both assertions below hold trivially under a UTC JVM. Running the suite with a non-UTC
+     * default zone (for example {@code -Duser.timezone=America/New_York}) is what makes this test
+     * able to observe the timestamp defect at all.
+     */
+    @Test
+    void should_updateAll_and_update_store_identical_timestamps() {
+        // GIVEN one dummy that will go through the single-row path and two that will be batched
+        final var createdDate = Instant.parse("2026-01-01T10:00:00Z");
+        final var single = createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, createdDate)
+                .build();
+        final var batched = new ArrayList<Dummy>();
+        for (int i = 0; i < 2; i++) {
+            batched.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, createdDate)
+                    .build());
+        }
+        repository.addAll(batched);
+        repository.add(single);
+
+        // WHEN one is updated alone and the others as a batch
+        repository.updateAll(List.of(single.withdraw(BigDecimal.ONE)));
+        repository.updateAll(
+                batched.stream().map(w -> w.withdraw(BigDecimal.ONE)).toList());
+
+        // THEN every row holds the same stored created date, whichever path wrote it
+        final var singleFetched = repository.getById(single.getId().getValue());
+        final var batchedFetched = repository.findAllByIds(
+                batched.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
+
+        assertThat(batchedFetched).hasSize(2);
+        batchedFetched.forEach(w -> assertThat(w.createdDate).isEqualTo(singleFetched.createdDate));
+        assertThat(singleFetched.createdDate).isEqualTo(createdDate);
+    }
+
+    /**
+     * A batch write in which a nullable non-text column is null in <em>every</em> row leaves the
+     * builder with no value to infer a type from. Binding against the target field types the NULL;
+     * inferring from the runtime class emits a bare NULL, which Postgres rejects outright with
+     * SQLSTATE 42804.
+     */
+    @Test
+    void should_updateAll_when_a_nullable_column_is_null_in_every_row() {
+        // GIVEN two dummies that both leave rewardPoints unset
+        final var dummies = new ArrayList<Dummy>();
+        for (int i = 0; i < 2; i++) {
+            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
+                    .build());
+        }
+        repository.addAll(dummies);
+        assertThat(dummies).allSatisfy(w -> assertThat(w.rewardPoints).isNull());
+
+        // WHEN they are updated as a batch, so the column is null across the whole batch
+        repository.updateAll(
+                dummies.stream().map(w -> w.withdraw(BigDecimal.ONE)).toList());
+
+        // THEN the statement succeeds and the column stays null
+        final var fetchedDummies = repository.findAllByIds(
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
+
+        assertThat(fetchedDummies).hasSize(2);
+        fetchedDummies.forEach(w -> assertThat(w.rewardPoints).isNull());
+    }
+
+    /**
+     * The {@code aliases} column only reaches the database through a jOOQ {@code Converter}. A
+     * write path that binds from the value's runtime class discards that converter along with the
+     * field's DataType, so the value never arrives in the shape the column expects.
+     */
+    @Test
+    void should_preserve_converted_values_when_updateAll_batches_multiple_rows() {
+        // GIVEN two dummies carrying converter-backed values, and a third to change them to
+        final var dummies = new ArrayList<Dummy>();
+        for (int i = 0; i < 2; i++) {
+            dummies.add(createDummy(randomUUID(), Currency.getInstance("EUR"), BigDecimal.TEN, Instant.now())
+                    .aliases(List.of("first-" + i, "second-" + i))
+                    .rewardPoints(10 + i)
+                    .build());
+        }
+        repository.addAll(dummies);
+
+        // WHEN the converted columns are changed through a batch update
+        final var updated = dummies.stream()
+                .map(w -> w.copy()
+                        .aliases(List.of("renamed-" + w.rewardPoints))
+                        .rewardPoints(w.rewardPoints + 100)
+                        .build())
+                .toList();
+        repository.updateAll(updated);
+
+        // THEN the stored values round-trip exactly
+        final var fetchedDummies = repository.findAllByIds(
+                dummies.stream().map(Dummy::getId).map(TypedValue::getValue).toList());
+
+        assertThat(fetchedDummies).hasSize(2);
+        fetchedDummies.forEach(w -> {
+            assertThat(w.rewardPoints).isIn(110, 111);
+            assertThat(w.aliases).containsExactly("renamed-" + (w.rewardPoints - 100));
+        });
+    }
+
     @Test
     void should_rollback_updateAll_inTransaction_when_exception() {
         // GIVEN

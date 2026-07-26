@@ -1615,11 +1615,14 @@ tasks {
                     .withIncludeTypes("(?i:DATETIME|TIMESTAMP)")
                     .withIncludeExpression(".*"),
                 // Note: no 'B' in JSONObjectNodeConverter (vs. Postgres's JSONBObjectNodeConverter).
+                // MariaDB reports JSON columns as LONGTEXT, so codegen sees CLOB: withName rewrites
+                // the generated type back to JSON so the converter attaches, and the column is
+                // matched by name because no type regex can match "JSON" here.
                 ForcedType()
+                    .withName("JSON")
                     .withUserType("tools.jackson.databind.node.ObjectNode")
                     .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter")
-                    .withIncludeTypes("(?i:JSON)")
-                    .withIncludeExpression(".*"),
+                    .withIncludeExpression(".*\\.my_json_column"),
                 // No UUID converter — MariaDB 10.7+ has a native UUID type that jOOQ maps
                 // to java.util.UUID directly. Contrast with MySQL below.
             )
@@ -2035,11 +2038,15 @@ Maven's codegen path uses three plugins in `<build><plugins>`. **docker-maven-pl
                                 <includeTypes>(?i:DATETIME|TIMESTAMP)</includeTypes>
                                 <includeExpression>.*</includeExpression>
                             </forcedType>
+                            <!-- MariaDB reports JSON as LONGTEXT, so codegen sees CLOB.
+                                 <name>JSON</name> rewrites the generated type back so the
+                                 converter attaches; the column is matched by name because the
+                                 reported type is not "JSON". -->
                             <forcedType>
+                                <name>JSON</name>
                                 <userType>tools.jackson.databind.node.ObjectNode</userType>
                                 <converter>io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter</converter>
-                                <includeTypes>(?i:JSON)</includeTypes>
-                                <includeExpression>.*</includeExpression>
+                                <includeExpression>.*\.my_json_column</includeExpression>
                             </forcedType>
                         </forcedTypes>
                     </database>

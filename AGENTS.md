@@ -309,7 +309,24 @@ The reference for what DDL type, what `SQLDataType`, and what JOOQ converter to 
 
 **Why MySQL needs `CHARACTER SET ascii` on UUID columns:** UUID strings are pure 7-bit ASCII (8-4-4-4-12 hex with hyphens). Pinning the charset to ASCII keeps each char at one byte (vs. 3–4 under `utf8mb4`), tightens index locality, and avoids accidental collation rules being applied. PostgreSQL's native `UUID` and MariaDB's `UUID` (≥ 10.7) bypass charset entirely.
 
-**Why MariaDB JSON columns need a converter despite JSON being a "real" type:** MariaDB stores JSON as `LONGTEXT` with a CHECK constraint internally, and the JDBC driver reports the type accordingly. The forced-type entry in `build.gradle.kts`'s `generateJooqClasses` block must use `(?i:JSON)` (or `(?i:JSON|LONGTEXT)` if you also have legitimate LONGTEXT columns) and bind `JSONObjectNodeConverter`.
+**Why MariaDB JSON columns need a converter despite JSON being a "real" type:** MariaDB stores JSON as `LONGTEXT` with a CHECK constraint internally, and the JDBC driver reports the type accordingly.
+
+Note the two contexts differ, and only the second is affected:
+
+- **Hand-declared fields** (as in `EventEntityRepository`) write `SQLDataType.JSON.asConvertedDataType(new JSONObjectNodeConverter())`. This *tells* jOOQ the type instead of asking the database, so MariaDB's `LONGTEXT` reporting never enters the picture. The table above describes this case.
+- **Code generation** takes the type the driver reports. On MariaDB that is `LONGTEXT` → `CLOB` → `DataType<String>`, so matching on `withIncludeTypes("(?i:JSON)")` never fires, and widening it to `(?i:JSON|LONGTEXT)` matches but then fails to compile: the shared converters are `Converter<JSON, ..>` and cannot attach to a `DataType<String>` field.
+
+The forced-type entry must therefore add `withName("JSON")`, which rewrites the generated `DataType` back to `JSON` so the shared converter fits, and match by column expression rather than by type:
+
+```kotlin
+ForcedType()
+    .withName("JSON")                                    // CLOB -> JSON, so the converter can attach
+    .withUserType("tools.jackson.databind.node.ObjectNode")
+    .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter")
+    .withIncludeExpression(".*\\.my_json_column")        // by name: the reported type is not "JSON"
+```
+
+Match each JSON column by name rather than forcing `(?i:LONGTEXT)` wholesale, which would also retype legitimate text columns. This applies to MariaDB only — MySQL reports `JSON` properly and uses `withIncludeTypes("(?i:JSON)")` unchanged. Working reference: `ekbatan-integration-tests/core-repo/mariadb/repository/build.gradle.kts`.
 
 **Why MySQL UUID converter is `CHAR(36)`-shaped, not `BINARY(16)`:** Ekbatan picks the human-readable form to keep query logs, raw JDBC dumps, and cross-dialect IDs grep-able. The `BINARY(16)` form would be more compact but isn't currently used anywhere in the project.
 
@@ -412,7 +429,7 @@ dependencies {
 }
 ```
 
-**MariaDB** — explicit `jooq { withContainer { … } }`; converter regex tightens to `(?i:JSON)` (not `LONGTEXT`, since MariaDB JDBC reports JSON columns as JSON when the dialect is MariaDB).
+**MariaDB** — explicit `jooq { withContainer { … } }`; the JSON entry cannot use a type regex at all, because MariaDB reports `JSON` columns as `LONGTEXT`. Match the column by name and add `withName("JSON")` — see [Column-type cheatsheet](#column-type-cheatsheet) above.
 ```kotlin
 jooq {
     withContainer {
@@ -447,10 +464,10 @@ tasks {
                     .withIncludeTypes("(?i:DATETIME|TIMESTAMP)")
                     .withIncludeExpression(".*"),
                 ForcedType()
+                    .withName("JSON")                    // MariaDB reports JSON as LONGTEXT; retype so the converter attaches
                     .withUserType("tools.jackson.databind.node.ObjectNode")
                     .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter")
-                    .withIncludeTypes("(?i:JSON)")
-                    .withIncludeExpression(".*"),
+                    .withIncludeExpression(".*\\.my_json_column"),   // by name; the reported type is not "JSON"
             )
         }
     }

@@ -246,7 +246,7 @@ Three deltas vs. the Postgres block:
 
 1. **Image** — `mariadb:11.8` with `MARIADB_*` env vars.
 2. **Driver** — `org.mariadb.jdbc:mariadb-java-client` on both `<dependencies>` (for the codegen plugin's `<dependency>` block) and `flyway-mysql` for Flyway plugin support (despite the name, `flyway-mysql` handles MariaDB).
-3. **Forced types** — `(?i:DATETIME|TIMESTAMP)` regex for `InstantConverter`, `(?i:JSON)` regex for `JSONObjectNodeConverter` (no `B`). No UUID forced type (MariaDB 10.7+ has native UUID).
+3. **Forced types** — `(?i:DATETIME|TIMESTAMP)` regex for `InstantConverter`; for JSON, `<name>JSON</name>` plus an `<includeExpression>` naming the column, bound to `JSONObjectNodeConverter` (no `B`) — a type regex cannot match, since MariaDB reports `JSON` columns as `LONGTEXT`. No UUID forced type (MariaDB 10.7+ has native UUID).
 
 The container block:
 
@@ -306,11 +306,14 @@ The forced types in the jOOQ generator block change to:
         <includeTypes>(?i:DATETIME|TIMESTAMP)</includeTypes>
         <includeExpression>.*</includeExpression>
     </forcedType>
+    <!-- MariaDB reports JSON as LONGTEXT, so codegen sees CLOB. <name>JSON</name> rewrites the
+         generated type back so the converter can attach, and the column is matched by name
+         because the reported type is not "JSON". -->
     <forcedType>
+        <name>JSON</name>
         <userType>tools.jackson.databind.node.ObjectNode</userType>
         <converter>io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter</converter>
-        <includeTypes>(?i:JSON)</includeTypes>
-        <includeExpression>.*</includeExpression>
+        <includeExpression>.*\.my_json_column</includeExpression>
     </forcedType>
 </forcedTypes>
 ```

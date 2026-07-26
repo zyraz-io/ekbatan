@@ -48,11 +48,11 @@ import org.jooq.impl.DSL;
  * aware routing, and a rich query surface.
  *
  * @param <PERSISTABLE> the domain object type this repository persists (a {@link Persistable}).
- * @param <RECORD> the jOOQ-generated {@link TableRecord} type for the table.
- * @param <TABLE> the jOOQ-generated {@link Table} type.
- * @param <DB_ID> the database-side identifier type (e.g. {@code UUID}, {@code Long}); typed
- *     separately from the domain-side ID so the framework can carry custom wrapper types like
- *     {@code Id<Wallet>} on the domain object while still emitting plain UUIDs to jOOQ.
+ * @param <RECORD>      the jOOQ-generated {@link TableRecord} type for the table.
+ * @param <TABLE>       the jOOQ-generated {@link Table} type.
+ * @param <DB_ID>       the database-side identifier type (e.g. {@code UUID}, {@code Long}); typed
+ *                      separately from the domain-side ID so the framework can carry custom wrapper types like
+ *                      {@code Id<Wallet>} on the domain object while still emitting plain UUIDs to jOOQ.
  */
 public abstract class AbstractRepository<
                 PERSISTABLE extends Persistable<?>,
@@ -61,25 +61,39 @@ public abstract class AbstractRepository<
                 DB_ID extends Comparable<?>>
         implements Repository<PERSISTABLE> {
 
-    /** The registry of per-shard connection pools and transaction managers; supplied by the application. */
+    /**
+     * The registry of per-shard connection pools and transaction managers; supplied by the application.
+     */
     public final DatabaseRegistry databaseRegistry;
 
-    /** Routes each row to a shard; defaults to {@link NoShardingStrategy} (single-shard) when not specified. */
+    /**
+     * Routes each row to a shard; defaults to {@link NoShardingStrategy} (single-shard) when not specified.
+     */
     public final ShardingStrategy<DB_ID> shardingStrategy;
 
-    /** The jOOQ {@link Table} this repository reads/writes; typically a generated {@code Tables.MY_TABLE} singleton. */
+    /**
+     * The jOOQ {@link Table} this repository reads/writes; typically a generated {@code Tables.MY_TABLE} singleton.
+     */
     protected final TABLE table;
 
-    /** The jOOQ {@link TableField} for the primary key; used by {@link #findById}, {@link #getById}, etc. */
+    /**
+     * The jOOQ {@link TableField} for the primary key; used by {@link #findById}, {@link #getById}, etc.
+     */
     public final TableField<RECORD, DB_ID> idField;
 
-    /** The jOOQ {@link TableField} for the optimistic-locking version column ({@code version}). */
+    /**
+     * The jOOQ {@link TableField} for the optimistic-locking version column ({@code version}).
+     */
     protected final TableField<RECORD, Long> versionField;
 
-    /** The jOOQ {@link TableField} for the discriminator/state column ({@code state}). */
+    /**
+     * The jOOQ {@link TableField} for the discriminator/state column ({@code state}).
+     */
     protected final TableField<RECORD, String> stateField;
 
-    /** The runtime {@link Class} of the persistable type; needed for reflective {@code nextVersion} and event emission. */
+    /**
+     * The runtime {@link Class} of the persistable type; needed for reflective {@code nextVersion} and event emission.
+     */
     public final Class<PERSISTABLE> domainClass;
 
     private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
@@ -91,9 +105,9 @@ public abstract class AbstractRepository<
      * Convenience constructor for single-shard repositories - equivalent to passing
      * {@link NoShardingStrategy}.
      *
-     * @param domainClass runtime {@link Class} of the persistable type.
-     * @param table the jOOQ-generated table.
-     * @param idField the jOOQ-generated id field.
+     * @param domainClass      runtime {@link Class} of the persistable type.
+     * @param table            the jOOQ-generated table.
+     * @param idField          the jOOQ-generated id field.
      * @param databaseRegistry the registry of connection pools / transaction managers.
      */
     protected AbstractRepository(
@@ -107,9 +121,9 @@ public abstract class AbstractRepository<
     /**
      * Primary constructor for sharded repositories.
      *
-     * @param domainClass runtime {@link Class} of the persistable type.
-     * @param table the jOOQ-generated table.
-     * @param idField the jOOQ-generated id field.
+     * @param domainClass      runtime {@link Class} of the persistable type.
+     * @param table            the jOOQ-generated table.
+     * @param idField          the jOOQ-generated id field.
      * @param databaseRegistry the registry of connection pools / transaction managers.
      * @param shardingStrategy strategy that maps each row's ID to a {@link ShardIdentifier}.
      */
@@ -139,7 +153,9 @@ public abstract class AbstractRepository<
         return shardingStrategy;
     }
 
-    /** {@return the human-readable name of the domain type, used in error messages} */
+    /**
+     * {@return the human-readable name of the domain type, used in error messages}
+     */
     protected abstract String getDomainTypeName();
 
     /**
@@ -160,7 +176,9 @@ public abstract class AbstractRepository<
 
     // --- db() variants ---
 
-    /** {@return the primary writer {@link DSLContext} for the default shard (non-transactional)} */
+    /**
+     * {@return the primary writer {@link DSLContext} for the default shard (non-transactional)}
+     */
     protected DSLContext db() {
         return databaseRegistry.primary.get(databaseRegistry.defaultShard);
     }
@@ -195,7 +213,9 @@ public abstract class AbstractRepository<
         return databaseRegistry.primary.get(shard);
     }
 
-    /** {@return every primary writer context, one per shard (scatter-gather entrypoint for queries spanning shards)} */
+    /**
+     * {@return every primary writer context, one per shard (scatter-gather entrypoint for queries spanning shards)}
+     */
     protected Collection<DSLContext> dbs() {
         if (shardingStrategy instanceof NoShardingStrategy<?>) {
             return List.of(db());
@@ -205,7 +225,9 @@ public abstract class AbstractRepository<
 
     // --- readonlyDb() variants ---
 
-    /** {@return the read-replica {@link DSLContext} for the default shard; falls back to primary if no replica is configured} */
+    /**
+     * {@return the read-replica {@link DSLContext} for the default shard; falls back to primary if no replica is configured}
+     */
     protected DSLContext readonlyDb() {
         return databaseRegistry.secondary.get(databaseRegistry.defaultShard);
     }
@@ -230,7 +252,9 @@ public abstract class AbstractRepository<
         return databaseRegistry.secondary.get(shard);
     }
 
-    /** {@return every read-replica context, one per shard} */
+    /**
+     * {@return every read-replica context, one per shard}
+     */
     protected Collection<DSLContext> readonlyDbs() {
         if (shardingStrategy instanceof NoShardingStrategy<?>) {
             return List.of(readonlyDb());
@@ -240,7 +264,9 @@ public abstract class AbstractRepository<
 
     // --- txDb() variants ---
 
-    /** {@return the in-flight transaction's {@link DSLContext} for the default shard, or empty if no transaction is bound} */
+    /**
+     * {@return the in-flight transaction's {@link DSLContext} for the default shard, or empty if no transaction is bound}
+     */
     protected Optional<DSLContext> txDb() {
         return databaseRegistry.defaultTransactionManager().currentTransactionDbContext();
     }
@@ -277,7 +303,9 @@ public abstract class AbstractRepository<
 
     // --- txDbElseDb() variants ---
 
-    /** {@return the in-flight transaction's context for the default shard if bound, otherwise a non-transactional primary context} */
+    /**
+     * {@return the in-flight transaction's context for the default shard if bound, otherwise a non-transactional primary context}
+     */
     protected DSLContext txDbElseDb() {
         return txDb().orElseGet(this::db);
     }
@@ -584,7 +612,15 @@ public abstract class AbstractRepository<
         final var records = domainObjects.stream().map(this::toRecord).toList();
         final var fields = records.getFirst().fields();
 
-        final var rows = records.stream().map(m -> DSL.row(m.intoArray())).toArray(RowN[]::new);
+        // Bind each value against its target field rather than letting DSL.row(Object...) re-infer
+        // a DataType from the value's runtime class - that inference discards the field's declared
+        // DataType and any attached Converter. DSL.row passes Fields through untouched, so wrapping
+        // each value in DSL.val(value, field) preserves both. Mirrors buildUpdateAllQueryMariadb.
+        final var rows = records.stream()
+                .map(record -> DSL.row(Arrays.stream(fields)
+                        .map(field -> (Object) DSL.val(record.get(field), field))
+                        .toArray()))
+                .toArray(RowN[]::new);
 
         final var columnNames = Arrays.stream(fields).map(Field::getName).toArray(String[]::new);
 
@@ -730,7 +766,9 @@ public abstract class AbstractRepository<
         return ctx.fetchExists(ctx.selectOne().from(table).where(idField.eq(id).and(notDeleted())));
     }
 
-    /** {@return count of non-soft-deleted rows in this table, summed across all shards} */
+    /**
+     * {@return count of non-soft-deleted rows in this table, summed across all shards}
+     */
     public long count() {
         return dbs().stream()
                 .mapToLong(ctx -> ctx.fetchCount(table, notDeleted()))
@@ -870,10 +908,10 @@ public abstract class AbstractRepository<
      * resolve {@code version} and {@code state} fields without subclasses having to pass them
      * explicitly.
      *
-     * @param table the jOOQ table.
+     * @param table     the jOOQ table.
      * @param fieldName the field's column name.
      * @param fieldType the expected Java type.
-     * @param <F> the field's Java type.
+     * @param <F>       the field's Java type.
      * @return the matching {@link TableField}, or {@code null} if absent / mistyped.
      */
     @SuppressWarnings("unchecked")

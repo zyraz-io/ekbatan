@@ -9,6 +9,7 @@ import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.core.shard.EmbeddedBitsShardingStrategy;
 import io.ekbatan.core.test.generated.jooq.tables.Dummies;
 import io.ekbatan.core.test.generated.jooq.tables.records.DummiesRecord;
+import io.ekbatan.core.test.model.Aliases;
 import io.ekbatan.core.test.model.Dummy;
 import io.ekbatan.core.test.model.DummyState;
 import java.util.Currency;
@@ -30,6 +31,8 @@ public class ShardedDummyRepository extends ModelRepository<Dummy, DummiesRecord
                 .balance(record.getBalance())
                 .createdDate(record.getCreatedDate())
                 .updatedDate(record.getUpdatedDate())
+                .rewardPoints(record.getRewardPoints())
+                .aliases(Aliases.toList(record.getAliases()))
                 .build();
     }
 
@@ -43,6 +46,8 @@ public class ShardedDummyRepository extends ModelRepository<Dummy, DummiesRecord
                 model.currency.getCurrencyCode(),
                 model.balance,
                 model.createdDate,
-                model.updatedDate);
+                model.updatedDate,
+                model.rewardPoints,
+                Aliases.toArrayNode(model.aliases));
     }
 }

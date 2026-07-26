@@ -172,7 +172,7 @@ CREATE INDEX idx_wallets_owner_id ON wallets(owner_id);
 
 ## jOOQ codegen
 
-Explicit `jooq { withContainer { … } }` is required — the plugin defaults to Postgres. Full reference: [JOOQ codegen on Gradle → MariaDB](../gradle/jooq-codegen.md#mariadb). **On Maven?** See [JOOQ codegen on Maven → MariaDB](../maven/jooq-codegen.md#mariadb) — same dialect deltas (image, env vars, `(?i:DATETIME|TIMESTAMP)`, `(?i:JSON)`) expressed as `<plugin>` blocks in a `pom.xml`.
+Explicit `jooq { withContainer { … } }` is required — the plugin defaults to Postgres. Full reference: [JOOQ codegen on Gradle → MariaDB](../gradle/jooq-codegen.md#mariadb). **On Maven?** See [JOOQ codegen on Maven → MariaDB](../maven/jooq-codegen.md#mariadb) — same dialect deltas (image, env vars, `(?i:DATETIME|TIMESTAMP)`, and the `withName("JSON")` + column-expression form for JSON) expressed as `<plugin>` blocks in a `pom.xml`.
 
 ```kotlin
 jooq {
@@ -210,10 +210,13 @@ tasks {
                     .withIncludeTypes("(?i:DATETIME|TIMESTAMP)")
                     .withIncludeExpression(".*"),
                 ForcedType()
+                    // MariaDB reports JSON as LONGTEXT, so the generated type is CLOB and a
+                    // Converter<JSON, ..> cannot attach. withName rewrites it back to JSON, and
+                    // matching is by column name because the reported type is not "JSON".
+                    .withName("JSON")
                     .withUserType("tools.jackson.databind.node.ObjectNode")
                     .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONObjectNodeConverter")
-                    .withIncludeTypes("(?i:JSON)")
-                    .withIncludeExpression(".*"),
+                    .withIncludeExpression(".*\\.my_json_column"),
                 // No UUID forced type needed — MariaDB has a native UUID type and jOOQ maps it
                 // to java.util.UUID directly. Contrast with MySQL, which uses CHAR(36).
             )
@@ -238,7 +241,7 @@ dependencies {
 ## MariaDB-specific gotchas
 
 - **Native UUID (10.7+) — no converter for IDs.** MariaDB has a real `UUID` type; jOOQ maps it directly to `java.util.UUID`. No `withForcedTypes` entry for UUID. On a 10.6-or-earlier server you'd need `CHAR(36)` + `UuidStringConverter` like MySQL.
-- **`JSON`, not `JSONB`** — MariaDB has no JSONB. Use `JSONObjectNodeConverter` / `JSONArrayNodeConverter` (without the `B`). MariaDB stores `JSON` as `LONGTEXT` with a CHECK constraint internally; the JDBC driver reports it accordingly, which is why the forced-type regex `(?i:JSON)` works (and `(?i:JSON|LONGTEXT)` is necessary if you also have legitimate `LONGTEXT` columns). See [multi-database.md → Why MariaDB JSON columns still need a converter](multi-database.md#why-mariadb-json-columns-still-need-a-converter).
+- **`JSON`, not `JSONB`** — MariaDB has no JSONB. Use `JSONObjectNodeConverter` / `JSONArrayNodeConverter` (without the `B`). MariaDB stores `JSON` as `LONGTEXT` with a CHECK constraint internally; the JDBC driver reports it accordingly, so codegen sees `CLOB`, not `JSON`. Match the column by name and add `withName("JSON")` to rewrite the generated type - `withIncludeTypes("(?i:JSON)")` never matches, and `(?i:JSON|LONGTEXT)` matches but fails to compile. See [multi-database.md → Why MariaDB JSON columns still need a converter](multi-database.md#why-mariadb-json-columns-still-need-a-converter).
 - **No partial indexes.** Drop the `WHERE delivered = FALSE` and `WHERE state IN (…)` clauses from the Postgres migrations when porting, and put the predicate columns in the full indexes instead, e.g. `(delivered, event_type, event_date)` for fan-out.
 - **`DATETIME(6)`, not `TIMESTAMP`.** App-written columns use `DATETIME(6)` (6-digit fractional seconds, no implicit `ON UPDATE` semantics). `TIMESTAMP` has a different value range and quirks around `NULL` / `DEFAULT CURRENT_TIMESTAMP` — reserve it for db-scheduler's table.
 - **eventlog as a separate database.** Two consequences: a `V0000__create_eventlog_database.sql` migration, and an init script that grants the connecting user cross-database rights. Don't try to put `GRANT` statements in Flyway migrations — Flyway connects as the named user, which can't grant itself anything.

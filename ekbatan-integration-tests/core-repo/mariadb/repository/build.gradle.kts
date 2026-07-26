@@ -51,6 +51,16 @@ tasks {
         schemaToPackageMapping.put("public", "")
         usingJavaConfig {
             database.withForcedTypes(
+                // MariaDB's JSON is an alias for LONGTEXT, so the generator reports this column as
+                // CLOB. withName("JSON") rewrites the generated DataType back to JSON, which is
+                // what lets the shared JSON-typed converter attach; without it the generated code
+                // does not compile (Converter<JSON, ..> against a DataType<String>). Matching is by
+                // column expression rather than by type, since the reported type is not "JSON".
+                ForcedType()
+                    .withName("JSON")
+                    .withUserType("tools.jackson.databind.node.ArrayNode")
+                    .withConverter("io.ekbatan.core.persistence.jooq.converter.JSONArrayNodeConverter")
+                    .withIncludeExpression(".*dummies\\.aliases"),
                 ForcedType()
                     .withUserType("java.time.Instant")
                     .withConverter("io.ekbatan.core.persistence.jooq.converter.InstantConverter")
