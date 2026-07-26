@@ -432,6 +432,57 @@ class PostgresKeyedLockProviderTest {
         verify(provider, times(1)).release(jdbc.connection);
     }
 
+    @Test
+    void interrupted_thread_should_still_re_enter_a_lock_it_already_holds() throws Exception {
+        // Re-entry cannot block, so there is nothing for the interrupt to abort - and a cancelled
+        // thread running cleanup is precisely the caller that needs its own lock back.
+        var jdbc = new JdbcMocks();
+        var provider = newProvider(jdbc.connection);
+        var lock = newLock(provider);
+
+        var outer = lock.acquire("k", ONE_HOUR);
+        Thread.currentThread().interrupt();
+        try {
+            var inner = lock.acquire("k", ONE_HOUR);
+
+            assertThat(inner.isHeld()).isTrue();
+            // The flag is left for the caller's next blocking call rather than consumed here.
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            inner.close();
+        } finally {
+            Thread.interrupted(); // clear for subsequent tests
+            outer.close();
+        }
+    }
+
+    // ----- Connection acquisition -----
+
+    @Test
+    void connection_acquisition_failure_should_surface_as_lock_acquisition_exception() {
+        // The database being unreachable is the most likely reason a lock cannot be taken, and
+        // ConnectionProvider reports it as a bare RuntimeException. It has to be translated, or it
+        // slips past every catch clause written against the documented type.
+        var provider = mock(ConnectionProvider.class);
+        when(provider.acquire()).thenThrow(new RuntimeException("Failed to acquire connection"));
+        var lock = newLock(provider);
+
+        assertThatThrownBy(() -> lock.tryAcquire("k", ONE_SECOND, ONE_HOUR))
+                .isInstanceOf(LockAcquisitionException.class)
+                .hasMessageContaining("k")
+                .hasCauseInstanceOf(RuntimeException.class)
+                .satisfies(
+                        thrown -> assertThat(thrown.getCause()).hasMessageContaining("Failed to acquire connection"));
+    }
+
+    @Test
+    void acquire_should_translate_connection_acquisition_failure_too() {
+        var provider = mock(ConnectionProvider.class);
+        when(provider.acquire()).thenThrow(new RuntimeException("Failed to acquire connection"));
+        var lock = newLock(provider);
+
+        assertThatThrownBy(() -> lock.acquire("k", ONE_HOUR)).isInstanceOf(LockAcquisitionException.class);
+    }
+
     // ----- Helpers -----
 
     private static PostgresKeyedLockProvider newLock() {

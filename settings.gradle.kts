@@ -22,6 +22,7 @@ include(
     "ekbatan-events-streaming-action-event-avro",
     "ekbatan-events-streaming-action-event-protobuf",
     "ekbatan-events-streaming-debezium-smt",
+    "ekbatan-events-streaming-debezium-smt-common",
     "ekbatan-events-streaming-debezium-smt-avro",
     "ekbatan-events-streaming-debezium-smt-protobuf",
     "ekbatan-events-local-event-handler",
@@ -43,6 +44,7 @@ include(
     "ekbatan-integration-tests-event-pipeline-debezium-kafka-json",
     "ekbatan-integration-tests-event-pipeline-debezium-kafka-avro-smt",
     "ekbatan-integration-tests-event-pipeline-debezium-kafka-protobuf-smt",
+    "ekbatan-integration-tests-event-pipeline-debezium-kafka-dialects-smt",
     "ekbatan-integration-tests-distributed-jobs-pg",
     "ekbatan-integration-tests-local-event-handler-shared",
     "ekbatan-integration-tests-local-event-handler-pg",
@@ -69,6 +71,7 @@ project(":ekbatan-events-streaming-action-event-json").projectDir = file("ekbata
 project(":ekbatan-events-streaming-action-event-avro").projectDir = file("ekbatan-events/streaming/action-event/avro")
 project(":ekbatan-events-streaming-action-event-protobuf").projectDir = file("ekbatan-events/streaming/action-event/protobuf")
 project(":ekbatan-events-streaming-debezium-smt").projectDir = file("ekbatan-events/streaming/debezium-smt")
+project(":ekbatan-events-streaming-debezium-smt-common").projectDir = file("ekbatan-events/streaming/debezium-smt/common")
 project(":ekbatan-events-streaming-debezium-smt-avro").projectDir = file("ekbatan-events/streaming/debezium-smt/avro")
 project(":ekbatan-events-streaming-debezium-smt-protobuf").projectDir = file("ekbatan-events/streaming/debezium-smt/protobuf")
 project(":ekbatan-events-local-event-handler").projectDir = file("ekbatan-events/local-event-handler")
@@ -90,6 +93,7 @@ project(":ekbatan-integration-tests-event-pipeline-common").projectDir = file("e
 project(":ekbatan-integration-tests-event-pipeline-debezium-kafka-json").projectDir = file("ekbatan-integration-tests/event-pipeline/debezium-kafka-json")
 project(":ekbatan-integration-tests-event-pipeline-debezium-kafka-avro-smt").projectDir = file("ekbatan-integration-tests/event-pipeline/debezium-kafka-avro-smt")
 project(":ekbatan-integration-tests-event-pipeline-debezium-kafka-protobuf-smt").projectDir = file("ekbatan-integration-tests/event-pipeline/debezium-kafka-protobuf-smt")
+project(":ekbatan-integration-tests-event-pipeline-debezium-kafka-dialects-smt").projectDir = file("ekbatan-integration-tests/event-pipeline/debezium-kafka-dialects-smt")
 project(":ekbatan-integration-tests-distributed-jobs-pg").projectDir = file("ekbatan-integration-tests/distributed-jobs-pg")
 project(":ekbatan-integration-tests-local-event-handler-shared").projectDir = file("ekbatan-integration-tests/local-event-handler/shared")
 project(":ekbatan-integration-tests-local-event-handler-pg").projectDir = file("ekbatan-integration-tests/local-event-handler/pg")

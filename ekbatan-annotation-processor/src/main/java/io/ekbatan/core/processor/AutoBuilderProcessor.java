@@ -7,6 +7,7 @@ import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
+import com.squareup.javapoet.TypeVariableName;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -82,6 +83,19 @@ public class AutoBuilderProcessor extends AbstractProcessor {
                 generateBuilderClass(classElement);
             } catch (IOException e) {
                 error(element, "Error generating builder for %s: %s", classElement.getQualifiedName(), e.getMessage());
+            } catch (RuntimeException e) {
+                // A processor runs inside javac, so an escaping unchecked exception is reported as
+                // "An annotation processor threw an uncaught exception" followed by a stack trace
+                // through Ekbatan's internals - with nothing naming the class that triggered it.
+                // Reporting against the element keeps it a normal compile error the user can act
+                // on. The specific known trigger is validated up front in generateBuilderClass;
+                // this is the backstop for everything not yet anticipated.
+                error(
+                        element,
+                        "Failed to generate builder for %s: %s: %s",
+                        classElement.getQualifiedName(),
+                        e.getClass().getSimpleName(),
+                        e.getMessage());
             }
         }
         return true;
@@ -93,29 +107,85 @@ public class AutoBuilderProcessor extends AbstractProcessor {
         final var className = classElement.getSimpleName().toString();
         final var builderClassName = className + "Builder";
 
-        // Get the type parameters from the superclass (Model or Entity)
+        // The generated builder reads ID and STATE straight off the superclass's type arguments,
+        // so @AutoBuilder only means anything on a direct subclass of Model or Entity. Validated
+        // here rather than assumed: the casts and index reads below used to run unguarded, so
+        // annotating anything else - a plain class, an indirect subclass, a raw extends - threw
+        // ClassCastException or IndexOutOfBoundsException out of the processor. javac surfaces
+        // that as an internal crash with a stack trace through Ekbatan, naming neither the
+        // annotated class nor the mistake.
         final var superclass = classElement.getSuperclass();
-        final var typeArguments = ((DeclaredType) superclass).getTypeArguments();
+        if (!(superclass instanceof DeclaredType declaredSuperclass)) {
+            error(
+                    classElement,
+                    "@AutoBuilder requires %s to directly extend %s.%s or %s.%s",
+                    classElement.getQualifiedName(),
+                    MODEL_PACKAGE,
+                    MODEL_CLASS,
+                    MODEL_PACKAGE,
+                    ENTITY_CLASS);
+            return;
+        }
+        final var superClassElement = (TypeElement) declaredSuperclass.asElement();
+        final var superClassName = superClassElement.getSimpleName().toString();
+        final var superQualifiedName = superClassElement.getQualifiedName().toString();
+        if (!superQualifiedName.equals(MODEL_PACKAGE + "." + MODEL_CLASS)
+                && !superQualifiedName.equals(MODEL_PACKAGE + "." + ENTITY_CLASS)) {
+            error(
+                    classElement,
+                    "@AutoBuilder requires %s to directly extend %s.%s or %s.%s, but it extends %s",
+                    classElement.getQualifiedName(),
+                    MODEL_PACKAGE,
+                    MODEL_CLASS,
+                    MODEL_PACKAGE,
+                    ENTITY_CLASS,
+                    superQualifiedName);
+            return;
+        }
+
+        final var typeArguments = declaredSuperclass.getTypeArguments();
+        if (typeArguments.size() < 3) {
+            error(
+                    classElement,
+                    "@AutoBuilder requires %s to extend %s with all of its type arguments spelled "
+                            + "out (raw %s is not supported)",
+                    classElement.getQualifiedName(),
+                    superClassName,
+                    superClassName);
+            return;
+        }
 
         final var modelType = TypeName.get(classElement.asType());
-        final var superClassName = ((TypeElement) ((DeclaredType) superclass).asElement())
-                .getSimpleName()
-                .toString();
 
         // Extract type parameters based on superclass type
         final var idType = TypeName.get(typeArguments.get(1)); // ID type is always second parameter
         final var stateType = TypeName.get(typeArguments.get(2)); // STATE type is always third parameter
 
+        // A generic domain class has to hand its type variables to the builder. Without this the
+        // builder was declared bare while its fields, setters and superclass argument still
+        // referred to T, so the generated file failed to compile with "cannot find symbol: class
+        // T" - reported against a file the user never wrote and cannot open. Empty for every
+        // non-generic class, where addTypeVariables is a no-op and builderTypeName collapses to
+        // the plain ClassName, so the generated output is unchanged.
+        final var typeVariables = classElement.getTypeParameters().stream()
+                .map(TypeVariableName::get)
+                .toList();
+        final var rawBuilderType = ClassName.get(packageName, builderClassName);
+        final TypeName builderTypeName = typeVariables.isEmpty()
+                ? rawBuilderType
+                : ParameterizedTypeName.get(rawBuilderType, typeVariables.toArray(TypeName[]::new));
+
         // Create the builder class with proper type parameters and @Generated annotation
         final var typeSpecBuilder = TypeSpec.classBuilder(builderClassName)
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .addTypeVariables(typeVariables)
                 .addAnnotation(AnnotationSpec.builder(Generated.class)
                         .addMember("value", "$S", AutoBuilderProcessor.class.getName())
                         .build())
                 .superclass(ParameterizedTypeName.get(
                         ClassName.get(MODEL_PACKAGE, superClassName, BUILDER_CLASS),
                         idType, // ID<M>
-                        ClassName.get(packageName, builderClassName), // B (builder type)
+                        builderTypeName, // B (builder type)
                         modelType, // M (model type)
                         stateType // STATE (dynamic)
                         ));
@@ -139,7 +209,7 @@ public class AutoBuilderProcessor extends AbstractProcessor {
 
             MethodSpec setter = MethodSpec.methodBuilder(fieldName)
                     .addModifiers(Modifier.PUBLIC)
-                    .returns(ClassName.get(packageName, builderClassName))
+                    .returns(builderTypeName)
                     .addParameter(fieldType, fieldName)
                     .addStatement("this.$N = $N", fieldName, fieldName)
                     .addStatement("return this")
@@ -163,10 +233,13 @@ public class AutoBuilderProcessor extends AbstractProcessor {
         // Add static factory method (using classname in lowercase as method name)
         final var factoryMethodName =
                 Character.toLowerCase(className.charAt(0)) + (className.length() > 1 ? className.substring(1) : "");
+        // A static method cannot see the class's type variables, so it declares its own copy:
+        // "public static <T> BoxBuilder<T> box()". Again a no-op when there are none.
         final var factoryMethod = MethodSpec.methodBuilder(factoryMethodName)
                 .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-                .returns(ClassName.get(packageName, builderClassName))
-                .addStatement("return new $T()", ClassName.get(packageName, builderClassName))
+                .addTypeVariables(typeVariables)
+                .returns(builderTypeName)
+                .addStatement("return new $T()", builderTypeName)
                 .build();
         typeSpecBuilder.addMethod(factoryMethod);
 

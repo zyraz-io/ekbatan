@@ -143,28 +143,50 @@ public final class DatabaseRegistry implements AutoCloseable {
      * @return a fully built registry with one transaction manager per shard member.
      */
     public static DatabaseRegistry fromConfig(ShardingConfig config) {
+        // Checked before a single pool is opened. This ran after the loop, which meant a mistyped
+        // default-shard - the one error anyone actually makes here - built every pool first and
+        // then threw. Nothing held a reference to them afterwards, so each abandoned pool kept its
+        // Hikari housekeeper thread alive for the life of the JVM. Usually invisible, because a
+        // failed startup normally ends in process exit; not invisible in a test suite, or wherever
+        // something catches the failure and retries.
+        //
+        // The check needs no pools at all - it is a scan of the config - so the ordering was only
+        // ever accidental.
+        Validate.isTrue(
+                config.groups.stream()
+                        .flatMap(group ->
+                                group.members.stream().map(member -> ShardIdentifier.of(group.group, member.member)))
+                        .anyMatch(id -> id.equals(config.defaultShard)),
+                "defaultShard must reference a registered database");
+
         var builder = databaseRegistry();
-        var defaultRegistered = false;
 
         for (var group : config.groups) {
             for (var member : group.members) {
                 var shardIdentifier = ShardIdentifier.of(group.group, member.member);
                 var primaryDataSourceConfig = member.primaryConfig();
-                var secondaryDataSourceConfig = member.secondaryConfig().orElse(primaryDataSourceConfig);
                 var primaryProvider = ConnectionProvider.hikariConnectionProvider(primaryDataSourceConfig);
-                var secondaryProvider = ConnectionProvider.hikariConnectionProvider(secondaryDataSourceConfig);
+                // Fall back on the primary *provider*, not on its config. Falling back on the
+                // config still ran the factory a second time, and identical settings do not
+                // produce the same pool - they produce a second one against the same database,
+                // with its own connections and housekeeping threads. A member with no replica
+                // therefore opened twice the configured maximum: eight shards at 20 held 320
+                // connections where the operator had budgeted 160, invisibly, because both pools
+                // were perfectly healthy. TransactionManager#close already assumes sharing - it
+                // closes the secondary only when it is a different object.
+                var secondaryProvider = member.secondaryConfig()
+                        .map(ConnectionProvider::hikariConnectionProvider)
+                        .orElse(primaryProvider);
                 var tm = new TransactionManager(
                         primaryProvider, secondaryProvider, primaryDataSourceConfig.dialect, shardIdentifier);
                 if (shardIdentifier.equals(config.defaultShard)) {
                     builder.withDefaultDatabase(tm);
-                    defaultRegistered = true;
                 } else {
                     builder.withDatabase(tm);
                 }
             }
         }
 
-        Validate.isTrue(defaultRegistered, "defaultShard must reference a registered database");
         return builder.build();
     }
 

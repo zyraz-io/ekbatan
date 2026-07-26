@@ -98,7 +98,7 @@ public class SingleTableJsonEventPersister implements EventPersister {
                                         event.modelId,
                                         event.modelName,
                                         eventTypeName(event),
-                                        (ObjectNode) objectMapper.valueToTree(event),
+                                        serializeEventPayload(event),
                                         completionDate)
                                 .build())
                         .collect(java.util.stream.Collectors.toList());
@@ -112,6 +112,30 @@ public class SingleTableJsonEventPersister implements EventPersister {
         } finally {
             span.end();
         }
+    }
+
+    /**
+     * Serializes one model event to the JSON object the {@code payload} column holds.
+     *
+     * <p>The same rule as {@link #serializeActionParams}, and now the same error. Passing
+     * {@code valueToTree(event)} straight into the {@code ObjectNode} parameter looked cast-free
+     * but was not: {@code valueToTree} is generic in its return type, so the compiler inserted the
+     * cast silently and an event that serialized to anything else failed as a bare
+     * {@code ClassCastException} naming Jackson node classes, from inside the persister, with
+     * nothing pointing at the event. An event carrying {@code @JsonValue} is the realistic way in -
+     * Jackson then renders the whole event as that single value.
+     *
+     * @param event the model event being persisted.
+     * @return the event serialized as a JSON object.
+     */
+    private ObjectNode serializeEventPayload(Object event) {
+        final var serializedPayload = objectMapper.valueToTree(event);
+        Validate.isInstanceOf(
+                ObjectNode.class,
+                serializedPayload,
+                "event must serialize to a JSON object; check for @JsonValue or a custom serializer"
+                        + " rendering it as a scalar/list");
+        return (ObjectNode) serializedPayload;
     }
 
     private ObjectNode serializeActionParams(Object actionParams) {

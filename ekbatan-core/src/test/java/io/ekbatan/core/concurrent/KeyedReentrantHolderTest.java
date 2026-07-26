@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -31,6 +33,51 @@ class KeyedReentrantHolderTest {
                 .isInstanceOf(NullPointerException.class);
 
         assertThat(seen.get()).isEqualTo(KeyedReentrantHolder.ReleaseReason.CLOSE);
+    }
+
+    @Test
+    void watchdog_fires_with_the_watchdog_reason() throws Exception {
+        var holder = new KeyedReentrantHolder<String>("wd");
+        var seen = new AtomicReference<KeyedReentrantHolder.ReleaseReason>();
+        var fired = new CountDownLatch(1);
+
+        var lease = holder.register("k", "payload", Duration.ofMillis(50), (payload, reason) -> {
+            seen.set(reason);
+            fired.countDown();
+        });
+
+        assertThat(fired.await(10, TimeUnit.SECONDS)).isTrue();
+        assertThat(seen.get()).isEqualTo(KeyedReentrantHolder.ReleaseReason.WATCHDOG);
+        assertThat(lease.isHeld()).isFalse();
+        assertThat(holder.tryReenter("k")).isEmpty();
+    }
+
+    /**
+     * A backend that refuses the watchdog's release - the JDBC providers throw
+     * RuntimeException("Failed to release connection") here - must not escape the watchdog thread.
+     * Uncaught, it reaches only the default handler and stderr, never SLF4J.
+     */
+    @Test
+    void watchdog_release_failure_does_not_escape_the_watchdog_thread() throws Exception {
+        var previous = Thread.getDefaultUncaughtExceptionHandler();
+        var uncaught = new AtomicReference<Throwable>();
+        Thread.setDefaultUncaughtExceptionHandler((t, e) -> uncaught.set(e));
+        try {
+            var holder = new KeyedReentrantHolder<String>("wd");
+            var attempted = new CountDownLatch(1);
+
+            holder.register("k", "payload", Duration.ofMillis(50), (payload, reason) -> {
+                attempted.countDown();
+                throw new RuntimeException("Failed to release connection");
+            });
+
+            assertThat(attempted.await(10, TimeUnit.SECONDS)).isTrue();
+            // Give an escaping throwable time to reach the handler before asserting its absence.
+            Thread.sleep(200);
+            assertThat(uncaught.get()).isNull();
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(previous);
+        }
     }
 
     @Test

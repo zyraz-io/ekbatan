@@ -128,12 +128,36 @@ public final class KeyedReentrantHolder<LOCK_PAYLOAD> {
                     .start(() -> {
                         try {
                             Thread.sleep(maxHold);
-                            if (registeredHolding.markReleasedByWatchdog()) {
-                                LOG.warn("Auto-released held lock for key {} (hold limit exceeded)", userKey);
-                                map.remove(registeredHolding.rkey, registeredHolding);
-                                lockReleaseCallback.release(payload, ReleaseReason.WATCHDOG);
-                            }
                         } catch (InterruptedException ignored) {
+                            // The outermost close interrupted us on its way out - the expected
+                            // ending for a lease returned within its hold limit. Nothing to do.
+                            return;
+                        }
+                        if (!registeredHolding.markReleasedByWatchdog()) {
+                            return; // the holder closed first and owns the release
+                        }
+                        map.remove(registeredHolding.rkey, registeredHolding);
+                        // Announce the auto-release only once it has actually happened, and keep a
+                        // failure inside this thread. Previously the warning was logged before the
+                        // attempt and the callback ran uncaught, so a backend that refused the
+                        // release - the JDBC providers throw RuntimeException("Failed to release
+                        // connection") from ConnectionProvider - killed this virtual thread through
+                        // the default uncaught handler. That reaches stderr, never SLF4J, and left
+                        // behind a log line asserting the release had succeeded.
+                        //
+                        // The backend lock does stay held; the CAS above has already short-circuited
+                        // the holder's close(), and reverting it would strand the map entry instead.
+                        // What changes is that the failure is now reported against the key that
+                        // caused it rather than being silently swallowed.
+                        try {
+                            lockReleaseCallback.release(payload, ReleaseReason.WATCHDOG);
+                            LOG.warn("Auto-released held lock for key {} (hold limit exceeded)", userKey);
+                        } catch (RuntimeException | Error e) {
+                            LOG.error(
+                                    "Failed to auto-release held lock for key {} after the hold limit was "
+                                            + "exceeded; the backend lock may remain held until its own expiry",
+                                    userKey,
+                                    e);
                         }
                     });
             return lease;

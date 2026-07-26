@@ -31,7 +31,13 @@ final class NativeImageFlywayResourceProvider implements ResourceProvider {
 
     private final ClassLoader classLoader;
     private final Charset encoding;
-    private final Location[] locations;
+
+    /**
+     * The locations captured at construction. Package-private so a test can assert which locations
+     * the scanner was actually built from - the distinction between honouring a customizer's
+     * {@code locations(...)} and silently scanning the pre-customizer ones.
+     */
+    final Location[] locations;
 
     /**
      * Constructs a provider bound to the Flyway configuration's effective locations and classloader.

@@ -4,8 +4,10 @@ import static io.ekbatan.core.config.DataSourceConfig.Builder.dataSourceConfig;
 import static io.ekbatan.core.persistence.ConnectionProvider.hikariConnectionProvider;
 import static io.ekbatan.distributedjobs.JobRegistry.jobRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.github.kagkarlsson.scheduler.task.ExecutionContext;
+import com.github.kagkarlsson.scheduler.task.schedule.DisabledSchedule;
 import com.github.kagkarlsson.scheduler.task.schedule.FixedDelay;
 import com.github.kagkarlsson.scheduler.task.schedule.Schedule;
 import io.ekbatan.core.persistence.ConnectionProvider;
@@ -55,6 +57,80 @@ class JobRegistryIntegrationTest {
         try (var conn = CONNECTION_PROVIDER.acquire();
                 var stmt = conn.createStatement()) {
             stmt.execute("TRUNCATE TABLE scheduled_tasks");
+        }
+    }
+
+    /**
+     * Registering a job means writing a row to {@code scheduled_tasks}. db-scheduler does that
+     * inside {@code start()} via {@code executeOnStartup}, which catches whatever each write throws,
+     * logs it and continues - so {@code scheduler.start()} returns normally whether every row landed
+     * or none did. Without a check of its own, the application boots, health checks pass, the
+     * scheduler polls an empty table, and no job ever runs. Dropping the table reproduces that
+     * exactly.
+     */
+    @Test
+    void start_failsLoudly_whenTheSchedulerCouldNotRegisterItsJobs() throws Exception {
+        var registry = jobRegistry()
+                .connectionProvider(CONNECTION_PROVIDER)
+                .withJob(new CountingJob(
+                        "unregistered-" + UUID.randomUUID(), FixedDelay.ofMillis(200), new AtomicInteger()))
+                .registerShutdownHook(false)
+                .build();
+
+        try (var conn = CONNECTION_PROVIDER.acquire();
+                var stmt = conn.createStatement()) {
+            stmt.execute("ALTER TABLE scheduled_tasks RENAME TO scheduled_tasks_hidden");
+        }
+        try {
+            // Either detection path is a pass. With the table gone the verification query itself
+            // fails ("could not verify"); with the table present but unwritable the query succeeds
+            // and returns nothing ("were not registered"). What matters is that start() refuses to
+            // return normally, and names the job that would never have run.
+            assertThatThrownBy(registry::start)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("unregistered-");
+        } finally {
+            try (var conn = CONNECTION_PROVIDER.acquire();
+                    var stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE scheduled_tasks_hidden RENAME TO scheduled_tasks");
+            }
+            registry.stop();
+        }
+    }
+
+    /** The check must not fire on a healthy start - that is the case it would otherwise break. */
+    @Test
+    void start_succeeds_whenTheJobsRegisterNormally() {
+        var registry = jobRegistry()
+                .connectionProvider(CONNECTION_PROVIDER)
+                .withJob(new CountingJob(
+                        "registered-" + UUID.randomUUID(), FixedDelay.ofMillis(200), new AtomicInteger()))
+                .registerShutdownHook(false)
+                .build();
+
+        try {
+            registry.start();
+        } finally {
+            registry.stop();
+        }
+    }
+
+    /**
+     * A disabled schedule is deliberately never written, so its absence is correct. Without this
+     * carve-out the check would reject a legitimate configuration.
+     */
+    @Test
+    void start_succeeds_whenAJobsScheduleIsDisabled() {
+        var registry = jobRegistry()
+                .connectionProvider(CONNECTION_PROVIDER)
+                .withJob(new CountingJob("disabled-" + UUID.randomUUID(), new DisabledSchedule(), new AtomicInteger()))
+                .registerShutdownHook(false)
+                .build();
+
+        try {
+            registry.start();
+        } finally {
+            registry.stop();
         }
     }
 

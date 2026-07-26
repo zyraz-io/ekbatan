@@ -1,7 +1,7 @@
 {
   "type": "record",
   "name": "WalletCreatedEvent",
-  "namespace": "io.ekbatan.test.event_pipeline.avro_smt.avro",
+  "namespace": "com.example.finance.avro",
   "fields": [
     {"name": "modelId", "type": "string"},
     {"name": "modelName", "type": "string"},

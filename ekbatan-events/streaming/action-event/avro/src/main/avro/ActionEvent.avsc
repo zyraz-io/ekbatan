@@ -2,19 +2,20 @@
   "type": "record",
   "name": "ActionEvent",
   "namespace": "io.ekbatan.events.streaming.actionevent.avro",
+  "doc": "One row of the eventlog.events outbox, encoded by OutboxToAvroTransform at the Kafka Connect tier. EVOLUTION: this schema is published, so consumers compiled against an older copy must keep reading new messages. A new field MUST declare a default, or an old writer's records become unreadable by a new reader. A field may only be removed if it already had a default. Never rename a field - that is a remove plus an add; use an alias instead. Never change a field's type or its logicalType: Avro's parsing canonical form strips logicalType, so micros->nanos would keep the same schema fingerprint and an old consumer would silently misread every timestamp by a factor of 1000 with no resolution error. Reordering is safe; Avro matches by name.",
   "fields": [
-    {"name": "id", "type": "string"},
-    {"name": "namespace", "type": "string"},
-    {"name": "action_id", "type": "string"},
-    {"name": "action_name", "type": "string"},
-    {"name": "action_params", "type": "string"},
-    {"name": "started_date", "type": "long"},
-    {"name": "completion_date", "type": "long"},
-    {"name": "model_id", "type": ["null", "string"], "default": null},
-    {"name": "model_type", "type": ["null", "string"], "default": null},
-    {"name": "event_type", "type": ["null", "string"], "default": null},
-    {"name": "payload", "type": ["null", "bytes"], "default": null},
-    {"name": "event_date", "type": "long"},
-    {"name": "delivered", "type": "boolean"}
+    {"name": "id", "type": "string", "doc": "Stable per-event identifier - the outbox row's primary key, as a UUID string. Required: present on every row since the first release."},
+    {"name": "namespace", "type": "string", "doc": "The producing deployment, from ActionExecutor.Builder.namespace(...). Dot-separated identifiers, like a Java package. Together with event_type it selects the payload schema, so the payload's own namespace is <namespace>.avro."},
+    {"name": "action_id", "type": "string", "doc": "Identifier shared by every event emitted from one action invocation, as a UUID string."},
+    {"name": "action_name", "type": "string", "doc": "Simple class name of the producing action, e.g. WalletDepositMoneyAction."},
+    {"name": "action_params", "type": "string", "doc": "Parameters the action was invoked with, as a JSON string. A string rather than a nested record because the shape differs per action and is not known to this schema."},
+    {"name": "started_date", "type": {"type": "long", "logicalType": "timestamp-micros"}, "doc": "When the action invocation began. Microseconds, matching the source column - TIMESTAMP on PostgreSQL and DATETIME(6) on MySQL and MariaDB all hold six fractional digits, which is their maximum."},
+    {"name": "completion_date", "type": {"type": "long", "logicalType": "timestamp-micros"}, "doc": "When the action invocation committed."},
+    {"name": "model_id", "type": ["null", "string"], "default": null, "doc": "Primary identifier of the affected model. Null when the action targets no single model."},
+    {"name": "model_type", "type": ["null", "string"], "default": null, "doc": "Simple class name of the affected model, e.g. Wallet. Null whenever model_id is null."},
+    {"name": "event_type", "type": ["null", "string"], "default": null, "doc": "Simple class name of the event, e.g. WalletMoneyDepositedEvent. Null on a sentinel row - an action that emitted no model event - which the SMT drops rather than publishing, so a consumer should not see one."},
+    {"name": "payload", "type": ["null", "bytes"], "default": null, "doc": "The event payload, already encoded against the per-event-type schema configured on the SMT. Avro single-object encoding, so read it with the generated class's own fromByteBuffer. Null on a sentinel row."},
+    {"name": "event_date", "type": {"type": "long", "logicalType": "timestamp-micros"}, "doc": "When the event was logically produced inside the action. May slightly precede completion_date."},
+    {"name": "delivered", "type": "boolean", "doc": "Whether the in-process fanout has already handled this row. Always false on the records this SMT publishes: it emits only inserts and snapshot reads, and the UPDATE that flips this flag is filtered out so the in-process and Kafka paths can share one table without double-publishing."}
   ]
 }

@@ -2,7 +2,7 @@
 layout: ../../../layouts/DocLayout.astro
 title: 'Distributed background jobs'
 activeSection: reference
-lead: 'For periodic background work that should run on <strong>at most one</strong> instance across a cluster — daily reports, hourly cleanups, periodic reconciliation — Ekbatan ships <code>JobRegistry</code> in the <code>ekbatan-distributed-jobs</code> module. It''s a thin, opinionated facade over <a href="https://github.com/kagkarlsson/db-scheduler">db-scheduler</a> that handles the tricky parts (atomic claim across instances, heartbeat-based crash recovery, graceful shutdown, per-task virtual-thread workers) while keeping the user-facing API tiny.'
+lead: 'For periodic background work that should run on <strong>a single</strong> instance across a cluster — daily reports, hourly cleanups, periodic reconciliation — Ekbatan ships <code>JobRegistry</code> in the <code>ekbatan-distributed-jobs</code> module. It''s a thin, opinionated facade over <a href="https://github.com/kagkarlsson/db-scheduler">db-scheduler</a> that handles the tricky parts (atomic claim across instances, heartbeat-based crash recovery, graceful shutdown, per-task virtual-thread workers) while keeping the user-facing API tiny.'
 ---
 
 ## Defining a job
@@ -41,10 +41,50 @@ The `@EkbatanDistributedJob` annotation marks the class for discovery by the DI 
 
 - Every instance polls the shared `scheduled_tasks` table.
 - When a task's `execution_time` arrives, exactly one instance wins the atomic claim per scheduled slot — that instance runs it.
-- Each running instance heartbeats periodically. If a heartbeat goes stale (instance crashed, network partitioned), another instance reclaims the row.
+- Each running instance heartbeats periodically. If a heartbeat goes stale (instance crashed, network partitioned, JVM stalled), another instance reclaims the row **and runs the job again** — while the original may still be part-way through `execute()`. The claim protects the row, not your method: db-scheduler stops the stale instance from recording a result, but cannot undo side effects it has already caused. **Write `execute()` so that running the same slot twice is harmless.**
 - Tasks that throw are retried per their `Schedule`; the row's `consecutive_failures` increments.
 
 This is at-most-one *per scheduled slot*, not at-most-one ever. A daily-at-02:00 job runs once at 02:00 across the cluster; if 02:00 passes while every node is down, the missed slot is picked up by the next live node when it polls.
+
+### Bailing out before you are taken over
+
+Ekbatan declares an execution dead after **60 seconds** of failed heartbeats (`heartbeatInterval` x
+`missedHeartbeatsLimit`, 10s x 6). The instance being replaced is not told and is not interrupted -
+heartbeats are written by a housekeeper thread, so a job whose work does not touch the scheduler's
+database carries on without noticing. That is how the same slot ends up running twice: not because
+the original died, but because it briefly could not say that it hadn't.
+
+A job that must not overlap itself can watch its own standing and stop first. The
+`ExecutionContext` already handed to `execute(...)` carries it:
+
+```java
+@Override
+public void execute(ExecutionContext ctx) {
+    var health = ctx.getCurrentlyExecuting().getHeartbeatState();
+
+    for (var invoice : invoices) {
+        // 0.0 right after a successful heartbeat, 1.0 at the moment another instance may claim
+        // the row. Anything above ~0.5 means contact has been lost for long enough to be worth
+        // stopping over.
+        if (health.getFractionDead() > 0.5) {
+            LOG.warn("Heartbeats failing; stopping before another instance takes this over");
+            return;
+        }
+        send(invoice);
+    }
+}
+```
+
+Returning early is a normal successful completion as far as db-scheduler is concerned, so the row is
+rescheduled per its `Schedule` and the remaining work is picked up on the next run - or immediately
+by whichever instance reclaims the row, since the reclaim happens regardless.
+
+`HeartbeatState` also exposes `hasStaleHeartbeat()` and `getFailedHeartbeats()` if you would rather
+branch on those.
+
+This is cooperative, and only as good as where you place the check: it suits a job that loops over
+work items, and cannot help one sitting inside a single long call. It narrows the overlap window
+rather than closing it - preferring an idempotent `execute()` remains the only complete answer.
 
 ## The `scheduled_tasks` table
 
@@ -119,9 +159,9 @@ With the `@EkbatanDistributedJob` annotation in place, the DI integration regist
 ```yaml
 ekbatan:
   jobs:
-    polling-interval: 10s
-    heartbeat-interval: 30s
-    shutdown-max-wait: 30s
+    polling-interval: PT10S
+    heartbeat-interval: PT30S
+    shutdown-max-wait: PT30S
 
   sharding:
     groups:
@@ -135,7 +175,55 @@ ekbatan:
                 maximum-pool-size: 5
 ```
 
+> **Durations are ISO-8601.** `PT10S` (10 seconds), `PT0.2S` (200 ms), `PT5M` (5 minutes). Spring Boot's shorthand - `10s`, `200ms` - is **not** accepted: the value is bound by Jackson's `Duration` deserializer, which calls `Duration.parse`, so a shorthand value fails at startup with `Cannot deserialize value of type java.time.Duration`.
+
+### What the three knobs do
+
+| Property | Default | What it controls |
+|---|---|---|
+| `polling-interval` | **10s** (db-scheduler's) | How often each instance asks the database for due work. Sets start latency: a job due at 12:00:00 may begin at 12:00:07. |
+| `heartbeat-interval` | **10s** (Ekbatan's own) | How often a *running* execution stamps `last_heartbeat`, proving it hasn't crashed. |
+| `shutdown-max-wait` | **30 min** (db-scheduler's) | How long `stop()` lets in-flight executions finish before forcing termination. |
+
+Two of those resolve to db-scheduler's own defaults when unset. **`heartbeat-interval` does not** - the framework substitutes 10 seconds where db-scheduler would use 5 minutes.
+
+That matters because the heartbeat is not only a heartbeat. db-scheduler declares an execution dead after `heartbeatInterval x missedHeartbeatsLimit`, and that limit defaults to **6**, so:
+
+```
+Ekbatan defaults    10s  x 6 = 60 seconds   before another instance revives the job
+db-scheduler's      5min x 6 = 30 minutes
+```
+
+The short window is deliberate. `EventFanoutJob` and `EventHandlingJob` are themselves `DistributedJob`s, so the scheduler carries the in-process event pipeline - and a recurring task is a **single row**, so a crashed instance freezes that whole schedule until the row is revived. Half an hour of stalled fanout is a worse outcome than an occasional early revival.
+
+Lengthen it if your jobs run long and a duplicate costs more than a delay. The tolerated-miss count is not exposed as a property, but is reachable through the escape hatch:
+
+```java
+JobRegistry.jobRegistry()
+    .heartbeatInterval(Duration.ofSeconds(30))
+    .customizeScheduler(b -> b.missedHeartbeatsLimit(8))   // 30s x 8 = 4 minutes; minimum is 4
+```
+
+The heartbeat is written by db-scheduler's housekeeper thread, not by the thread running your job, so a long-running `execute()` is not itself at risk of being declared dead. It takes the housekeeper stalling - a long GC pause, a saturated pool, a database that won't accept the write.
+
+> **`shutdown-max-wait` is doubled.** db-scheduler applies it to each of its two shutdown phases - waiting politely, then waiting again after interrupting - and logs "Will wait up to 2x". On the 30-minute default that is up to an hour, which is usually worth lowering in tests. An execution still running when it expires is abandoned, leaving its row picked with a frozen heartbeat, so it is recovered later by the same path as a crash.
+
 `JobRegistry.start()` is wired to your DI container's lifecycle (Spring `initMethod`/`destroyMethod`, Quarkus `@Observes StartupEvent`/`ShutdownEvent`, Micronaut `ApplicationEventListener<StartupEvent>`).
+
+
+### Database dialect
+
+db-scheduler needs dialect-specific SQL, and by default works out which by opening a connection at `Scheduler.create(...)` and reading `DatabaseMetaData`. If that connection fails it logs an error and keeps generic SQL **for the scheduler's lifetime**. Ekbatan's pools are built with `initializationFailTimeout = -1` so an application can start before its database is reachable, which makes that failure ordinary rather than exotic - and the generic SQL emits `OFFSET 0 ROWS FETCH FIRST n ROWS ONLY`, which MySQL and MariaDB cannot parse. The result would be a scheduler issuing an invalid poll query forever, while the application reports healthy.
+
+So `JobRegistry` resolves the dialect from the pool's **JDBC URL** instead and pins it before the scheduler is created. No connection is involved, so an unreachable database at startup cannot change the outcome, and `build()` does not block waiting for one.
+
+One assumption is worth knowing: a URL cannot reveal the server version, and db-scheduler distinguishes MySQL 8+ from older releases (they differ only in whether generic lock-and-fetch is used; both emit `LIMIT`). Ekbatan assumes **MySQL 8 or later**, matching its own migrations and examples. On an older server, override it:
+
+```java
+JobRegistry.jobRegistry()
+    .customizeScheduler(b -> b.jdbcCustomization(new MySQLJdbcCustomization(false)))
+```
+
 
 The `ekbatan.jobs.*` properties also accept camelCase aliases: `polling-interval` / `pollingInterval`, `heartbeat-interval` / `heartbeatInterval`, and `shutdown-max-wait` / `shutdownMaxWait`.
 

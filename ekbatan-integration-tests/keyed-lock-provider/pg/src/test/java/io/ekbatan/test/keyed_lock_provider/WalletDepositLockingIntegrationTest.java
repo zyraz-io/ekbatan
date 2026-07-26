@@ -85,7 +85,7 @@ public class WalletDepositLockingIntegrationTest {
                 .build();
 
         executor = actionExecutor()
-                .namespace("test.keyed-lock-provider")
+                .namespace("test.keyed_lock_provider")
                 .databaseRegistry(databases)
                 .objectMapper(new ObjectMapper())
                 .repositoryRegistry(repositoryRegistry()

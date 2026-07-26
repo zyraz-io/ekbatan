@@ -306,7 +306,9 @@ public class EkbatanCoreConfiguration {
         // before the auto-config runs. We just read the prepared list - the runtime
         // classpath scan below would silently return empty on native because there are
         // no .class files to walk in a native binary.
-        var aotDiscovered = EkbatanActionsHolder.get();
+        // Taken, not read: the holder is a JVM-wide static, so leaving it populated let the next
+        // context in the same JVM inherit this one's actions and skip its own scan.
+        var aotDiscovered = EkbatanActionsHolder.consume();
         if (!aotDiscovered.isEmpty()) {
             var classes = new LinkedHashSet<Class<? extends Action<?, ?>>>(aotDiscovered.size());
             for (Class<?> cls : aotDiscovered) {

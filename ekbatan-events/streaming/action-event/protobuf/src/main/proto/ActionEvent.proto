@@ -2,22 +2,79 @@ syntax = "proto3";
 
 package io.ekbatan.events.streaming.actionevent.protobuf;
 
+import "google/protobuf/timestamp.proto";
+
 option java_package = "io.ekbatan.events.streaming.actionevent.protobuf";
 option java_outer_classname = "ActionEventProto";
 option java_multiple_files = true;
 
+// One row of the eventlog.events outbox, encoded by OutboxToProtobufTransform at the Kafka
+// Connect tier.
+//
+// EVOLUTION. This schema is published, so consumers compiled against an older copy must keep
+// reading new messages.
+//   - Never reuse or change a field number. The number is the identity on the wire; the name is
+//     not transmitted at all. Renaming a field is therefore safe on the wire and breaks only
+//     generated accessors; changing its number is the opposite.
+//   - Retiring a field means `reserved 8;` and `reserved "model_id";`, so the number can never be
+//     handed to something else later.
+//   - A new field must be optional or have a sensible zero value; old writers simply will not set
+//     it, and proto3 cannot tell "absent" from "default" unless the field is `optional`.
+//   - Changing a field's type is breaking whenever the wire type changes. int64 is a varint while
+//     a message is length-delimited, which is exactly why the move from int64 to
+//     google.protobuf.Timestamp on the three date fields was a breaking change and was taken
+//     before 1.0.0 rather than after.
+//   - Adding a message field means the .desc must be regenerated with --include_imports, or the
+//     SMT cannot resolve the import at startup.
 message ActionEvent {
+  // Stable per-event identifier - the outbox row's primary key, as a UUID string.
   string id = 1;
+
+  // The producing deployment, from ActionExecutor.Builder.namespace(...). Dot-separated
+  // identifiers, like a Java package. Together with event_type it selects the payload descriptor,
+  // so the payload's own proto package is <namespace>.proto.
   string namespace = 2;
+
+  // Identifier shared by every event emitted from one action invocation, as a UUID string.
   string action_id = 3;
+
+  // Simple class name of the producing action, e.g. WalletDepositMoneyAction.
   string action_name = 4;
+
+  // Parameters the action was invoked with, as a JSON string. A string rather than a nested
+  // message because the shape differs per action and is not known to this schema.
   string action_params = 5;
-  int64 started_date = 6;
-  int64 completion_date = 7;
+
+  // When the action invocation began. A Timestamp rather than an integer so the unit travels with
+  // the value: these were int64 microseconds, which a consumer could not tell from milliseconds.
+  // Populated to microsecond resolution, matching the source column - TIMESTAMP on PostgreSQL and
+  // DATETIME(6) on MySQL and MariaDB all hold six fractional digits, which is their maximum - so
+  // the nanos field is always a multiple of 1000.
+  google.protobuf.Timestamp started_date = 6;
+
+  // When the action invocation committed.
+  google.protobuf.Timestamp completion_date = 7;
+
+  // Primary identifier of the affected model. Unset when the action targets no single model.
   optional string model_id = 8;
+
+  // Simple class name of the affected model, e.g. Wallet. Unset whenever model_id is unset.
   optional string model_type = 9;
+
+  // Simple class name of the event, e.g. WalletMoneyDepositedEvent. Unset on a sentinel row - an
+  // action that emitted no model event - which the SMT drops rather than publishing, so a consumer
+  // should not see one.
   optional string event_type = 10;
+
+  // The event payload, already encoded against the per-event-type descriptor configured on the
+  // SMT. Read it with the generated class's own parseFrom. Unset on a sentinel row.
   optional bytes payload = 11;
-  int64 event_date = 12;
+
+  // When the event was logically produced inside the action. May slightly precede completion_date.
+  google.protobuf.Timestamp event_date = 12;
+
+  // Whether the in-process fanout has already handled this row. Always false on the records this
+  // SMT publishes: it emits only inserts and snapshot reads, and the UPDATE that flips this flag
+  // is filtered out so the in-process and Kafka paths can share one table without double-publishing.
   bool delivered = 13;
 }

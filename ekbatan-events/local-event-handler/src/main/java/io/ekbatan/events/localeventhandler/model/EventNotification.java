@@ -85,6 +85,9 @@ public final class EventNotification {
         this.eventId = Validate.notNull(builder.eventId, "eventId cannot be null");
         this.handlerName = Validate.notBlank(builder.handlerName, "handlerName cannot be blank");
         this.state = Validate.notNull(builder.state, "state cannot be null");
+        // Unbounded before; a negative attempt count is not a state the retry arithmetic can
+        // produce, so it can only come from a caller constructing the row by hand.
+        Validate.isTrue(builder.attempts >= 0, "attempts cannot be negative");
         this.attempts = builder.attempts;
         this.nextRetryAt = Validate.notNull(builder.nextRetryAt, "nextRetryAt cannot be null");
         this.createdDate = Validate.notNull(builder.createdDate, "createdDate cannot be null");

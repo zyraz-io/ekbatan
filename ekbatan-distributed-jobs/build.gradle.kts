@@ -28,9 +28,19 @@ dependencies {
     // ConnectionProvider fixture. Hikari calls Class.forName on the driver during validation
     // before the test's expected IllegalArgumentException is thrown, so the driver class must
     // be on the test classpath.
+    // JobsConfigJacksonBindingTest binds through the same JavaPropsMapper the DI producers use.
+    // It previously used a JsonMapper with a KEBAB_CASE naming strategy - neither of which
+    // production has - so it exercised a configuration nobody runs.
+    testImplementation("tools.jackson.dataformat:jackson-dataformat-properties:${project.property("jacksonDatabindVersion")}")
+
     testImplementation("org.postgresql:postgresql:${project.property("postgresqlVersion")}")
     // ekbatan-core declares HikariCP as compileOnly so it does not leak transitively to this
     // module's test classpath; the JobRegistryBuilderTest fixture needs a real pool, so pull
     // Hikari in for tests explicitly.
     testRuntimeOnly("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
+    // JobRegistryDialectPinningTest builds a pool per dialect against unreachable hosts, to
+    // prove the customization is pinned from the URL alone. Hikari resolves the driver through
+    // DriverManager before it ever tries to connect, so each driver must be present.
+    testRuntimeOnly("com.mysql:mysql-connector-j:${project.property("mysqlConnectorVersion")}")
+    testRuntimeOnly("org.mariadb.jdbc:mariadb-java-client:${project.property("mariadbJavaClientVersion")}")
 }

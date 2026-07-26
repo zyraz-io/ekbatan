@@ -7,8 +7,6 @@ import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import org.apache.avro.io.DecoderFactory;
-import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -103,10 +101,17 @@ public class AvroRetryingEventConsumer implements AutoCloseable {
         }
     }
 
+    /**
+     * Decodes through the generated class's own {@code fromByteBuffer}, which is what a consumer
+     * holding {@code ekbatan-action-event-avro} will reach for first.
+     *
+     * <p>This deliberately does not hand-roll a {@code SpecificDatumReader}. It used to, and that
+     * mirrored the SMT's encoder rather than exercising the published contract - which is precisely
+     * why nobody noticed that {@code fromByteBuffer} could not read a single message the pipeline
+     * produced. A reference consumer that does not use the API we ship proves nothing about it.
+     */
     private static ActionEvent decode(byte[] bytes) throws java.io.IOException {
-        var reader = new SpecificDatumReader<>(ActionEvent.class);
-        var decoder = DecoderFactory.get().binaryDecoder(bytes, null);
-        return reader.read(null, decoder);
+        return ActionEvent.fromByteBuffer(java.nio.ByteBuffer.wrap(bytes));
     }
 
     private void sendToDlq(ConsumerRecord<String, byte[]> record) {

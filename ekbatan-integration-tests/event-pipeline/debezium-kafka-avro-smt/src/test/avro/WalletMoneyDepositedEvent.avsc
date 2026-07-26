@@ -1,10 +1,11 @@
 {
   "type": "record",
   "name": "WalletMoneyDepositedEvent",
-  "namespace": "io.ekbatan.test.event_pipeline.avro_smt.avro",
+  "namespace": "com.example.finance.avro",
   "fields": [
     {"name": "modelId", "type": "string"},
     {"name": "modelName", "type": "string"},
-    {"name": "amount", "type": "string"}
+    {"name": "amount", "type":
+      {"type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2}}
   ]
 }

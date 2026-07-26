@@ -72,7 +72,18 @@ public final class MariaDBKeyedLockProvider implements KeyedLockProvider {
         // Thread.interrupt() cannot break - so the InterruptedException this method declares could
         // never be thrown. Segmenting also keeps the connection sending traffic every
         // ACQUIRE_SEGMENT, so idle connection reapers stop silently dropping long waits.
-        // Reentry is handled by tryAcquire's own holder.tryReenter on the first pass.
+        //
+        // Reentry is resolved before the interrupt check, not by tryAcquire on the first pass.
+        // Re-taking a lock this thread already holds touches no backend and cannot block, so an
+        // interrupt has nothing to abort; checking the flag first meant an interrupted thread
+        // could not re-enter its own lock, which is exactly what a shutdown-path cleanup does.
+        // The flag is left set rather than consumed here, so the caller's next blocking call
+        // still observes it.
+        final var reentered = holder.tryReenter(key);
+        if (reentered.isPresent()) {
+            return reentered.get();
+        }
+
         while (true) {
             if (Thread.interrupted()) {
                 throw new InterruptedException("Interrupted while acquiring lock for key " + key);
@@ -98,7 +109,18 @@ public final class MariaDBKeyedLockProvider implements KeyedLockProvider {
         }
 
         final var hashedKey = hash(key);
-        final var connection = connectionProvider.acquire();
+        // Drawing the connection is part of acquiring the lock, so its failure has to surface as
+        // LockAcquisitionException like every other failure below. Unwrapped, it escaped as the
+        // bare RuntimeException("Failed to acquire connection") that ConnectionProvider throws -
+        // past every catch clause written against the documented type, and on the single most
+        // likely failure of all, the database being unreachable. Nothing to release on this path:
+        // the connection was never handed over.
+        final Connection connection;
+        try {
+            connection = connectionProvider.acquire();
+        } catch (RuntimeException e) {
+            throw new LockAcquisitionException(key, "could not obtain a connection", e);
+        }
         final LockResult result;
         try {
             result = getLock(connection, hashedKey, toGetLockTimeout(maxWait));

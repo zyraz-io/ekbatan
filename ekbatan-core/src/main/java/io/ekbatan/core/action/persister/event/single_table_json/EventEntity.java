@@ -59,7 +59,13 @@ public final class EventEntity {
 
     private EventEntity(Builder builder) {
         this.id = Validate.notNull(builder.id, "id cannot be null");
-        this.namespace = Validate.notNull(builder.namespace, "namespace cannot be null");
+        // notBlank, deliberately not the identifier pattern ActionExecutor enforces. This type is
+        // also how EventEntityRepository#findUndelivered maps rows *back* out of the table, so a
+        // stricter rule here would make previously-written rows unreadable - a namespace that was
+        // legal when the row was written (hyphens were, before 1.0.0) would throw on read and
+        // wedge the fanout job on that row forever. New values are constrained at the writing end,
+        // where rejecting one costs nothing.
+        this.namespace = Validate.notBlank(builder.namespace, "namespace cannot be blank");
         this.actionId = Validate.notNull(builder.actionId, "actionId cannot be null");
         this.actionName = Validate.notNull(builder.actionName, "actionName cannot be null");
         this.actionParams = Validate.notNull(builder.actionParams, "actionParams cannot be null");

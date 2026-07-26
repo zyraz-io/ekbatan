@@ -8,6 +8,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.ekbatan.core.shard.ShardIdentifier;
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.Location;
+import org.flywaydb.core.api.ResourceProvider;
+import org.flywaydb.core.api.resource.LoadableResource;
 import org.junit.jupiter.api.Test;
 
 class FlywayMigratorTest {
@@ -32,6 +36,52 @@ class FlywayMigratorTest {
                 System.setProperty(key, originalValue);
             }
         }
+    }
+
+    @Test
+    void should_build_the_native_scanner_from_the_locations_the_customizer_left_behind() {
+        // Goes through configure(...) rather than installNativeResourceProvider(...) directly: the
+        // defect was the ordering of those two steps, so a test that performs them in its own order
+        // proves nothing. Asserting on the scanner's captured locations, not the configuration's -
+        // the configuration was always updated; the scanner was what kept the stale copy.
+        var cfg = Flyway.configure().locations("classpath:db/migration");
+
+        FlywayMigrator.applyCustomizerThenProvider(cfg, c -> c.locations("classpath:db/other"), true);
+
+        assertThat(cfg.getResourceProvider()).isInstanceOf(NativeImageFlywayResourceProvider.class);
+        var scanner = (NativeImageFlywayResourceProvider) cfg.getResourceProvider();
+        assertThat(scanner.locations).extracting(Location::getDescriptor).containsExactly("classpath:db/other");
+    }
+
+    @Test
+    void should_keep_a_resource_provider_the_customizer_supplied() {
+        // The documented escape hatch. A plain reorder would have overwritten it.
+        var cfg = Flyway.configure().locations("classpath:db/migration");
+        ResourceProvider explicit = new ResourceProvider() {
+            @Override
+            public LoadableResource getResource(String name) {
+                return null;
+            }
+
+            @Override
+            public java.util.Collection<LoadableResource> getResources(String prefix, String[] suffixes) {
+                return java.util.List.of();
+            }
+        };
+        cfg.resourceProvider(explicit);
+
+        FlywayMigrator.installNativeResourceProvider(cfg, true);
+
+        assertThat(cfg.getResourceProvider()).isSameAs(explicit);
+    }
+
+    @Test
+    void should_not_install_the_native_scanner_outside_a_native_image() {
+        var cfg = Flyway.configure().locations("classpath:db/migration");
+
+        FlywayMigrator.installNativeResourceProvider(cfg, false);
+
+        assertThat(cfg.getResourceProvider()).isNull();
     }
 
     @Test

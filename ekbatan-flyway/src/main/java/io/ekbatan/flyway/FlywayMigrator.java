@@ -158,12 +158,52 @@ public final class FlywayMigrator {
         requireNotBlank(username, "username is required");
         Objects.requireNonNull(password, "password is required");
         var cfg = Flyway.configure().dataSource(jdbcUrl, username, password).locations(locations);
-        if (NativeImageFlywayResourceProvider.inNativeImage()) {
-            cfg.resourceProvider(new NativeImageFlywayResourceProvider(
-                    cfg.getLocations(), Thread.currentThread().getContextClassLoader(), StandardCharsets.UTF_8));
-        }
-        customizer.accept(cfg);
+        applyCustomizerThenProvider(cfg, customizer, NativeImageFlywayResourceProvider.inNativeImage());
         return cfg.load().migrate();
+    }
+
+    /**
+     * Applies the caller's customizer and then installs the native-image scanner, in that order.
+     *
+     * <p>Extracted from {@link #migrateOne} because the ordering of these two steps <em>is</em> the
+     * behaviour: a test that performs them in its own order would prove nothing. Kept free of the
+     * datasource so it stays reachable without a database - {@code dataSource(...)} resolves a
+     * Flyway database plugin eagerly.
+     *
+     * @param cfg the configuration being prepared.
+     * @param customizer the caller's configuration customizer.
+     * @param inNativeImage whether this is running inside a native image.
+     */
+    static void applyCustomizerThenProvider(
+            FluentConfiguration cfg, Consumer<FluentConfiguration> customizer, boolean inNativeImage) {
+        customizer.accept(cfg);
+        installNativeResourceProvider(cfg, inNativeImage);
+    }
+
+    /**
+     * Installs the native-image resource scanner, unless the caller already supplied a provider of
+     * their own.
+     *
+     * <p>Called <em>after</em> the customizer. Built beforehand, the scanner captured
+     * {@code cfg.getLocations()} while the customizer had yet to run, so a customizer that changed
+     * the locations updated the configuration but not the scanner that actually enumerates the
+     * files - honoured on the JVM, silently ignored in a native image, which is the pair of
+     * environments a caller is most likely to assume agree.
+     *
+     * <p>The {@code null} check keeps the documented escape hatch working: a customizer that sets
+     * its own {@link org.flywaydb.core.api.ResourceProvider} still wins, which a plain reorder
+     * would have broken. Flyway leaves the property {@code null} until someone sets it.
+     *
+     * @param cfg the configuration being prepared.
+     * @param inNativeImage whether this is running inside a native image; a parameter rather than a
+     *     direct call so the behaviour is reachable from a JVM test.
+     */
+    static void installNativeResourceProvider(FluentConfiguration cfg, boolean inNativeImage) {
+        if (!inNativeImage || cfg.getResourceProvider() != null) {
+            return;
+        }
+        cfg.resourceProvider(new NativeImageFlywayResourceProvider(
+                cfg.getLocations(), Thread.currentThread().getContextClassLoader(), StandardCharsets.UTF_8));
     }
 
     private static String[] normalizeLocations(String[] locations) {
@@ -296,8 +336,10 @@ public final class FlywayMigrator {
         /**
          * Customizes Flyway configuration before {@code load().migrate()}.
          *
-         * <p>The native-image resource provider is installed before this customizer runs, so advanced
-         * callers can still override Flyway's resource provider explicitly.
+         * <p>Runs before the native-image resource provider is installed, so changes made here -
+         * including {@code locations(...)} - are what the native scanner is built from. A customizer
+         * that sets its own {@link org.flywaydb.core.api.ResourceProvider} keeps it: the built-in
+         * one is only installed when none was supplied.
          *
          * @param customizer Flyway configuration customizer.
          * @return this builder.

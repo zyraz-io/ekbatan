@@ -63,6 +63,14 @@ ekbatan:
                 driverClassName: org.postgresql.Driver
                 maximumPoolSize: 30
                 leakDetectionThreshold: 0
+  # ISO-8601, the format java.time.Duration.parse accepts - PT10S, and not Spring's own PT10S
+  # shorthand equivalent "10s", which the binder rejects. Shown here because the shipped
+  # configuration is what gets copied; WalletJobsIntegrationTest sets its own durations through
+  # @SpringBootTest(properties = ...) and those override this file, so this line documents the
+  # format rather than guarding it.
+  jobs:
+    pollingInterval: PT10S
+
   local-event-handler:
     handling:
       enabled: true

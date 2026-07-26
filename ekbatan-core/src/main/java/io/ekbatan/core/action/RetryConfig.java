@@ -30,5 +30,8 @@ public final class RetryConfig {
         Validate.isTrue(maxRetries >= 0, "maxRetries must be non-negative");
         this.maxRetries = maxRetries;
         this.delay = Validate.notNull(delay, "delay cannot be null");
+        // A negative delay was accepted here and only failed at the first retry, inside
+        // Thread.sleep, far from the configuration that caused it.
+        Validate.isTrue(!delay.isNegative(), "delay cannot be negative");
     }
 }

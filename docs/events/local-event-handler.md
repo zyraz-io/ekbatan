@@ -43,7 +43,7 @@ Your App
 Your handlers (in-process, virtual threads)
 ```
 
-Both jobs are `DistributedJob`s registered with the existing `JobRegistry`, so cluster exclusivity, heartbeating, and crash recovery are inherited — only one instance per cluster runs the fan-out job, only one runs the handling job.
+Both jobs are `DistributedJob`s registered with the existing `JobRegistry`, so cluster exclusivity, heartbeating, and crash recovery are inherited — a single instance per cluster runs the fan-out job and a single instance runs the handling job. As with any `DistributedJob` that is the normal case rather than a guarantee — a stalled instance can have its execution revived elsewhere — but both jobs are written to be safe under a repeat.
 
 ## Defining a handler
 
@@ -217,11 +217,13 @@ With `@EkbatanEventHandler`-annotated handlers and the local-event-handler modul
 ```yaml
 ekbatan:
   local-event-handler:
-    fanout-poll-delay: 1s
-    handling-poll-delay: 1s
+    fanout-poll-delay: PT1S
+    handling-poll-delay: PT1S
     handling:
       enabled: true            # opt in to running EventHandlingJob in this process
 ```
+
+> **Durations are ISO-8601.** `PT10S` (10 seconds), `PT0.2S` (200 ms), `PT5M` (5 minutes). Spring Boot's shorthand - `10s`, `200ms` - is **not** accepted: the value is bound by Jackson's `Duration` deserializer, which calls `Duration.parse`, so a shorthand value fails at startup with `Cannot deserialize value of type java.time.Duration`.
 
 The opt-in for `EventHandlingJob` exists because some deployments want the fan-out path on (so events leave the outbox into `event_notifications`) without running handlers locally — e.g. a separate worker process picks them up. Default is **off**.
 

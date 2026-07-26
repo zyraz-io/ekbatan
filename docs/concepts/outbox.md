@@ -41,6 +41,8 @@ var executor = ActionExecutor.Builder.actionExecutor()
         .build();
 ```
 
+The namespace must be **dot-separated identifiers, shaped like a Java package** - letters, digits and underscores, each segment starting with a letter or underscore. It is rejected at startup otherwise. A service name is the obvious thing to put here and service names are usually hyphenated, so this catches people out: the namespace is also used as a schema package when streaming, and a hyphen is a syntax error in both protobuf and Avro. Write `my_service`, not `my-service`.
+
 `event_type` is the event class's simple name, e.g. `WalletMoneyDepositedEvent`, not the fully-qualified package name. This keeps package moves from changing the wire/database contract. The default persister guards that contract at runtime: if one service emits two different event classes with the same simple name, it throws instead of writing ambiguous rows.
 
 The on-disk shape of the event tables — the SQL DDL, the dialect-specific column types, the `delivered` column written on every insert, the `event_notifications` table the local-event-handler path adds for in-process dispatch, the indexes — lives in **[Framework tables](../database/tables.md)**.

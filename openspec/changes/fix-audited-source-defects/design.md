@@ -82,10 +82,29 @@ finally { connection.setAutoCommit(initialAutoCommit); }   // runs even when rol
 MySQL/MariaDB document as an implicit `COMMIT` ("Statements That Cause an Implicit Commit").
 HikariCP 7.0.2 passes `setAutoCommit` straight to the driver.
 
-The trigger requires `ROLLBACK` to fail on a live session: `KILL QUERY` against the in-flight
-rollback raises error 1317 `ER_QUERY_INTERRUPTED` and, unlike `KILL CONNECTION`, leaves the
-transaction open; or a MariaDB Galera node returns "WSREP has not yet prepared node for
-application use".
+The trigger requires `ROLLBACK` to fail on a live session, and reachability is **not uniform
+across dialects**. Measured under a saturating `KILL QUERY` flood:
+
+- **MariaDB 11.8 - reachable, with real data loss.** ROLLBACK is interrupted in early dispatch,
+  before any undo work, so error 1317 `ER_QUERY_INTERRUPTED` leaves the transaction open and fully
+  committable. 64 of 3000 rollbacks threw; 60 of those were durably committed by the pre-fix code.
+  Zero leaked once fixed.
+- **MySQL 8.4 - not reachable this way.** ~16,000 kills produced zero interrupted ROLLBACKs.
+- **PostgreSQL 18 - mechanism fires but is neutralised.** The aborted-transaction-block rule means
+  the follow-up COMMIT returns the `ROLLBACK` command tag. Zero leaks in 15,000 iterations.
+
+SQLState matters too: `08*` states cause HikariCP's own `checkException` to evict the connection
+before the restore is reached, masking the defect. The states that actually reach it are the
+transaction-level ones (1317/70100, 40001).
+
+Realistic sources of the required `KILL QUERY`: DBAs, `pt-kill`, MaxScale/ProxySQL, cloud query
+killers, `Statement.cancel()`, and JDBC query-timeout tasks. Ekbatan sets no query timeout itself,
+so it is not self-inflicted by default.
+
+(An earlier draft of this section also cited a Galera node returning "WSREP has not yet prepared
+node for application use". That is **not** load-bearing and is left out deliberately: in the wsrep
+rejection modes that would fail a `ROLLBACK`, the follow-up `SET autocommit=1` is rejected with the
+same error, so no implicit commit reaches the server. Nobody tested it.)
 
 The irony is load-bearing: the comment at lines 59-67 is the only place in the repo that mentions
 an implicit commit, and it names `setAutoCommit(true)` on a not-rolled-back transaction as the
@@ -160,7 +179,17 @@ Fix: `var cv = config.getConfigValue(name); if (cv.getValue() != null) props.set
 
 ### 5. `InProcessKeyedLockProvider.tryAcquire` leaks its refcount on interrupt
 
-`ekbatan-core/.../concurrent/InProcessKeyedLockProvider.java:65` - **medium**.
+**Resolved by deleting the class, not by fixing it.** The finding below stands as written; what
+changed is the verdict on whether the code should exist. `KeyedLockProvider` has no consumer inside
+the framework - it is a user-facing utility - and every Ekbatan user already runs a database, so
+`PostgresKeyedLockProvider` was always the zero-extra-infrastructure option. The remaining argument
+for an in-process provider was that it made a convenient test double, but `KeyedLockProvider` is an
+interface: a mock or a ten-line fake serves that better than a production-grade fair-semaphore
+implementation with refcounted eviction and a watchdog thread. Keeping it meant supporting a
+published class with no consumer, whose only distinguishing promise (FIFO fairness in a single JVM)
+is niche and which a user could mistakenly select for a multi-node deployment.
+
+`ekbatan-core/.../concurrent/InProcessKeyedLockProvider.java:65` - **medium**, now removed.
 
 ```java
 var entry = retainEntry(key);

@@ -21,6 +21,7 @@ import io.ekbatan.test.local_event_handler.note.handler.NoteCreatedAuditHandler;
 import io.ekbatan.test.local_event_handler.note.models.Note;
 import io.ekbatan.test.local_event_handler.widget.action.WidgetCreateAction;
 import io.ekbatan.test.local_event_handler.widget.handler.AlwaysFailingWidgetCreatedHandler;
+import io.ekbatan.test.local_event_handler.widget.handler.ErrorThrowingWidgetCreatedHandler;
 import io.ekbatan.test.local_event_handler.widget.handler.FlakyWidgetCreatedHandler;
 import io.ekbatan.test.local_event_handler.widget.handler.SlowAlwaysFailingHandler;
 import io.ekbatan.test.local_event_handler.widget.handler.WidgetCreatedAutoNoteHandler;
@@ -66,7 +67,7 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
 
     private ActionExecutor newActionExecutor(Clock clock) {
         return actionExecutor()
-                .namespace("test.local-event-handler")
+                .namespace("test.local_event_handler")
                 .databaseRegistry(databaseRegistry)
                 .objectMapper(objectMapper)
                 .clock(clock)
@@ -354,6 +355,58 @@ public abstract class BaseLocalEventHandlerIntegrationTest {
         var callsBefore = failingHandler.callCount();
         handlingJob.drainOneRound();
         assertThat(failingHandler.callCount()).isEqualTo(callsBefore);
+    }
+
+    /**
+     * A handler throwing an {@link Error} must fail its own notification and nothing else.
+     *
+     * <p>Before this was fixed, the Error escaped {@code classify()} (which caught {@code Exception},
+     * and {@code Error} is not an {@code Exception}), surfaced at {@code Future.get()} as an
+     * {@code ExecutionException}, and was rethrown upstream of every state UPDATE - so the whole
+     * batch was discarded with zero rows written. The sibling handler below had already run
+     * successfully; its success was simply never recorded, so it was re-invoked on every poll,
+     * forever, turning at-least-once delivery into at-once-per-second-forever.
+     */
+    @Test
+    void an_error_from_one_handler_does_not_discard_the_rest_of_its_batch() throws Exception {
+        // GIVEN two handlers for the same event, so both notifications land in one batch on one
+        // shard - one throws NoClassDefFoundError, the other succeeds
+        var errorHandler = new ErrorThrowingWidgetCreatedHandler();
+        var emailHandler = new WidgetCreatedEmailHandler();
+        var registry = eventHandlerRegistry()
+                .withHandler(errorHandler)
+                .withHandler(emailHandler)
+                .build();
+
+        var fanoutJob = eventFanoutJob()
+                .databaseRegistry(databaseRegistry)
+                .eventHandlerRegistry(registry)
+                .clock(Clock.systemUTC())
+                .build();
+        var handlingJob = eventHandlingJob()
+                .databaseRegistry(databaseRegistry)
+                .eventHandlerRegistry(registry)
+                .objectMapper(objectMapper)
+                .clock(Clock.systemUTC())
+                .build();
+
+        // WHEN
+        executor.execute(
+                () -> "tester", WidgetCreateAction.class, new WidgetCreateAction.Params(shardFor(0), "alpha", "red"));
+        fanoutJob.drainOneRound();
+        handlingJob.drainOneRound();
+
+        // THEN both handlers ran, and the healthy one's success survived its sibling's Error
+        assertThat(errorHandler.callCount()).isEqualTo(1);
+        assertThat(emailHandler.callCount()).isEqualTo(1);
+        assertThat(countNotifications("SUCCEEDED")).isEqualTo(1);
+        assertThat(countNotifications("FAILED")).isEqualTo(1);
+
+        // AND the next poll makes progress rather than re-processing the identical batch: the
+        // succeeded notification is not re-delivered
+        handlingJob.drainOneRound();
+        assertThat(emailHandler.callCount()).isEqualTo(1);
+        assertThat(countNotifications("SUCCEEDED")).isEqualTo(1);
     }
 
     @Test

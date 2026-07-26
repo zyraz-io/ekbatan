@@ -88,6 +88,15 @@ public final class Jackson3RecordsFeature implements Feature {
      */
     private final java.util.Set<Class<?>> fieldsRegistered = new java.util.HashSet<>();
 
+    /**
+     * Names of classes skipped because introspecting their members threw - almost always a
+     * {@link NoClassDefFoundError} for an optional dependency absent from the build classpath.
+     * Reported in the summary so a skip is visible rather than silent: a class that Jackson does
+     * need at runtime would otherwise fail much later, as a
+     * {@code MissingReflectionRegistrationError} with no hint that it was passed over here.
+     */
+    private final java.util.Set<String> skipped = new java.util.TreeSet<>();
+
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
         String[] scanRoots = resolveScanRoots();
@@ -205,6 +214,11 @@ public final class Jackson3RecordsFeature implements Feature {
                 + jooqRecordCount + " jOOQ-generated classes, " + builderCount + " builders, " + creatorCount
                 + " @JsonCreator-bearing classes (+ " + creatorTargets.size()
                 + " creator-target return types) under " + String.join(",", scanRoots));
+        if (!skipped.isEmpty()) {
+            System.out.println("[ekbatan-native] Jackson3RecordsFeature: skipped " + skipped.size()
+                    + " class(es) whose members could not be introspected (absent optional"
+                    + " dependencies): " + String.join(",", skipped));
+        }
     }
 
     private static Class<?> tryLoadByName(String fqcn) {
@@ -259,19 +273,41 @@ public final class Jackson3RecordsFeature implements Feature {
         while (c != null && c != Object.class) {
             boolean newClass = registered.add(c);
             boolean newFields = includeFields && fieldsRegistered.add(c);
-            if (newClass) {
-                RuntimeReflection.register(c);
-                RuntimeReflection.registerAllDeclaredMethods(c);
-                RuntimeReflection.registerAllDeclaredConstructors(c);
-                for (var ctor : c.getDeclaredConstructors()) {
-                    RuntimeReflection.register(ctor);
+            // getDeclaredConstructors / getDeclaredMethods resolve every parameter and return
+            // type the members mention, so a single member referring to an absent optional
+            // dependency throws NoClassDefFoundError out of what reads like a plain query.
+            // KafkaClientsFeature and TestcontainersDockerJavaFeature both guard this exact call
+            // and document it as necessary; unguarded here, one such class aborted the entire
+            // image build instead of being skipped. The existing tryLoad / tryLoadByName guards
+            // cover only the loading step, which is a different failure.
+            //
+            // The set entries are rolled back so a partially registered class is not recorded as
+            // done, and the walk stops here: if this class could not be introspected, its
+            // superclass chain is not reachable through it either.
+            try {
+                if (newClass) {
+                    RuntimeReflection.register(c);
+                    RuntimeReflection.registerAllDeclaredMethods(c);
+                    RuntimeReflection.registerAllDeclaredConstructors(c);
+                    for (var ctor : c.getDeclaredConstructors()) {
+                        RuntimeReflection.register(ctor);
+                    }
+                    for (var method : c.getDeclaredMethods()) {
+                        RuntimeReflection.register(method);
+                    }
                 }
-                for (var method : c.getDeclaredMethods()) {
-                    RuntimeReflection.register(method);
+                if (newFields) {
+                    RuntimeReflection.registerAllDeclaredFields(c);
                 }
-            }
-            if (newFields) {
-                RuntimeReflection.registerAllDeclaredFields(c);
+            } catch (Throwable t) {
+                if (newClass) {
+                    registered.remove(c);
+                }
+                if (newFields) {
+                    fieldsRegistered.remove(c);
+                }
+                skipped.add(c.getName());
+                return;
             }
             if (!walkChain) {
                 return;

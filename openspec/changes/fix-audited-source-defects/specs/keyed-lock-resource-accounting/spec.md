@@ -18,14 +18,17 @@ Every exit from a `KeyedLockProvider` acquire attempt - success, contention time
 or any exception from registration - SHALL leave the provider's bookkeeping exactly as it was
 before the attempt, except for a successful acquire.
 
-#### Scenario: Interrupted in-process tryAcquire
+#### Scenario: Interrupted acquire on any provider
 
 - **GIVEN** a thread whose interrupt flag is already set, or which is interrupted while waiting
-- **WHEN** it calls `InProcessKeyedLockProvider.tryAcquire(key, maxWait, maxHold)`, contended or
-  not, including with `maxWait = Duration.ZERO`
+- **WHEN** it calls `tryAcquire(key, maxWait, maxHold)` on any provider, contended or not,
+  including with `maxWait = Duration.ZERO`
 - **THEN** `InterruptedException` SHALL be thrown
-- **AND** the per-key refcount SHALL be decremented, so `activeKeyCount()` returns to zero once
-  no holder or waiter remains, as the class javadoc promises
+- **AND** no per-key bookkeeping SHALL be left behind
+
+Note: the original wording named `InProcessKeyedLockProvider`, which was the only provider that
+violated this. That class has since been deleted rather than fixed - see `design.md` finding 5 -
+so the requirement now stands as a contract on whatever providers remain.
 
 #### Scenario: Registration failure on a SQL provider
 

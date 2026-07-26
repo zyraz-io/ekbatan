@@ -44,4 +44,12 @@ class RetryConfigTest {
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("delay cannot be null");
     }
+
+    @Test
+    void should_reject_a_negative_delay() {
+        // Accepted before, then failing at the first retry inside Thread.sleep.
+        assertThatThrownBy(() -> new RetryConfig(3, java.time.Duration.ofSeconds(-1)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("delay");
+    }
 }

@@ -8,6 +8,8 @@ import static io.ekbatan.core.repository.RepositoryRegistry.Builder.repositoryRe
 import static io.ekbatan.core.shard.DatabaseRegistry.Builder.databaseRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.example.finance.proto.WalletCreatedEvent;
+import com.example.finance.proto.WalletMoneyDepositedEvent;
 import io.debezium.testing.testcontainers.ConnectorConfiguration;
 import io.debezium.testing.testcontainers.DebeziumContainer;
 import io.ekbatan.core.action.ActionExecutor;
@@ -18,8 +20,6 @@ import io.ekbatan.test.event_pipeline.common.wallet.action.WalletCreateAction;
 import io.ekbatan.test.event_pipeline.common.wallet.action.WalletDepositMoneyAction;
 import io.ekbatan.test.event_pipeline.common.wallet.models.Wallet;
 import io.ekbatan.test.event_pipeline.common.wallet.repository.WalletRepository;
-import io.ekbatan.test.event_pipeline.protobuf_smt.proto.WalletCreatedEvent;
-import io.ekbatan.test.event_pipeline.protobuf_smt.proto.WalletMoneyDepositedEvent;
 import io.ekbatan.test.event_pipeline.protobuf_smt.router.ProtobufEventRouter;
 import io.ekbatan.test.event_pipeline.protobuf_smt.streaming.ProtobufRetryingEventConsumer;
 import java.math.BigDecimal;
@@ -122,8 +122,8 @@ class EventStreamingProtobufSmtIntegrationTest {
                 .build();
 
         // Both event types live in the same combined descriptor file.
-        var payloadDescriptors = "WalletCreatedEvent:" + CONTAINER_DESCRIPTORS_DIR + "/payloads.desc"
-                + ",WalletMoneyDepositedEvent:" + CONTAINER_DESCRIPTORS_DIR + "/payloads.desc";
+        var payloadDescriptors = NAMESPACE + ".proto.WalletCreatedEvent:" + CONTAINER_DESCRIPTORS_DIR + "/payloads.desc"
+                + "," + NAMESPACE + ".proto.WalletMoneyDepositedEvent:" + CONTAINER_DESCRIPTORS_DIR + "/payloads.desc";
 
         var connectorConfig = ConnectorConfiguration.forJdbcContainer(PG)
                 .with("topic.prefix", "dbserver1")
@@ -135,8 +135,8 @@ class EventStreamingProtobufSmtIntegrationTest {
                 .with(
                         "transforms.encodeProto.type",
                         "io.ekbatan.events.streaming.debeziumsmt.protobuf.OutboxToProtobufTransform")
-                .with("transforms.encodeProto.payloadDescriptors", payloadDescriptors)
-                .with("transforms.encodeProto.actionEventDescriptor", CONTAINER_DESCRIPTORS_DIR + "/ActionEvent.desc")
+                .with("transforms.encodeProto.payload.descriptors", payloadDescriptors)
+                .with("transforms.encodeProto.action.event.descriptor", CONTAINER_DESCRIPTORS_DIR + "/ActionEvent.desc")
                 .with("transforms.encodeProto.payload.field", "payload")
                 .with("transforms.encodeProto.event.type.field", "event_type");
         DEBEZIUM.registerConnector("events-connector", connectorConfig);

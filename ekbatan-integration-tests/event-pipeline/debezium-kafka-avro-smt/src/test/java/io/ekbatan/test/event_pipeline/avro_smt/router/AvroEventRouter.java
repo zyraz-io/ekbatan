@@ -6,8 +6,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.apache.avro.io.DecoderFactory;
-import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -77,9 +75,7 @@ public class AvroEventRouter implements AutoCloseable {
     }
 
     private void routeEvent(byte[] value) throws Exception {
-        var reader = new SpecificDatumReader<>(ActionEvent.class);
-        var decoder = DecoderFactory.get().binaryDecoder(value, null);
-        var actionEvent = reader.read(null, decoder);
+        var actionEvent = ActionEvent.fromByteBuffer(java.nio.ByteBuffer.wrap(value));
 
         var modelType = actionEvent.getModelType();
         var eventType = actionEvent.getEventType();

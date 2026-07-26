@@ -122,28 +122,32 @@ public class RetryingEventConsumer implements AutoCloseable {
                     : (ObjectNode) actionParamsNode;
         }
 
-        return new ActionEvent(
-                UUID.fromString(json.get("id").asString()),
-                json.get("namespace").asString(),
-                UUID.fromString(json.get("action_id").asString()),
-                json.get("action_name").asString(),
-                actionParams,
-                parseTimestamp(json.get("started_date")),
-                parseTimestamp(json.get("completion_date")),
-                json.has("model_id") && !json.get("model_id").isNull()
-                        ? json.get("model_id").asString()
-                        : null,
-                json.has("model_type") && !json.get("model_type").isNull()
-                        ? json.get("model_type").asString()
-                        : null,
-                json.has("event_type") && !json.get("event_type").isNull()
-                        ? json.get("event_type").asString()
-                        : null,
-                payload,
-                parseTimestamp(json.get("event_date")),
-                json.has("delivered")
+        // Through the builder rather than the 13-argument constructor. This mapping is the whole
+        // reason the builder exists: modelType/eventType are adjacent Strings and
+        // startedDate/completionDate adjacent Instants, so a transposition here would compile,
+        // run, and route events to the wrong topic. Naming each field makes that impossible.
+        return ActionEvent.actionEvent()
+                .id(UUID.fromString(json.get("id").asString()))
+                .namespace(json.get("namespace").asString())
+                .actionId(UUID.fromString(json.get("action_id").asString()))
+                .actionName(json.get("action_name").asString())
+                .actionParams(actionParams)
+                .startedDate(parseTimestamp(json.get("started_date")))
+                .completionDate(parseTimestamp(json.get("completion_date")))
+                .modelId(text(json, "model_id"))
+                .modelType(text(json, "model_type"))
+                .eventType(text(json, "event_type"))
+                .payload(payload)
+                .eventDate(parseTimestamp(json.get("event_date")))
+                .delivered(json.has("delivered")
                         && !json.get("delivered").isNull()
-                        && json.get("delivered").asBoolean());
+                        && json.get("delivered").asBoolean())
+                .build();
+    }
+
+    /** Nullable column: absent and JSON null both mean "not set" on a sentinel row. */
+    private static String text(tools.jackson.databind.JsonNode json, String field) {
+        return json.has(field) && !json.get(field).isNull() ? json.get(field).asString() : null;
     }
 
     private Instant parseTimestamp(tools.jackson.databind.JsonNode node) {

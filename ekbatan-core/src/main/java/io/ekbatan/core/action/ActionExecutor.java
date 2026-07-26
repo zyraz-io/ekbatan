@@ -92,7 +92,7 @@ public class ActionExecutor {
     private final ExecutionConfiguration defaultExecutionConfiguration;
 
     private ActionExecutor(Builder builder) {
-        this.namespace = Validate.notBlank(builder.namespace, "namespace is required");
+        this.namespace = requireValidNamespace(builder.namespace);
         this.databaseRegistry = Validate.notNull(builder.databaseRegistry, "databaseRegistry is required");
         final var objectMapper = Validate.notNull(builder.objectMapper, "objectMapper is required");
         this.actionRegistry = Validate.notNull(builder.actionRegistry, "actionRegistry is required");
@@ -107,6 +107,40 @@ public class ActionExecutor {
         this.changePersister = new ChangePersister(repositoryRegistry, eventPersister, clock);
         this.defaultExecutionConfiguration =
                 Validate.notNull(builder.defaultExecutionConfiguration, "defaultExecutionConfiguration is required");
+    }
+
+    /**
+     * Dot-separated identifiers, the same shape as a Java package. Anchored, so the whole value
+     * must match rather than merely contain a match.
+     */
+    private static final java.util.regex.Pattern NAMESPACE =
+            java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*");
+
+    /**
+     * The namespace is not free text: it is a naming root, so it has to be spellable everywhere it
+     * is used downstream.
+     *
+     * <p>It reaches Kafka topic names ({@code ekbatan.{namespace}}) and, for binary streaming, the
+     * schema package a payload's {@code .proto} or {@code .avsc} declares. Protobuf's grammar is
+     * {@code ident = letter { letter | decimalDigit | "_" }} - so a hyphen is a syntax error, not a
+     * style preference: {@code package test.local-event-handler;} fails in protoc with
+     * {@code Expected ";"}. Accepting one here would defer that failure to whoever later tried to
+     * write a schema for the events.
+     *
+     * <p>A service name is the natural thing to put here and is conventionally hyphenated, so this
+     * rejects rather than silently rewriting: turning {@code my-svc} into {@code my_svc} would
+     * change the topic name and the value stored on every outbox row without the operator asking.
+     */
+    private static String requireValidNamespace(String namespace) {
+        Validate.notBlank(namespace, "namespace is required");
+        Validate.isTrue(
+                NAMESPACE.matcher(namespace).matches(),
+                "namespace '%s' must be dot-separated identifiers, like a Java package"
+                        + " (letters, digits and underscore; each segment starting with a letter or"
+                        + " underscore). Hyphens are not legal in a protobuf package or Avro namespace,"
+                        + " and the namespace is used as one - write 'my_service' rather than 'my-service'.",
+                namespace);
+        return namespace;
     }
 
     /**
@@ -173,10 +207,14 @@ public class ActionExecutor {
                         final R performResult;
                         try (var _ = performSpan.makeCurrent()) {
                             performResult = action.runIn(plan, principal, params);
-                        } catch (Exception e) {
-                            performSpan.setStatus(StatusCode.ERROR, e.getMessage());
-                            performSpan.recordException(e);
-                            throw e;
+                        } catch (Throwable t) {
+                            // Throwable: runIn -> Action.perform is arbitrary user code, and an
+                            // Error from it is still a failed action. Caught as Exception it
+                            // skipped both lines below while the finally still ended the span, so
+                            // a perform that died was exported looking successful.
+                            performSpan.setStatus(StatusCode.ERROR, t.getMessage());
+                            performSpan.recordException(t);
+                            throw t;
                         } finally {
                             performSpan.end();
                         }
@@ -192,12 +230,15 @@ public class ActionExecutor {
                     Duration.between(startTime, clock.instant()).toMillis(),
                     principalName);
             return result;
-        } catch (Exception e) {
+        } catch (Throwable t) {
+            // An Error killing an action must still be reported. Caught as Exception it skipped the
+            // outcome attribute, the span status, the recorded exception AND the error log, leaving
+            // no trace anywhere that the action had failed.
             actionSpan.setAttribute("ekbatan.action.outcome", "error");
-            actionSpan.setStatus(StatusCode.ERROR, e.getMessage());
-            actionSpan.recordException(e);
-            LOG.error("{} failed: {}: {}", actionName, e.getClass().getSimpleName(), e.getMessage());
-            throw e;
+            actionSpan.setStatus(StatusCode.ERROR, t.getMessage());
+            actionSpan.recordException(t);
+            LOG.error("{} failed: {}: {}", actionName, t.getClass().getSimpleName(), t.getMessage());
+            throw t;
         } finally {
             actionSpan.end();
         }
@@ -251,7 +292,12 @@ public class ActionExecutor {
                                 actionEventId);
                     });
                     committedShards.add(shard);
-                } catch (Exception e) {
+                } catch (Throwable t) {
+                    // The most consequential of these: this is the partial-commit alarm. A
+                    // cross-shard action that commits shard A and fails on shard B does NOT roll
+                    // back automatically, and this log plus its span attributes are the only
+                    // notice anyone gets. Caught as Exception, an Error on shard B produced
+                    // partially-committed data in silence.
                     if (!committedShards.isEmpty()) {
                         LOG.error(
                                 "CRITICAL: Cross-shard action {} PARTIALLY COMMITTED! "
@@ -260,20 +306,20 @@ public class ActionExecutor {
                                 action.getClass().getSimpleName(),
                                 committedShards,
                                 shard,
-                                e.getClass().getSimpleName(),
-                                e.getMessage(),
-                                e);
+                                t.getClass().getSimpleName(),
+                                t.getMessage(),
+                                t);
                         persistSpan.setAttribute("ekbatan.shard.partial_commit_failure", true);
                         persistSpan.setAttribute("ekbatan.shard.committed_shards", committedShards.toString());
                         persistSpan.setAttribute("ekbatan.shard.failed_shard", shard.toString());
                     }
-                    throw e;
+                    throw t;
                 }
             }
-        } catch (Exception e) {
-            persistSpan.setStatus(StatusCode.ERROR, e.getMessage());
-            persistSpan.recordException(e);
-            throw e;
+        } catch (Throwable t) {
+            persistSpan.setStatus(StatusCode.ERROR, t.getMessage());
+            persistSpan.recordException(t);
+            throw t;
         } finally {
             persistSpan.end();
         }

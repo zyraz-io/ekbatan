@@ -55,7 +55,7 @@ import java.util.Optional;
  *
  * <h2>How the SQL-backed implementations wait</h2>
  *
- * <p>{@code InProcessKeyedLockProvider} and {@code RedisKeyedLockProvider} block on primitives
+ * <p>{@code RedisKeyedLockProvider} blocks on a primitive
  * that respond to {@link Thread#interrupt()} directly. The SQL-backed providers cannot: a single
  * unbounded {@code pg_advisory_lock} / {@code GET_LOCK} call parks the thread inside a JDBC
  * socket read, which no interrupt can break. They therefore wait in bounded segments (five

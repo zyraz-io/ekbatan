@@ -91,7 +91,7 @@ The framework writes only **JSON** to `eventlog.events.payload`. Binary encoding
 
 ## Consumer-side envelope contracts
 
-Three small modules are published; pick the one matching your wire format. Each carries the same 12-field shape (id, namespace, action_id/name, action_params, timestamps, model_id/type, event_type, payload, event_date) — only the encoding differs.
+Three small modules are published; pick the one matching your wire format. Each carries the same 13-field shape (id, namespace, action_id/name, action_params, started_date, completion_date, model_id/type, event_type, payload, event_date, delivered) — only the encoding differs. See [Envelope timestamps](#envelope-timestamps) for how the three date fields are declared in each.
 
 | Module | Format | What's in it |
 |---|---|---|
@@ -109,7 +109,13 @@ ekbatan.{namespace}.model.{ModelType}             — all events for a model typ
 ekbatan.{namespace}.event.{EventType}             — specific event type
 ```
 
-`{namespace}` is whatever you set on `ActionExecutor.Builder.namespace(...)`. Example with `namespace = "com.example.finance"`:
+`{namespace}` is what you set on `ActionExecutor.Builder.namespace(...)`. It must be **dot-separated identifiers, shaped like a Java package** — letters, digits and underscores, each segment starting with a letter or underscore. `ActionExecutor` rejects anything else at construction.
+
+> **Hyphens are not allowed.** A service name is the natural thing to put here and service names are conventionally hyphenated, so this catches people out — but the namespace is used as a *schema package*, and protobuf's grammar is `ident = letter { letter | decimalDigit | "_" }`. `package my-service;` is a syntax error, not a style preference: protoc reports `Expected ";"`. Write `my_service`. The rule is enforced up front rather than silently rewriting the value, because rewriting would change both your topic names and the `namespace` column on every outbox row without you asking.
+>
+> *Changed in `1.0.0`:* previously any non-blank string was accepted. A hyphenated namespace now fails at startup. Note that changing it also changes your topic names, and existing outbox rows keep the old value.
+
+Example with `namespace = "com.example.finance"`:
 
 ```
 ekbatan.com.example.finance
@@ -157,9 +163,157 @@ Both:
 - **Drop ops other than `c` (create) and `r` (read/snapshot).** The `UPDATE delivered = TRUE` writes from the local-event-handler fan-out path are filtered out, so the in-process and Kafka paths can coexist on the same `eventlog.events` table without double-publishing.
 - **Skip sentinel rows** where `event_type IS NULL`.
 - **Throw `DataException` for corrupt event rows** such as `event_type IS NOT NULL` with `payload IS NULL`, missing Avro schema / protobuf descriptor mappings, or payloads that cannot be encoded. Sentinel rows are skipped; malformed real events should be visible to operators.
+- **Convert each column through its Connect schema** rather than copying the raw value across. The same logical column reaches the SMT as a different Java type depending on the database, the column's precision and the connector's `time.precision.mode`: `BOOLEAN` is a real boolean on PostgreSQL but `TINYINT(1)` (an INT16) on MySQL and MariaDB, and a timestamp arrives as epoch millis, micros, nanos, an ISO-8601 string or a `java.util.Date`. All timestamps are normalised to **epoch microseconds**, which is lossless for every form Debezium produces here and leaves PostgreSQL's bytes unchanged. There is no dialect setting: the SMT branches on what the record says its columns are, so the same row yields identical bytes on all three databases. A column it cannot convert raises `DataException` naming the column, its Connect schema and the runtime type.
+- **Never pass a record through untouched.** Because the SMT emits `byte[]`, its connector runs `ByteArrayConverter`, which can serialize only bytes or null - so handing back an unrecognised record guarantees the converter throws and the task dies. Every record therefore gets one of four outcomes: an outbox row is **encoded**; something recognised but deliberately not published is **skipped** silently (the `UPDATE` that flips `delivered`, a delete, and the tombstone that accompanies it); Debezium's own housekeeping - heartbeats, schema-change notices, transaction metadata - is **dropped** with a WARN logged once; and a data row from a table that is *not* the outbox raises **`DataException`**, because silently discarding someone else's data is worse than stopping. Housekeeping is told apart structurally, by the absence of the `after` field, rather than by a list of Debezium class names.
+- **Prefer running this SMT before any unwrap transform.** The `c`/`r` filter reads Debezium's `op`, which lives on the envelope, so `ExtractNewRecordState` running first takes it away. The SMT still filters correctly in that case - it falls back to the row's `delivered` column - but there is one snapshot limitation to know about. See [Unwrapped records and `ExtractNewRecordState`](#unwrapped-records-and-extractnewrecordstate).
+- **Tombstones are not republished.** A delete produces both a change event and a tombstone under the same key. Since the outbox key is the row id the `ActionEvent` was published under, forwarding the tombstone would let a compacted topic erase an event that had already been delivered - so pruning old `eventlog.events` rows can never unpublish the facts they recorded.
+- **Validate the `ActionEvent` schema at startup.** Every field of the configured schema must have a column binding; one that does not fails the connector immediately rather than shipping that field unset on every message. A schema carrying only a subset of the fields is accepted.
 - **Load schemas/descriptors from file paths** passed as transform properties at Kafka Connect startup. The schemas are exposed as Gradle named configurations on the consumer-side `action-event:avro` / `action-event:protobuf` modules so containerised setups can mount them in.
 
-The integration tests under [`ekbatan-integration-tests/event-pipeline`](../../ekbatan-integration-tests/event-pipeline) (the `debezium-kafka-avro-smt` and `debezium-kafka-protobuf-smt` subprojects) wire up Debezium + Kafka + the SMT in TestContainers as a working reference.
+> `payload.field` and `event.type.field` name the source **column on the outbox row**, never the target field in the `ActionEvent` schema. The target field names are fixed by the schema.
+
+The integration tests under [`ekbatan-integration-tests/event-pipeline`](../../ekbatan-integration-tests/event-pipeline) (the `debezium-kafka-avro-smt` and `debezium-kafka-protobuf-smt` subprojects) wire up Debezium + Kafka + the SMT in TestContainers as a working reference, against PostgreSQL. `debezium-kafka-dialects-smt` runs the same pipeline against MySQL and MariaDB, writing through the real event persister so the dialect-specific column bindings are the ones under test.
+
+### SMT configuration
+
+Each transform takes five properties. The two schema properties are mandatory; the connector will not start without them.
+
+| Property | Avro | Protobuf | Default | Meaning |
+|---|---|---|---|---|
+| payload schemas | `payload.schemas` | `payload.descriptors` | *(required)* | Comma-separated `<qualified-name>:<path>` pairs — one per event type. See below. |
+| envelope schema | `action.event.schema` | `action.event.descriptor` | *(required)* | Path to `ActionEvent.avsc`, or to the protobuf `.desc` descriptor set. |
+| `payload.field` | ✔ | ✔ | `payload` | Outbox **column** holding the JSON payload. |
+| `event.type.field` | ✔ | ✔ | `event_type` | Outbox **column** holding the event-type discriminator. |
+| `namespace.field` | ✔ | ✔ | `namespace` | Outbox **column** holding the namespace; with the event type it selects the schema. |
+
+> **Changed in `1.0.0`.** These four were `payloadSchemas`, `actionEventSchema`,
+> `payloadDescriptors` and `actionEventDescriptor` - camelCase among otherwise dotted keys, so
+> every option now follows Kafka's own convention and there is no per-option spelling to remember.
+> Rename them in your connector configuration; the old spellings are not accepted, and Connect
+> ignores an unrecognised key rather than rejecting it, so a missed rename shows up as the option
+> silently having no effect.
+
+The transform class names are `io.ekbatan.events.streaming.debeziumsmt.avro.OutboxToAvroTransform` and `io.ekbatan.events.streaming.debeziumsmt.protobuf.OutboxToProtobufTransform`.
+
+#### Naming a payload schema
+
+The mapping key is the schema's **own fully-qualified name**, built from three things:
+
+```
+com.example.finance . avro . WalletCreatedEvent
+└──── namespace ───┘  └fmt┘  └── event_type ──┘
+```
+
+- **namespace** — the row's `namespace` column, i.e. what you set on `ActionExecutor.Builder.namespace(...)`
+- **format** — literally `avro` or `proto`, according to which transform you are configuring
+- **event type** — the event class's simple name
+
+Your schema must *declare* that name. For Avro, the `.avsc`'s `namespace` + `name`; for protobuf, the `.proto`'s `package` + message name. Both transforms check it at startup and refuse to start on a mismatch, quoting both the configured and the declared name.
+
+```properties
+transforms=outbox
+transforms.outbox.type=io.ekbatan.events.streaming.debeziumsmt.avro.OutboxToAvroTransform
+transforms.outbox.action.event.schema=/kafka/schemas/ActionEvent.avsc
+transforms.outbox.payload.schemas=\
+  com.example.finance.avro.WalletCreatedEvent:/kafka/schemas/WalletCreatedEvent.avsc,\
+  com.example.finance.avro.WalletMoneyDepositedEvent:/kafka/schemas/WalletMoneyDepositedEvent.avsc
+
+# Mandatory. The SMT emits byte[]; every other converter rejects it.
+value.converter=org.apache.kafka.connect.converters.ByteArrayConverter
+key.converter=org.apache.kafka.connect.storage.StringConverter
+```
+
+Three things follow from spelling the name out in full, and each fixes something that used to be silently wrong.
+
+**The namespace is part of the key**, so two services sharing one `eventlog.events` table — the reason the `namespace` column exists — can each define `OrderCreated` with different shapes. Keyed on the event type alone, one of them was encoded with the other's schema, and silently succeeded whenever the two happened to be field-compatible. There is no bare `EventType` wildcard: it would quietly match namespaces it was never meant to.
+
+**Protobuf messages are resolved by fully-qualified name.** A `.desc` built with `--include_imports` contains every imported file too, so a library message sharing a short name could be picked instead. A qualified name matches at most one message, so the ambiguity cannot arise rather than merely being detected.
+
+**The key, the name searched for, and the name in any error message are the same string** — so a failure can be diffed against your config by eye.
+
+> **Changed in `1.0.0`.** Keys were previously the bare event type (`WalletCreatedEvent:/path`). Add the namespace and format segment, and move your schema's `namespace` / `package` to `<namespace>.avro` or `<namespace>.proto`. That relocation is worth having on its own: generated payload classes then live in their own package and cannot collide with your application's classes. Note the namespace must be [dot-separated identifiers](#topic-naming) — no hyphens.
+
+Note the two naming styles: the schema properties are camelCase and the column properties are dotted. That is an inconsistency in the SMT's own `ConfigDef`, not a typo here.
+
+The SMT JARs are **not published to Maven Central** — Kafka Connect loads plugins from the filesystem. Build one with `./gradlew :ekbatan-events-streaming-debezium-smt-avro:shadowJar` and install it in **its own directory** under the worker's `plugin.path`. The separate directory matters: Connect gives each plugin directory its own classloader, which is what stops a plugin's bundled dependencies from colliding with anything else's. See [`ekbatan-events/streaming/README.md`](../../ekbatan-events/streaming/README.md) for the full install walkthrough.
+
+### Payload encoding
+
+The `payload` column holds JSON, which the SMT re-encodes against the per-`event_type` schema you configure. Protobuf delegates this to `JsonFormat.parser()`; Avro has no equivalent, so `JsonToAvro` does it. (Avro's `DecoderFactory.jsonDecoder` is not that equivalent - it reads Avro's *own* JSON encoding, in which a union value must be tagged with its type, `{"amount":{"string":"77.10"}}`, rather than the plain form Jackson writes.)
+
+The rule is that **the schema decides the type**, and a value that does not fit **fails, naming the field path** - it is never coerced to a default:
+
+| Situation | Behaviour |
+|---|---|
+| Value's type disagrees with the schema | `DataException` naming the field, e.g. `Field 'WalletDeposit.count' is declared LONG so it needs a number, but the payload has a STRING` |
+| `["null", T]` - Avro's spelling of "optional" | Decided by the schema alone: `null` to the null branch, otherwise `T` |
+| A union with several non-null branches | The branch that converts *and* accounts for the most of the JSON's keys; ties break toward the tighter schema, then declaration order with a WARN |
+| `decimal`, `timestamp-millis`/`-micros`/`-nanos`, `date`, `uuid` | Handled as those types. A decimal too precise for the schema's scale fails rather than rounding silently |
+| A timestamp given as a **number** | Taken to be already in the unit the schema declares - no scaling. `1700000000000` in a `timestamp-micros` field is read as 1.7 million microseconds, i.e. January 1970, not November 2023. A number carries no unit, so nothing can detect the mistake. Emit an ISO-8601 string when in doubt: a `java.time.Instant` serializes to one by default, and the string path converts to whichever unit the field declares |
+| Field absent from the JSON | Its schema default, or `DataException` if it has none |
+| Field present in the JSON but not in the schema | Dropped, with a WARN logged once - so an additive change to an event class cannot take the pipeline down, but the drift is visible |
+
+### How to read the bytes
+
+| Format | Envelope | Payload |
+|---|---|---|
+| Avro | `ActionEvent.fromByteBuffer(value)` | `MyEvent.fromByteBuffer(event.getPayload())` |
+| Protobuf | `ActionEvent.parseFrom(value)` | `MyEvent.parseFrom(event.getPayload())` |
+
+In both formats the same call works at both levels, and in both it is the method the generated class already gives you — there is nothing to hand-roll.
+
+For Avro this is true because the SMT emits **single-object encoding**: a two-byte marker, the schema's 8-byte fingerprint, then the record. `fromByteBuffer` reads exactly that.
+
+> **Upgrading from `1.0.0` or earlier — Avro only.** The SMT previously emitted bare Avro binary with no framing, which `fromByteBuffer` cannot read at all; it fails with `BadHeaderException: Not enough header bytes`. Anyone who worked around that by hand-rolling a `SpecificDatumReader` over a `binaryDecoder` should now delete that code and call `fromByteBuffer`. Messages gain 10 bytes each. Protobuf is unaffected — `parseFrom` always worked.
+
+The fingerprint is a bonus worth knowing about: it identifies *which* schema wrote each message, so a consumer holding several versions can resolve the right one via a `SchemaStore` rather than guessing. Note that Avro's parsing canonical form ignores logical types, so the `timestamp-micros` declaration above does not change the fingerprint and does not divide old readers from new.
+
+### Envelope timestamps
+
+`started_date`, `completion_date` and `event_date` are declared as **date types, not numbers**, in both binary formats:
+
+| Format | Declaration | What a consumer's generated code hands them |
+|---|---|---|
+| Avro | `{"type": "long", "logicalType": "timestamp-micros"}` | `java.time.Instant` |
+| Protobuf | `google.protobuf.Timestamp` | `Timestamp` (seconds + nanos) |
+| JSON | ISO-8601 string, via Jackson's default | a string you parse |
+
+This matters more than it looks. These fields used to be a bare `long` / `int64` counting microseconds, and a bare integer cannot say what it counts. A consumer reaching for the usual Java reflex — `Instant.ofEpochMilli(...)` — got a timestamp in the year 58535, with nothing anywhere raising an error; the reverse mistake lands three weeks after the epoch. The unit was recorded only in this document, so a correct consumer was one that happened to read it. Now the unit is part of the type, and the mistake cannot be expressed.
+
+Both are microsecond resolution, because that is what the source holds: `TIMESTAMP` on PostgreSQL and `DATETIME(6)` on MySQL and MariaDB are all six fractional digits. Protobuf's `Timestamp` has a nanosecond field, so its last three digits are always zero. Avro is deliberately **not** `timestamp-nanos`: that logical type only arrived in Avro 1.12, so consumers on 1.11 would silently fall back to a bare long — reintroducing the exact ambiguity — and it would advertise precision no supported database can store.
+
+> **Upgrading from `1.0.0` or earlier.** This is a breaking change to the published wire contract, taken deliberately before `1.0.0` froze it. Avro consumers are unaffected on the wire — a logical type annotates its underlying primitive, so the bytes are unchanged and an old schema still decodes them — but regenerating gives `Instant` where you had `long`. Protobuf consumers **must** regenerate: a message field is length-delimited where an `int64` is a varint, so old and new cannot read each other's bytes.
+
+Timestamps *inside* `payload` are a separate matter and were never ambiguous: Jackson 3 writes `java.time` values as ISO-8601 strings by default. If your application enables `WRITE_DATES_AS_TIMESTAMPS` on the `ObjectMapper` it hands to `ActionExecutor`, its payload timestamps become bare numbers again, with all of the ambiguity described above — the framework has no opinion there, and does not override the mapper you supply.
+
+### Unwrapped records and `ExtractNewRecordState`
+
+Debezium normally delivers each change inside an **envelope**: `{ before, after, source, op, ts_ms }`, where the row itself sits in `after` and `op` says what happened. Debezium 3.5 defines six operations - `c` insert, `r` snapshot read, `u` update, `d` delete, `t` truncate, `m` logical-decoding message - and both SMTs read that shape and publish only `c` and `r`. The filter is an allow-list, so any operation a future Debezium release adds is withheld rather than published unexamined.
+
+Some pipelines put Debezium's `ExtractNewRecordState` transform in front, which **unwraps** the envelope: the record value becomes the row's columns directly. The SMTs support that shape too - if the value carries the configured payload and event-type columns, it is treated as the row.
+
+**The catch: unwrapping discards `op`.** It lives on the envelope, and the envelope is gone. The SMT then has no way to tell an `INSERT` from an `UPDATE`.
+
+**When that matters.** Only if something updates `eventlog.events`, and exactly one thing in this framework does: the **`local-event-handler`** module sets `delivered = TRUE` on every row it fans out. So:
+
+| Deployment | Effect of unwrapping without `op` |
+|---|---|
+| Kafka only, no `local-event-handler` | Harmless - nothing ever updates the outbox, so there are no `UPDATE` events to mistake for inserts |
+| `local-event-handler` **and** Debezium on the same outbox | The flip would be republished as a duplicate event, so the SMT filters it on `delivered` instead - see below |
+
+The duplicate carries the same `id` and the same payload; only `delivered` differs. Consumers that deduplicate on `id` will not notice, but anything treating each message as a distinct fact will double-process.
+
+**What the SMT does about it.** It falls back to the row's own `delivered` column, which carries the same information for the only `UPDATE` this table ever sees. `SingleTableJsonEventPersister` inserts every row with `delivered = FALSE`, and the sole writer that sets it `TRUE` is the `local-event-handler` fanout - so `delivered = TRUE` *is* the flip, and `delivered = FALSE` *is* the insert. Duplicates are filtered without any configuration on your part.
+
+That couples the SMT to a framework invariant defined in another module, so the invariant is pinned from both ends: `EventEntityDeliveredDefaultTest` in `ekbatan-core` guards it at the source, and the unwrapped scenario in the `debezium-kafka-dialects-smt` module performs both writes against real Debezium and asserts the second publishes nothing. If the persister ever starts inserting rows already delivered, those fail rather than letting the SMT silently publish nothing.
+
+**One consequence worth knowing:** during an initial snapshot, rows already marked `delivered` are *not* replayed, because a snapshot read is indistinguishable from the flip without `op`. If you need the full history on a topic bootstrapped from an outbox that `local-event-handler` has already processed, use one of the options below. The SMT logs a WARN once when it takes this fallback, naming the limitation.
+
+**Preferred configurations**, which sidestep the question entirely:
+
+1. **Run the SMT before the unwrap transform** - `transforms=encodeAvro,unwrap` rather than `transforms=unwrap,encodeAvro`. The SMT sees the envelope and filters on `op`.
+2. **Carry `op` through the unwrap.** Configure `ExtractNewRecordState` with `add.fields=op`, which adds `__op` to the row. The SMTs honour it - and an explicit `op` always wins over the inferred `delivered` signal, so snapshot replay works again. A bare `op` is also accepted if you set an empty `add.fields.prefix`.
+3. **Do not run both delivery paths against one outbox.** If Kafka is the only consumer, drop `local-event-handler`; nothing then updates the table.
 
 ### SMT error handling
 
@@ -201,7 +355,7 @@ The router in the integration tests does this automatically.
 
 - **The Kafka client wiring** (consumer/producer configs, retry, DLQ). Too infrastructure-specific.
 - **Debezium connector configuration**. Properties differ across PostgreSQL / MySQL / MariaDB and across deployment topologies (snapshot mode, replica slot config, heartbeats).
-- **A Confluent Schema Registry binding for Avro.** The reference SMT uses bare schema files; switch to a Schema-Registry-backed converter at the Connect level if that's how your org runs Kafka.
+- **A Confluent Schema Registry binding.** The SMTs deliberately need no registry - they read schema files and emit Avro's single-object encoding (`0xC3 0x01` + an 8-byte schema fingerprint) or plain protobuf. Note that you **cannot** simply swap in a Schema-Registry-backed converter: the SMT emits `byte[]` with `Schema.BYTES_SCHEMA`, so `AvroConverter` would register a useless `"bytes"` schema and wrap the already-encoded payload inside it, and Confluent's wire format (`0x00` + a 4-byte schema id) is not the one we write. Registry users should either keep this SMT and treat the schema files as the contract, or drop it and use Debezium plus a registry-backed converter directly - in which case `payload` stays a JSON string rather than nested binary.
 
 ## See also
 

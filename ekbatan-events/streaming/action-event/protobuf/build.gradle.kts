@@ -61,3 +61,16 @@ artifacts {
         builtBy(tasks.named("generateProto"))
     }
 }
+
+// Ship the compiled descriptor set inside the published jar, alongside the ActionEvent.proto the
+// protobuf plugin already puts there. The SMT loads this file by path at runtime - the connector
+// will not start without it - and until now it existed only as the Gradle configuration above,
+// which is reachable from other modules in this build and from nobody consuming us via Maven. The
+// README consequently had to tell operators to build it from source.
+//
+// Renamed from protoc's generic descriptor_set.desc so the jar reads ActionEvent.proto /
+// ActionEvent.desc, and so two descriptors never collide if a second one is ever added.
+tasks.processResources {
+    from(descriptorFile) { rename { "ActionEvent.desc" } }
+    dependsOn(tasks.named("generateProto"))
+}

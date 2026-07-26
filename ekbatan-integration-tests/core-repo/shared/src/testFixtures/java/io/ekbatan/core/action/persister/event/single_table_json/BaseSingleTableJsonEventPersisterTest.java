@@ -352,6 +352,39 @@ public abstract class BaseSingleTableJsonEventPersisterTest {
         assertRejectsInvalidActionParams(List.of("not", "an", "object"));
     }
 
+    @Test
+    void should_reject_an_event_that_does_not_serialize_to_a_json_object() {
+        // Same rule as the action params, and until now not the same error: the payload was handed
+        // to an ObjectNode parameter with the cast supplied silently by generic inference, so this
+        // surfaced as a bare ClassCastException naming Jackson node classes.
+        var persister = createPersister(new ObjectMapper());
+
+        assertThatThrownBy(() -> persister.persistActionEvents(
+                        "com.example.finance",
+                        "ScalarPayloadAction",
+                        Instant.now(),
+                        Instant.now(),
+                        new TestActionParams("deposit", 1),
+                        List.of(new ScalarPayloadEvent()),
+                        ShardIdentifier.DEFAULT,
+                        UUID.randomUUID()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("event must serialize to a JSON object");
+    }
+
+    /** An event rendered as a bare string by {@code @JsonValue} - the realistic way in. */
+    static final class ScalarPayloadEvent extends ModelEvent<Object> {
+
+        ScalarPayloadEvent() {
+            super("model-1", Object.class);
+        }
+
+        @com.fasterxml.jackson.annotation.JsonValue
+        public String asText() {
+            return "not-an-object";
+        }
+    }
+
     private void assertRejectsInvalidActionParams(Object actionParams) {
         var persister = createPersister(new ObjectMapper());
 

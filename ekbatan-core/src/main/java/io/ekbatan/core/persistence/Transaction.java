@@ -28,7 +28,17 @@ class Transaction {
 
     public void begin() {
         try {
-            // when we set autoCommit = false, we are implicitly signaling the db that we want a transaction
+            // Nothing is sent to the server here, despite the name. Clearing auto-commit only
+            // records the intent in the driver; pgjdbc defers the BEGIN and sends it attached to
+            // the first statement the transaction actually executes. Same for the MySQL and
+            // MariaDB drivers.
+            //
+            // Harmless as things stand: nothing runs between this call and the caller's first
+            // query, so the BEGIN still precedes every statement that belongs to the transaction.
+            // It stops being harmless the day an isolation level above READ COMMITTED is offered,
+            // because REPEATABLE READ and SERIALIZABLE take their snapshot when the transaction
+            // really starts - the first statement, not this line - and a caller reading rows
+            // "before" opening the transaction would silently see them inside its snapshot.
             connection.setAutoCommit(false);
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -37,11 +47,10 @@ class Transaction {
 
     public void commit() {
         try {
-            try {
-                connection.commit();
-            } finally {
-                connection.setAutoCommit(initialAutoCommit);
-            }
+            connection.commit();
+            // Only after the commit returned normally - see rollback() for why this must not sit
+            // in a finally.
+            connection.setAutoCommit(initialAutoCommit);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -50,18 +59,21 @@ class Transaction {
     public void rollback() {
         try {
             if (!connection.isClosed()) {
-                try {
-                    connection.rollback();
-                } finally {
-                    connection.setAutoCommit(initialAutoCommit);
-                }
+                connection.rollback();
+                // Deliberately NOT in a finally. Restoring auto-commit re-enables it on a
+                // connection whose transaction may still be open, and that flip is itself a
+                // commit: pgjdbc issues an explicit COMMIT, MySQL and MariaDB send
+                // `SET autocommit=1`, which both document as an implicit commit. Running it after
+                // a failed rollback would commit the very transaction we failed to roll back.
+                // Leaving auto-commit off instead keeps the transaction open until the connection
+                // is evicted below, and the physical close makes the server discard it.
+                connection.setAutoCommit(initialAutoCommit);
             }
         } catch (SQLException e) {
             // The connection is in unknown state: either rollback itself failed (transaction may
             // still be pending) or the autocommit reset failed (subsequent users would inherit the
             // wrong setting). Mark dirty so the caller evicts instead of returning to the pool -
-            // otherwise Hikari's setAutoCommit(true) reset on return would implicitly commit a
-            // partially-rolled-back transaction.
+            // eviction closes the physical connection, which aborts anything still pending.
             log.warn("Failed to rollback and reset auto-commit; connection will be evicted", e);
             this.dirty = true;
         }

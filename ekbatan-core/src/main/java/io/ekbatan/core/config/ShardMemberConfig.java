@@ -118,7 +118,7 @@ public final class ShardMemberConfig {
          * @return this builder, for chaining.
          */
         public Builder name(String name) {
-            this.name = Optional.of(name);
+            this.name = Optional.of(Validate.notNull(name, "name cannot be null"));
             return this;
         }
 
