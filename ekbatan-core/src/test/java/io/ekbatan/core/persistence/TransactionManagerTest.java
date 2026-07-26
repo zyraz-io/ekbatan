@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -67,8 +69,9 @@ class TransactionManagerTest {
     void evicts_connection_when_rollback_itself_throws_sqlexception() throws SQLException {
         // Block throws -> rollback() is called -> connection.rollback() raises SQLException ->
         // Transaction.rollback() catches it, marks dirty -> TransactionManager evicts instead of
-        // returning the connection (where Hikari's setAutoCommit(true) reset could implicitly
-        // commit the failed-rollback transaction).
+        // returning the connection. (Note: Hikari's own return path would NOT have committed it -
+        // ProxyConnection.close() rolls back before resetting autoCommit. The hazard was always
+        // this class's own restore, which is why it no longer runs after a failed rollback.)
         doThrow(new SQLException("rollback failed", "55006")).when(connection).rollback();
         CheckedFunction<DSLContext, Object> failing = _ -> {
             throw new RuntimeException("boom");
@@ -125,6 +128,69 @@ class TransactionManagerTest {
 
         verify(provider).release(connection);
         verify(provider, never()).evict(any());
+    }
+
+    // Restoring auto-commit is itself a commit: pgjdbc issues an explicit COMMIT, MySQL and
+    // MariaDB send `SET autocommit=1`. All three were verified against live databases - an INSERT
+    // followed only by setAutoCommit(true), with no commit() call anywhere, is durably committed.
+    // So the reset must never run while a transaction may still be open, which is exactly the
+    // state a failed rollback leaves behind.
+
+    @Test
+    void does_not_restore_autocommit_when_rollback_fails() throws SQLException {
+        // A rollback that fails on a live session. Measured: on MariaDB 11.8 a `KILL QUERY` flood
+        // interrupts ROLLBACK in early dispatch (error 1317, before any undo work), leaving the
+        // transaction open and fully committable - 64 of 3000 rollbacks threw and 60 of those were
+        // durably committed by the pre-fix code. The same flood against MySQL 8.4 produced zero
+        // interrupted rollbacks, so this is a MariaDB reachability story, not a MySQL one.
+        doThrow(new SQLException("rollback failed", "55006")).when(connection).rollback();
+        CheckedFunction<DSLContext, Object> failing = _ -> {
+            throw new RuntimeException("boom");
+        };
+
+        assertThatThrownBy(() -> tm.inTransactionChecked(failing)).isInstanceOf(RuntimeException.class);
+
+        // The transaction is left open on purpose; evicting closes the physical connection, and
+        // the server discards it. Restoring auto-commit here would commit it instead.
+        verify(connection, never()).setAutoCommit(true);
+        verify(provider).evict(connection);
+    }
+
+    @Test
+    void restores_autocommit_after_a_successful_rollback() throws SQLException {
+        CheckedFunction<DSLContext, Object> failing = _ -> {
+            throw new RuntimeException("boom");
+        };
+
+        assertThatThrownBy(() -> tm.inTransactionChecked(failing)).isInstanceOf(RuntimeException.class);
+
+        final var inOrder = inOrder(connection);
+        inOrder.verify(connection).setAutoCommit(false);
+        inOrder.verify(connection).rollback();
+        inOrder.verify(connection).setAutoCommit(true);
+        verify(provider).release(connection);
+    }
+
+    @Test
+    void does_not_restore_autocommit_between_a_failed_commit_and_its_rollback() throws SQLException {
+        // commit() throws with the transaction potentially still open. The reset must wait for the
+        // rollback that TransactionManager is about to perform - otherwise the framework commits
+        // the data it just told the caller had failed to commit, and then returns the connection
+        // to the pool as if nothing happened.
+        // 55006, not an 08* state: HikariCP's ProxyConnection.checkException evicts the connection
+        // outright on 08* (connection-level) failures, so the ordering asserted below could never
+        // arise in production with one of those. The states that actually reach this path are the
+        // transaction-level ones - 1317/70100 from a killed query, 40001 from a deadlock.
+        doThrow(new SQLException("commit failed", "55006")).when(connection).commit();
+
+        assertThatThrownBy(() -> tm.inTransactionChecked(_ -> "ok")).isInstanceOf(RuntimeException.class);
+
+        // Exactly one restore, and it belongs to the rollback - not to the failed commit.
+        verify(connection, times(1)).setAutoCommit(true);
+        final var inOrder = inOrder(connection);
+        inOrder.verify(connection).commit();
+        inOrder.verify(connection).rollback();
+        inOrder.verify(connection).setAutoCommit(true);
     }
 
     @Test

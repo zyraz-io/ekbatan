@@ -17,6 +17,7 @@ import io.ekbatan.events.localeventhandler.repository.EventNotificationRepositor
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import java.time.Clock;
@@ -72,11 +73,44 @@ public final class EventHandlingJob extends DistributedJob {
             .setDescription("Notification rows processed by the event-handling job, tagged by outcome")
             .setUnit("{notification}")
             .build();
+    /**
+     * Wall-clock duration of a single handler invocation, tagged by handler and by whether that
+     * invocation succeeded. Answers "which handler is slow", which no counter can - a handler that
+     * degrades from 5ms to 5s shows up here long before it starts failing.
+     */
+    private static final DoubleHistogram HANDLER_DURATION = METER.histogramBuilder("ekbatan.events.handler.duration")
+            .setDescription("Wall-clock duration of a single event-handler invocation")
+            .setUnit("s")
+            .build();
+
+    /**
+     * End-to-end delivery lag: how old the source event was when its handler finally succeeded,
+     * tagged by handler. Recorded on success only, so it measures time-to-delivery rather than
+     * time-spent-failing. This is the signal that reveals a growing backlog - counters cannot,
+     * because a shard falling behind still reports a healthy success count.
+     */
+    private static final DoubleHistogram DELIVERY_LAG = METER.histogramBuilder("ekbatan.events.delivery.lag")
+            .setDescription("Age of the source event when its handler succeeded")
+            .setUnit("s")
+            .build();
+
+    private static final AttributeKey<String> HANDLER_KEY = AttributeKey.stringKey("handler");
     private static final AttributeKey<String> OUTCOME_KEY = AttributeKey.stringKey("outcome");
-    private static final Attributes OUTCOME_SUCCEEDED = Attributes.of(OUTCOME_KEY, "succeeded");
-    private static final Attributes OUTCOME_FAILED_RETRY = Attributes.of(OUTCOME_KEY, "failed_retry");
-    private static final Attributes OUTCOME_EXPIRED_PREFLIGHT = Attributes.of(OUTCOME_KEY, "expired_preflight");
-    private static final Attributes OUTCOME_EXPIRED_POSTFAILURE = Attributes.of(OUTCOME_KEY, "expired_postfailure");
+    private static final String OUTCOME_SUCCEEDED = "succeeded";
+    private static final String OUTCOME_FAILED_RETRY = "failed_retry";
+    private static final String OUTCOME_EXPIRED_PREFLIGHT = "expired_preflight";
+    private static final String OUTCOME_EXPIRED_POSTFAILURE = "expired_postfailure";
+
+    /**
+     * {@link #HANDLER_DURATION} reports a binary {@code outcome} of {@code succeeded} / {@code
+     * failed}, deliberately narrower than the four values above: at the moment a handler returns,
+     * the only fact known is whether it threw. Whether a failure becomes a retry or an expiry is
+     * decided later, against the post-invocation clock, and a pre-flight expiry never invokes a
+     * handler at all - so it can never appear in the duration histogram.
+     */
+    private static final String OUTCOME_FAILED = "failed";
+
+    private static final double NANOS_PER_SECOND = 1_000_000_000.0;
 
     private static final String DEFAULT_NAME = "ekbatan-event-handling";
     private static final Duration DEFAULT_POLL_DELAY = Duration.ofSeconds(1);
@@ -175,11 +209,11 @@ public final class EventHandlingJob extends DistributedJob {
         if (notifications.isEmpty()) return 0;
 
         // Pre-flight bucket: rows whose deadline has already passed never get invoked.
-        final var preflightExpiredIds = new ArrayList<UUID>();
+        final var preflightExpired = new ArrayList<EventNotification>();
         final var toInvoke = new ArrayList<EventNotification>();
         for (var n : notifications) {
             if (now.isAfter(n.eventDate.plus(retentionWindow))) {
-                preflightExpiredIds.add(n.id);
+                preflightExpired.add(n);
             } else {
                 toInvoke.add(n);
             }
@@ -187,23 +221,40 @@ public final class EventHandlingJob extends DistributedJob {
 
         // Parallel handler invocations; each fork returns the row plus a SUCCEEDED/FAILED tag.
         // EXPIRE-vs-RETRY for failures is decided post-invocation against postInvokeNow (below).
-        final var succeededIds = new ArrayList<UUID>();
+        // Notifications rather than bare ids: DELIVERY_LAG needs each row's eventDate and handler.
+        final var succeeded = new ArrayList<EventNotification>();
         final var failedNotifications = new ArrayList<EventNotification>();
         if (!toInvoke.isEmpty()) {
             try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
                 final var futures = toInvoke.stream()
                         .map(n -> executor.submit(() -> classify(n)))
                         .toList();
-                for (var f : futures) {
+                // Indexed rather than for-each so a fork that died without producing an Outcome can
+                // still be attributed to its notification.
+                for (int i = 0; i < futures.size(); i++) {
+                    final var n = toInvoke.get(i);
                     try {
-                        final var outcome = f.get();
+                        final var outcome = futures.get(i).get();
                         if (outcome.kind == Outcome.Kind.SUCCEEDED) {
-                            succeededIds.add(outcome.notification.id);
+                            succeeded.add(outcome.notification);
                         } else {
                             failedNotifications.add(outcome.notification);
                         }
                     } catch (ExecutionException e) {
-                        throw new RuntimeException("Handling worker threw", e.getCause());
+                        // The fork died outside classify()'s reach. This is NOT swallowing the
+                        // throwable - FutureTask.run() already caught it one frame below and stored
+                        // it as this future's outcome; all we do is decide what it means for this
+                        // row. Rethrowing here instead would abort the loop before the state UPDATEs
+                        // below, discarding the decisions already made for every healthy sibling in
+                        // the batch - which, since their handlers have already run, means they are
+                        // re-invoked successfully once per poll forever.
+                        LOG.error(
+                                "Handler '{}' died while processing event {} (attempts={}); recording FAILED",
+                                n.handlerName,
+                                n.eventId,
+                                n.attempts,
+                                e.getCause());
+                        failedNotifications.add(n);
                     }
                 }
             }
@@ -218,42 +269,87 @@ public final class EventHandlingJob extends DistributedJob {
 
         // Bucket failures into RETRY (per existing attempts, so each bucket shares one
         // resolved next_retry_at) vs EXPIRE (proposed retry would land past the deadline).
-        final var failedExpiredIds = new ArrayList<UUID>();
-        final var failedRetryByAttempts = new HashMap<Integer, List<UUID>>();
+        final var failedExpired = new ArrayList<EventNotification>();
+        final var failedRetryByAttempts = new HashMap<Integer, List<EventNotification>>();
         for (var n : failedNotifications) {
             final var deadline = n.eventDate.plus(retentionWindow);
             final var proposedNextRetry = postInvokeNow.plus(Backoff.delay(n.attempts + 1, maxBackoffCap));
             if (proposedNextRetry.isAfter(deadline)) {
-                failedExpiredIds.add(n.id);
+                failedExpired.add(n);
             } else {
                 failedRetryByAttempts
                         .computeIfAbsent(n.attempts, _ -> new ArrayList<>())
-                        .add(n.id);
+                        .add(n);
             }
         }
 
         // One batch UPDATE per non-empty bucket. Repository methods short-circuit on empty.
-        eventNotificationRepository.markExpiredAllPreflight(preflightExpiredIds, postInvokeNow, tm.shardIdentifier);
-        eventNotificationRepository.markSucceededAll(succeededIds, postInvokeNow, tm.shardIdentifier);
-        eventNotificationRepository.markExpiredAllPostFailure(failedExpiredIds, postInvokeNow, tm.shardIdentifier);
-        int failedRetryCount = 0;
+        eventNotificationRepository.markExpiredAllPreflight(idsOf(preflightExpired), postInvokeNow, tm.shardIdentifier);
+        eventNotificationRepository.markSucceededAll(idsOf(succeeded), postInvokeNow, tm.shardIdentifier);
+        eventNotificationRepository.markExpiredAllPostFailure(idsOf(failedExpired), postInvokeNow, tm.shardIdentifier);
         for (var entry : failedRetryByAttempts.entrySet()) {
             final var newAttempts = entry.getKey() + 1;
             final var nextRetry = postInvokeNow.plus(Backoff.delay(newAttempts, maxBackoffCap));
             eventNotificationRepository.markFailedBucket(
-                    entry.getValue(), nextRetry, postInvokeNow, tm.shardIdentifier);
-            failedRetryCount += entry.getValue().size();
+                    idsOf(entry.getValue()), nextRetry, postInvokeNow, tm.shardIdentifier);
         }
 
-        if (!preflightExpiredIds.isEmpty()) HANDLED.add(preflightExpiredIds.size(), OUTCOME_EXPIRED_PREFLIGHT);
-        if (!succeededIds.isEmpty()) HANDLED.add(succeededIds.size(), OUTCOME_SUCCEEDED);
-        if (!failedExpiredIds.isEmpty()) HANDLED.add(failedExpiredIds.size(), OUTCOME_EXPIRED_POSTFAILURE);
-        if (failedRetryCount > 0) HANDLED.add(failedRetryCount, OUTCOME_FAILED_RETRY);
+        recordHandled(preflightExpired, OUTCOME_EXPIRED_PREFLIGHT);
+        recordHandled(succeeded, OUTCOME_SUCCEEDED);
+        recordHandled(failedExpired, OUTCOME_EXPIRED_POSTFAILURE);
+        failedRetryByAttempts.values().forEach(rows -> recordHandled(rows, OUTCOME_FAILED_RETRY));
+
+        for (var n : succeeded) {
+            DELIVERY_LAG.record(
+                    Duration.between(n.eventDate, postInvokeNow).toNanos() / NANOS_PER_SECOND,
+                    Attributes.of(HANDLER_KEY, n.handlerName));
+        }
 
         return notifications.size();
     }
 
+    private static List<UUID> idsOf(List<EventNotification> notifications) {
+        return notifications.stream().map(n -> n.id).toList();
+    }
+
+    /**
+     * Emits {@link #HANDLED} for one outcome bucket, broken down by handler. Grouped rather than
+     * incremented per row so a 100-row batch costs one counter add per distinct handler, not one
+     * per notification.
+     */
+    private static void recordHandled(List<EventNotification> rows, String outcome) {
+        if (rows.isEmpty()) {
+            return;
+        }
+        final var countsByHandler = new HashMap<String, Long>();
+        for (var n : rows) {
+            countsByHandler.merge(n.handlerName, 1L, Long::sum);
+        }
+        countsByHandler.forEach(
+                (handler, count) -> HANDLED.add(count, Attributes.of(OUTCOME_KEY, outcome, HANDLER_KEY, handler)));
+    }
+
     private Outcome classify(EventNotification n) {
+        // System.nanoTime, not the injected Clock: this is an elapsed-time measurement, and the
+        // Clock exists for business timestamps (and is a VirtualClock in tests).
+        final var startNanos = System.nanoTime();
+        var kind = Outcome.Kind.FAILED;
+        try {
+            final var outcome = classifyInternal(n);
+            kind = outcome.kind;
+            return outcome;
+        } finally {
+            HANDLER_DURATION.record(
+                    (System.nanoTime() - startNanos) / NANOS_PER_SECOND,
+                    Attributes.of(
+                            HANDLER_KEY,
+                            n.handlerName,
+                            OUTCOME_KEY,
+                            kind == Outcome.Kind.SUCCEEDED ? OUTCOME_SUCCEEDED : OUTCOME_FAILED));
+        }
+    }
+
+    private Outcome classifyInternal(EventNotification n) {
         try {
             invoke(n);
             return new Outcome(n, Outcome.Kind.SUCCEEDED);
@@ -271,6 +367,28 @@ public final class EventHandlingJob extends DistributedJob {
                     n.attempts,
                     e.getMessage(),
                     e);
+            return new Outcome(n, Outcome.Kind.FAILED);
+        } catch (Throwable t) {
+            // An Error from user handler code is a failure of ONE notification, not of the batch or
+            // the shard. Left uncaught it still reaches the collection loop, which records the same
+            // FAILED for the same row - this arm exists so the log line can name the handler, the
+            // event and the attempt count instead of being a generic post-mortem.
+            //
+            // Deliberately NOT guarded by a Reactor/RxJava-style throwIfFatal: their fatal sets are
+            // {VirtualMachineError, ThreadDeath, LinkageError}, and NoClassDefFoundError IS a
+            // LinkageError - i.e. precisely the case this catch exists to absorb. Rethrowing a
+            // "fatal" subset here would also be inert, because db-scheduler catches Throwable in the
+            // frame that calls execute() (ExecutePicked) and reschedules regardless. Compare
+            // Jackson's ExceptionUtil.isFatal, which treats a corrupt class as fatal but a merely
+            // missing one as a recoverable per-item failure.
+            LOG.error(
+                    "Handler '{}' threw Error {} while processing event {} (attempts={}): {}",
+                    n.handlerName,
+                    t.getClass().getSimpleName(),
+                    n.eventId,
+                    n.attempts,
+                    t.getMessage(),
+                    t);
             return new Outcome(n, Outcome.Kind.FAILED);
         }
     }

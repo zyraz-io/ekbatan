@@ -31,7 +31,11 @@ left with autocommit disabled, marked dirty, and evicted rather than returned to
 #### Scenario: Failed commit follows the same rule
 
 - **WHEN** `connection.commit()` throws
-- **THEN** the autocommit restore SHALL be skipped and the transaction SHALL be marked dirty
+- **THEN** the autocommit restore SHALL be skipped, leaving auto-commit disabled so the rollback
+  that follows can actually roll the transaction back
+- **AND** the transaction SHALL NOT be marked dirty on that basis alone: if the follow-up rollback
+  succeeds the connection is clean and SHALL be returned to the pool. It is marked dirty only when
+  that rollback, or its own restore, also fails.
 
 #### Scenario: Happy path is unchanged
 

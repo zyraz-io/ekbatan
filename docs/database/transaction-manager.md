@@ -43,8 +43,12 @@ What each call does, in order:
 2. Save its current `autoCommit`, set `autoCommit = false`.
 3. Build a JOOQ `DSLContext` over the connection and bind it (along with the `Connection`) into the internal `ScopedValue<Transaction>`.
 4. Run your lambda, passing that `DSLContext` as its argument.
-5. On normal return: `commit()`, restore `autoCommit`, release the connection back to the pool.
-6. On exception: `rollback()` (errors during rollback are logged but don't mask the original throwable), restore `autoCommit`, release the connection, rethrow.
+5. On normal return: `commit()`, then restore `autoCommit`, then release the connection back to the pool.
+6. On exception: `rollback()` (errors during rollback are logged but don't mask the original throwable), then restore `autoCommit`, release the connection, rethrow.
+
+**If the `commit()` or `rollback()` itself fails, `autoCommit` is deliberately NOT restored.** Re-enabling auto-commit on a connection whose transaction may still be open is itself a commit — pgjdbc issues an explicit `COMMIT`, MySQL and MariaDB send `SET autocommit=1`, which they document as an implicit commit. Restoring it after a failed rollback would therefore commit the very transaction the framework just failed to roll back. Instead the transaction is marked dirty and the connection is **evicted** rather than returned to the pool; the physical close makes the server discard whatever was still pending.
+
+A failed `commit()` is not on its own grounds for eviction: auto-commit is left disabled so the follow-up `rollback()` can do its job, and if that rollback succeeds the connection is clean and goes back to the pool normally.
 
 **Do not nest.** The framework does not simulate nested transactions or savepoints. A nested `inTransaction(...)` on the same `tm` does not fail loudly — `ScopedValue` rebinding shadows the outer transaction, so the inner block quietly runs on a *second* pooled connection with its own commit boundary. That is almost never what you want. Structure your code to do all the work inside one outer block.
 

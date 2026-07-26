@@ -85,14 +85,68 @@ Section 1 is complete; the rest have not been started.
 
 ## 2. Transaction cleanup safety (design.md finding 2)
 
-- [ ] 2.1 `Transaction.rollback()`: move `setAutoCommit(initialAutoCommit)` out of the `finally`
+- [x] 2.0 Verify the finding before fixing it. Every load-bearing claim was checked at source and
+      then reproduced against live databases:
+      - HikariCP never has auto-commit disabled by the framework - `hikariConnectionProvider` does
+        not touch it, and `HikariConfig:127` defaults `isAutoCommit = true`. So the reset is a real
+        `false -> true` transition, not a no-op.
+      - `ProxyConnection.setAutoCommit` (HikariCP 7.0.2, line 412) passes straight to the driver.
+      - The flip is a commit on **all three** dialects, not just MySQL/MariaDB:
+        pgjdbc `PgConnection.setAutoCommit` calls `commit()` outright (line 962); MySQL
+        Connector/J sends `SET autocommit=1`; the MariaDB driver sends `set autocommit=1`.
+      - Empirically, on PostgreSQL 18, MariaDB 11 and MySQL 8: an `INSERT` followed only by
+        `setAutoCommit(true)` - no `commit()` call anywhere - leaves the row **committed**, while
+        the same transaction followed by a physical `close()` leaves **zero rows**. The defect and
+        the fix's safety net were both confirmed on every dialect.
+      - `ConnectionProvider.evict` -> `HikariPool.evictConnection` -> `softEvictConnection(owner=true)`
+        -> `closeConnection` -> physical close, bypassing `ProxyConnection.close()`. So eviction
+        really does let the server discard the open transaction.
+- [x] 2.1 `Transaction.rollback()`: `setAutoCommit(initialAutoCommit)` moved out of the `finally`
       so it runs only after `connection.rollback()` returns normally.
-- [ ] 2.2 Apply the same ordering to `Transaction.commit()`.
-- [ ] 2.3 Update the comment at lines 59-67 - it currently describes a guard the `finally`
-      pre-empted.
-- [ ] 2.4 Unit test (Mockito): a `rollback()` that throws never calls `setAutoCommit`, and marks
-      the transaction dirty.
-- [ ] 2.5 Unit test: the happy path still restores autocommit and does not mark dirty.
+- [x] 2.2 Same ordering applied to `Transaction.commit()`. This one matters more than first
+      assessed: a failed commit previously flipped auto-commit (committing the data the caller was
+      told had failed), after which the follow-up `rollback()` found nothing to roll back,
+      succeeded, and the connection was **released to the pool** rather than evicted.
+- [x] 2.3 Comment rewritten - it described a guard the `finally` pre-empted.
+- [x] 2.4 Unit tests added to `TransactionManagerTest`:
+      `does_not_restore_autocommit_when_rollback_fails`,
+      `does_not_restore_autocommit_between_a_failed_commit_and_its_rollback` (asserts exactly one
+      restore, ordered after the rollback - the call *count* is what separates fixed from broken).
+      Both **fail against the pre-fix code**, verified by reverting.
+- [x] 2.5 `restores_autocommit_after_a_successful_rollback` pins the happy path with an ordered
+      `setAutoCommit(false)` -> `rollback()` -> `setAutoCommit(true)` and no eviction.
+- [x] 2.6 Correct the inaccurate Hikari rationale. `ProxyConnection.close()` rolls back (line 250)
+      BEFORE resetting auto-commit (line 255), and both sit in one try block, so a failed rollback
+      skips the restore - Hikari's return path could never have committed anything. Fixed in the
+      stale comment in `TransactionManagerTest`, and `docs/database/transaction-manager.md` +
+      `website/src/pages/reference/transaction-manager.mdx` now document the actual rule.
+- [x] 2.7 Deep-research review of the applied fix (11 agents, every lens independently re-checked,
+      end-to-end harnesses on live databases). Verdict: **KEEP** - no change to the logic. What it
+      established:
+      - **The defect and the fix reproduce on all three dialects**, twice each with independently
+        built harnesses: pre-fix the row survives a failed rollback (1 row), post-fix it does not
+        (0 rows). The MySQL/MariaDB general query log shows `SET autocommit=0` -> `INSERT` ->
+        `SET autocommit=1` with no COMMIT and no ROLLBACK, and the row durable.
+      - **The fix matches HikariCP's own discipline exactly.** `ProxyConnection.close()` rolls back
+        first and resets auto-commit second, in one try block. More: by setting `isAutoCommit=true`
+        the old `finally` falsified Hikari's `if (isCommitStateDirty && !isAutoCommit)` guard, so it
+        **disarmed Hikari's own rollback-on-return safety net in the same statement that committed
+        the transaction**. The fix re-arms it. Demonstrated by driving a real HikariDataSource over
+        a recording JDBC fake: OLD+release -> no retry; NEW+release -> rollback retried.
+      - **No regression on any path**, and no better alternative. Notably, deleting the restore and
+        letting Hikari do it (the simpler-looking option) is worse: the reset then happens inside
+        `ProxyConnection.close()`, where a failure escapes `release()` and is thrown from
+        `TransactionManager`'s finally, masking the caller's original business exception.
+      - The fix also removes a spurious-eviction bug on the failed-commit path: pre-fix, pgjdbc
+        rejects `rollback()` when auto-commit is enabled, so every failed commit (deadlock,
+        serialization failure) forced a physical reconnect.
+- [ ] 2.8 Follow-up, out of scope here (pre-existing, unaffected by this change):
+      `TransactionManager.java:174` catches `Exception`, not `Throwable`. An `Error` from the action
+      block releases a connection with `autoCommit=false` and an open transaction rather than
+      evicting it. Proven by probe against the fixed code. Related to finding 3's `classify()` gap.
+- [ ] 2.9 Follow-up, out of scope here: a pgjdbc lazy-`BEGIN` hazard found with `log_statement=all` -
+      a cancelled `BEGIN` lets the subsequent INSERT auto-commit outside any transaction while the
+      caller sees an exception. Present identically before and after this change.
 
 ## 3. Quarkus config binding parity (design.md finding 4)
 
@@ -109,12 +163,86 @@ Section 1 is complete; the rest have not been started.
 
 ## 4. Event dispatch fault isolation (design.md findings 3 and 6)
 
-- [ ] 4.1 `EventHandlingJob.classify()`: catch `Throwable` rather than `Exception` (rethrowing
-      `VirtualMachineError` if preferred), recording the notification as `FAILED` with its cause.
-- [ ] 4.2 Make the four bucket writes at lines 236-246 robust to an abnormal fork, so decided
-      outcomes still commit.
-- [ ] 4.3 Test: a handler throwing `NoClassDefFoundError` marks only its own row `FAILED`, leaves
-      siblings correctly bucketed, and advances `next_retry_at` so the next poll makes progress.
+- [x] 4.0 Research the convention before writing the fix (7 agents, every survey re-checked). Two
+      findings changed the design:
+      - **`catch (Throwable)` at a user-handler boundary is the platform norm**, not an oddity.
+        `FutureTask.run()`, `ForkJoinTask`, `StructuredTaskScope`, Quartz, Spring `@Scheduled`,
+        Netty, Micronaut, Vert.x, Tomcat and JUnit all do it. Decisively, **db-scheduler - the
+        frame that calls `EventHandlingJob.execute()` - does it too**: `ExecutePicked.java:118-123`
+        has `catch (RuntimeException)` then `catch (Throwable unhandledError)`, both routing to the
+        same failure path, with no fatal carve-out anywhere in the library. It even documents the
+        reasoning in the same words, at `Scheduler.java:458`:
+        `catch (Throwable ex) // just-in-case to avoid any "poison-pills"`.
+      - **The mainstream "fatal throwable" sets could not be used here.** Reactor's
+        `Exceptions.isJvmFatal` is `VirtualMachineError || ThreadDeath || LinkageError`; RxJava and
+        Scala's `NonFatal` match. `NoClassDefFoundError` IS a `LinkageError`, so adopting any of
+        them verbatim would rethrow the exact case this fix exists to absorb. An earlier draft
+        rethrew `OutOfMemoryError` only; that was dropped as both bespoke and inert - db-scheduler
+        catches `Throwable` above us and reschedules regardless, so the carve-out could not fail
+        fast, only sideways.
+- [x] 4.1 `classify()` left catching `Exception` only. A `catch (Throwable)` arm was written and
+      then dropped: with 4.2 in place it is semantically inert - the `Error` escapes the fork,
+      `FutureTask` stores it, and the collection loop records the same `FAILED` for the same row,
+      with the same `attempts+1` and the same backoff. It bought a better log line at the cost of a
+      ten-line comment defending a decision with no consequences.
+- [x] 4.2 The collection loop no longer rethrows on `ExecutionException`: a fork that died without
+      producing an `Outcome` is recorded as `FAILED` for its own row, so the batch always reaches
+      its state UPDATEs. This is the load-bearing half - the rethrow, not the narrow catch, is what
+      turned one bad row into a discarded batch. Severity was worse than first assessed: the
+      sibling handlers had **already run successfully**, so their success was never recorded and
+      they were re-invoked once per poll forever - at-least-once silently becoming
+      at-once-per-second-forever.
+- [x] 4.2b Meters improved on the handling job (separate from the defect fix):
+      - `HANDLED` gained a `handler` dimension alongside `outcome`, on all four outcomes. Counters
+        are grouped per handler before emitting, so a 100-row batch costs one add per distinct
+        handler rather than one per row. Totals are unchanged - summing across the new dimension
+        reproduces exactly the numbers emitted before.
+      - New `ekbatan.events.handler.duration` histogram (seconds), tagged by handler and a binary
+        `succeeded`/`failed` outcome. Timed with `System.nanoTime()`, not the injected `Clock` -
+        elapsed time, and the `Clock` is a `VirtualClock` under test.
+      - New `ekbatan.events.delivery.lag` histogram (seconds), tagged by handler: how old the source
+        event was when its handler finally succeeded. Recorded on success only, so it measures
+        time-to-delivery rather than time-spent-failing. This is the instrument that reveals a
+        growing backlog, which no counter can - a shard falling behind still reports healthy
+        success counts.
+      - The four outcome bucket lists now carry `EventNotification`s rather than bare UUIDs, since
+        both the handler name and the event date live on the row. Repository calls take
+        `idsOf(bucket)`.
+      Note the deliberate vocabulary difference: `handler.duration`'s `outcome` is binary, because
+      at the moment a handler returns the only known fact is whether it threw - retry-vs-expiry is
+      decided later, and a pre-flight expiry never invokes a handler at all.
+- [x] 4.2c Documented the metrics. `docs/runtime/observability.md` was titled "OpenTelemetry
+      tracing" and covered only spans - every instrument in the framework was undocumented. Added a
+      Metrics section listing all five instruments with type, unit, tags and emitting job, what each
+      one answers, the four `outcome` values, and why `handler.duration`'s `outcome` is deliberately
+      binary. Mirrored verbatim in `website/src/pages/reference/runtime/observability.mdx`; both
+      retitled to "OpenTelemetry tracing and metrics". Verified every documented name, tag value and
+      unit against the code, and that no instrument in the code is missing from the docs.
+      Also fixed pre-existing drift found in passing: the website mirror documented
+      `db.operation.name` as `"INSERT"`/`"UPDATE"`, but the code emits `BATCH_INSERT`/`BATCH_UPDATE`
+      (as `docs/` correctly said).
+      Noted the known caveat in both: `ekbatan.events.fanned_out` counts rows read from the replica,
+      not rows written, so it over-reports under replication lag (see 4.4).
+- [ ] 4.2a Alerting on handler `Error`s is still an open question, deliberately. A dedicated
+      `ekbatan.events.handler.errors` counter was added and then removed: the job already exposes a
+      single `HANDLED` counter tagged by outcome, and bolting a second counter onto one case breaks
+      that symmetry. If handler-level visibility is wanted, it should be a consistent dimension
+      across every outcome, not a special case for this one. Worth noting the concern that motivated
+      it, so it is not lost: a `NoClassDefFoundError` is a deployment fault retrying cannot fix, so
+      the row now retries and eventually EXPIRES past the retention window - the framework discards
+      a business event because a JAR was missing, where previously the shard stopped and someone
+      noticed. That trade (silent loss vs loud stall) is the strongest argument against 4.2 and is
+      currently unmitigated.
+- [x] 4.3 Test `an_error_from_one_handler_does_not_discard_the_rest_of_its_batch` in the shared
+      `BaseLocalEventHandlerIntegrationTest`, so PostgreSQL, MySQL and MariaDB all inherit it. Two
+      handlers subscribe to one event so both notifications land in one batch; one throws
+      `NoClassDefFoundError`, the other succeeds. Asserts the healthy sibling reaches `SUCCEEDED`,
+      the poisoned row reaches `FAILED`, and the next poll does not re-deliver the succeeded one.
+      Verified against the pre-fix code: fails with `java.lang.RuntimeException: Handling worker
+      threw`. Passing on all three dialects (10 tests each).
+      The fixture handler throws `NoClassDefFoundError` specifically, not a generic `Error`,
+      because it is a `LinkageError` - the subtype every mainstream fatal set rethrows. That keeps
+      any future "let's use throwIfFatal" refactor honest.
 - [ ] 4.4 `EventFanoutJob`: derive the round-progress signal and both metrics from rows written on
       primary, not `events.size()` read from the replica.
 - [ ] 4.5 Add `.and(DELIVERED.eq(false))` to `markDelivered` so its update count is meaningful.

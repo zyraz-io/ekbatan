@@ -37,11 +37,10 @@ class Transaction {
 
     public void commit() {
         try {
-            try {
-                connection.commit();
-            } finally {
-                connection.setAutoCommit(initialAutoCommit);
-            }
+            connection.commit();
+            // Only after the commit returned normally - see rollback() for why this must not sit
+            // in a finally.
+            connection.setAutoCommit(initialAutoCommit);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -50,18 +49,21 @@ class Transaction {
     public void rollback() {
         try {
             if (!connection.isClosed()) {
-                try {
-                    connection.rollback();
-                } finally {
-                    connection.setAutoCommit(initialAutoCommit);
-                }
+                connection.rollback();
+                // Deliberately NOT in a finally. Restoring auto-commit re-enables it on a
+                // connection whose transaction may still be open, and that flip is itself a
+                // commit: pgjdbc issues an explicit COMMIT, MySQL and MariaDB send
+                // `SET autocommit=1`, which both document as an implicit commit. Running it after
+                // a failed rollback would commit the very transaction we failed to roll back.
+                // Leaving auto-commit off instead keeps the transaction open until the connection
+                // is evicted below, and the physical close makes the server discard it.
+                connection.setAutoCommit(initialAutoCommit);
             }
         } catch (SQLException e) {
             // The connection is in unknown state: either rollback itself failed (transaction may
             // still be pending) or the autocommit reset failed (subsequent users would inherit the
             // wrong setting). Mark dirty so the caller evicts instead of returning to the pool -
-            // otherwise Hikari's setAutoCommit(true) reset on return would implicitly commit a
-            // partially-rolled-back transaction.
+            // eviction closes the physical connection, which aborts anything still pending.
             log.warn("Failed to rollback and reset auto-commit; connection will be evicted", e);
             this.dirty = true;
         }
