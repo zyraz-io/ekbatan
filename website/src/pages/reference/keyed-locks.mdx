@@ -133,7 +133,6 @@ This contract is enforced by a shared internal helper, `KeyedReentrantHolder`, w
 
 | Provider | Scope | Backend | Hold | Notes |
 |---|---|---|---|---|
-| `InProcessKeyedLockProvider` | single JVM | per-key fair `Semaphore` | watchdog | FIFO. No JDBC connection consumed. |
 | `PostgresKeyedLockProvider` | cross-JVM | `pg_advisory_lock` (session-scoped) | session + watchdog | Auto-released if the session terminates (process crash, network drop). Borrows a connection per lease. |
 | `MariaDBKeyedLockProvider` | cross-JVM | `GET_LOCK(...)` | session + watchdog | MariaDB 12.x rejects negative timeout — `Integer.MAX_VALUE` (≈68 years) is the wait-forever sentinel. |
 | `MySQLKeyedLockProvider` | cross-JVM | `GET_LOCK(...)` | session + watchdog | Sub-second `maxWait` rounds up to whole seconds (MySQL precision limit). |
@@ -143,12 +142,12 @@ All five honor the same reentrancy contract via `KeyedReentrantHolder`. The Redi
 
 ### How the SQL backends wait
 
-`InProcessKeyedLockProvider` and `RedisKeyedLockProvider` block on primitives that respond to `Thread.interrupt()` directly. The three SQL providers can't: a single unbounded `pg_advisory_lock` / `GET_LOCK` call parks the thread inside a JDBC socket read, which no interrupt can break. So they wait in **5-second segments** and check for interruption between them.
+`RedisKeyedLockProvider` blocks on a primitive that responds to `Thread.interrupt()` directly. The three SQL providers can't: a single unbounded `pg_advisory_lock` / `GET_LOCK` call parks the thread inside a JDBC socket read, which no interrupt can break. So they wait in **5-second segments** and check for interruption between them.
 
 Two consequences worth knowing:
 
 - **Interrupt latency is up to 5 seconds.** Well inside typical 30-second graceful-shutdown budgets, but not instant.
-- **Fairness is weaker under contention.** During each segment the waiter is genuinely queued inside the database, so hand-off from a releasing holder is immediate — this is not client-side spinning. But every new segment re-enters that queue at the *back*, so a long-waiting thread repeatedly yields position to newer arrivals. Only `InProcessKeyedLockProvider` promises FIFO; treat the SQL backends as best-effort, and prefer optimistic locking if you're contending hard enough for this to matter.
+- **Fairness is weaker under contention.** During each segment the waiter is genuinely queued inside the database, so hand-off from a releasing holder is immediate — this is not client-side spinning. But every new segment re-enters that queue at the *back*, so a long-waiting thread repeatedly yields position to newer arrivals. No provider promises FIFO - treat ordering as best-effort, and prefer optimistic locking if you're contending hard enough for this to matter.
 
 A useful side effect: because the connection now sends traffic every 5 seconds, idle-connection reapers (NAT gateways, load balancers, PgBouncer) no longer silently drop a long lock wait — previously a 30-minute wait sent zero packets and looked exactly like an abandoned connection.
 
@@ -176,7 +175,7 @@ var lockProvider = redisKeyedLockProvider()
         .build();
 ```
 
-The same builder shape works for `MariaDBKeyedLockProvider`, `MySQLKeyedLockProvider`, and `InProcessKeyedLockProvider`.
+The same builder shape works for `MariaDBKeyedLockProvider` and `MySQLKeyedLockProvider`.
 ### Wiring up a backend
 
 The SQL-backed providers all take a `ConnectionProvider`; Redis takes a `RedissonClient`:
@@ -199,7 +198,7 @@ var lockProvider = redisKeyedLockProvider()
         .build();
 ```
 
-The same builder shape works for `MariaDBKeyedLockProvider`, `MySQLKeyedLockProvider`, and `InProcessKeyedLockProvider`.
+The same builder shape works for `MariaDBKeyedLockProvider` and `MySQLKeyedLockProvider`.
 
 ## Dedicated pool via the `lock-config` / `lockConfig` slot
 

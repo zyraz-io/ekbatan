@@ -28,7 +28,7 @@ ekbatan/
 │   │   │   └── persister/                 # Change & event persistence
 │   │   │       └── event/single_table_json/  # Single-table JSON event store implementation
 │   │   ├── shard/                         # Sharding: ShardIdentifier, DatabaseRegistry, ShardingStrategy
-│   │   ├── concurrent/                    # KeyedLockProvider family (Postgres, MariaDB, MySQL, InProcess) + KeyedReentrantHolder
+│   │   ├── concurrent/                    # KeyedLockProvider family (Postgres, MariaDB, MySQL) + KeyedReentrantHolder
 │   │   ├── persistence/                   # Transaction management, JOOQ converters
 │   │   └── config/                        # DataSourceConfig
 ├── ekbatan-test-support/                  # Public test helpers (ActionSpec, VirtualClock, Testcontainers utilities)
@@ -119,7 +119,6 @@ Command pattern for business operations:
 Keyed mutual-exclusion primitives for cross-thread (and cross-JVM) coordination:
 
 - **`KeyedLockProvider`** — interface. `acquire(key, maxHold)` returns a `Lease`; `tryAcquire(key, maxWait, maxHold)` is the bounded-wait variant. Closing the lease releases the lock.
-- **`InProcessKeyedLockProvider`** — single-JVM, semaphore-backed, FIFO-fair.
 - **`PostgresKeyedLockProvider` / `MariaDBKeyedLockProvider` / `MySQLKeyedLockProvider`** — cross-JVM via session-scoped advisory locks (`pg_advisory_lock` / `GET_LOCK`). Each acquire borrows its own JDBC connection; per-DB quirks (timeout precision, Galera caveat, wait-forever sentinel) are documented in each class's Javadoc.
 - **`KeyedReentrantHolder`** — shared internal helper. Owns the per-`(thread, key)` counter, watchdog thread, and release-arbitration CAS so each provider only has to define backend acquire/release.
 

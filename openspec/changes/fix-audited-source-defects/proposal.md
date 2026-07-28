@@ -61,7 +61,7 @@ the areas deliberately left unexamined.
 ## Impact
 
 - `ekbatan-core`: `AbstractRepository`, `Transaction`, `DatabaseRegistry`, `DataSourceConfig`,
-  `Retry`, `InProcessKeyedLockProvider`, `KeyedReentrantHolder`, `PostgresKeyedLockProvider`,
+  `Retry`, `KeyedReentrantHolder` (and the removal of `InProcessKeyedLockProvider`), `PostgresKeyedLockProvider`,
   `MySQLKeyedLockProvider`, `SingleTableJsonEventPersister`, config builder validation.
 - `ekbatan-keyed-lock-redis`: `RedisKeyedLockProvider`.
 - `ekbatan-events:local-event-handler`: `EventHandlingJob`, `EventFanoutJob`,

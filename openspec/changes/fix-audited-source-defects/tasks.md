@@ -338,8 +338,14 @@ Section 1 is complete; the rest have not been started.
 
 ## 5. Keyed lock resource accounting (design.md findings 5 and 6)
 
-- [ ] 5.1 `InProcessKeyedLockProvider.tryAcquire`: single try/finally releasing the entry on every
-      non-success exit - timeout, interrupt, and any `RuntimeException` from `register()`.
+- [x] 5.1 `InProcessKeyedLockProvider` **deleted** rather than fixed - the refcount leak goes with
+      it. Rationale in `design.md` finding 5. Removed: the class, its reentrancy tests, the provider
+      row and FIFO claims in `docs/database/keyed-locks.md` + the website mirror, the entry in
+      `AGENTS.md`, and the javadoc reference in `KeyedLockProvider`.
+      `KeyedReentrantHolder` stays - the other four providers depend on it.
+      **Breaking change**: the class has been published since v0.2.1, so it belongs in the release
+      notes. Also note the docs no longer advertise any FIFO-fair provider; the fairness paragraph
+      now says ordering is best-effort across the board and points at optimistic locking.
 - [ ] 5.2 `KeyedReentrantHolder` watchdog: wrap the release callback in its own
       `catch (RuntimeException | Error)` logging at ERROR, and move (or reword) the "auto-released"
       `LOG.warn` so it never claims a release that has not happened.

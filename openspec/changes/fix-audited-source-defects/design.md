@@ -179,7 +179,17 @@ Fix: `var cv = config.getConfigValue(name); if (cv.getValue() != null) props.set
 
 ### 5. `InProcessKeyedLockProvider.tryAcquire` leaks its refcount on interrupt
 
-`ekbatan-core/.../concurrent/InProcessKeyedLockProvider.java:65` - **medium**.
+**Resolved by deleting the class, not by fixing it.** The finding below stands as written; what
+changed is the verdict on whether the code should exist. `KeyedLockProvider` has no consumer inside
+the framework - it is a user-facing utility - and every Ekbatan user already runs a database, so
+`PostgresKeyedLockProvider` was always the zero-extra-infrastructure option. The remaining argument
+for an in-process provider was that it made a convenient test double, but `KeyedLockProvider` is an
+interface: a mock or a ten-line fake serves that better than a production-grade fair-semaphore
+implementation with refcounted eviction and a watchdog thread. Keeping it meant supporting a
+published class with no consumer, whose only distinguishing promise (FIFO fairness in a single JVM)
+is niche and which a user could mistakenly select for a multi-node deployment.
+
+`ekbatan-core/.../concurrent/InProcessKeyedLockProvider.java:65` - **medium**, now removed.
 
 ```java
 var entry = retainEntry(key);
