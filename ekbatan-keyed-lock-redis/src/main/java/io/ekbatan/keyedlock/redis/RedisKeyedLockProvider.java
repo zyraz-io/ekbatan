@@ -5,6 +5,7 @@ import io.ekbatan.core.concurrent.KeyedReentrantHolder;
 import io.ekbatan.core.internal.Validate;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
@@ -70,7 +71,7 @@ public final class RedisKeyedLockProvider implements KeyedLockProvider {
         }
         var rlock = redisson.getLock(redisKey(key));
         var acquirerThreadId = Thread.currentThread().threadId();
-        rlock.lockInterruptibly(maxHold.toMillis(), TimeUnit.MILLISECONDS);
+        rlock.lockInterruptibly(leaseMillis(maxHold), TimeUnit.MILLISECONDS);
         return holder.register(key, new RedisPayload(key, rlock, acquirerThreadId), maxHold, this::backendRelease);
     }
 
@@ -88,7 +89,7 @@ public final class RedisKeyedLockProvider implements KeyedLockProvider {
         }
         var rlock = redisson.getLock(redisKey(key));
         var acquirerThreadId = Thread.currentThread().threadId();
-        var acquired = rlock.tryLock(maxWait.toMillis(), maxHold.toMillis(), TimeUnit.MILLISECONDS);
+        var acquired = rlock.tryLock(maxWait.toMillis(), leaseMillis(maxHold), TimeUnit.MILLISECONDS);
         if (!acquired) {
             return Optional.empty();
         }
@@ -110,8 +111,44 @@ public final class RedisKeyedLockProvider implements KeyedLockProvider {
                     .toCompletableFuture()
                     .join();
         } catch (RuntimeException e) {
-            LOG.debug("Tried to unlock Redis lock for {} but it was no longer held", payload.userKey, e);
+            // Redisson surfaces both the benign and the fatal case as a CompletionException from
+            // join(), so they are indistinguishable until unwrapped. Deliberately still catching
+            // RuntimeException rather than CompletionException: narrowing it would let anything
+            // else escape backendRelease and propagate out of the caller's try-with-resources.
+            final var cause = e instanceof CompletionException && e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof IllegalMonitorStateException) {
+                // The lease's TTL expired before we got here, so Redisson's owner check failed.
+                // Nothing is wrong, and nothing is still held.
+                LOG.debug("Redis lock for {} was no longer held by this owner", payload.userKey);
+            } else {
+                // A genuine backend failure - unreachable Redis, failover, timeout. The unlock did
+                // NOT happen, so the key stays held until its TTL expires and every other node
+                // blocks on it meanwhile. Nothing can release a lock on a server we cannot reach,
+                // so the TTL is the only remedy; what matters is that this is not silent. Logging
+                // it at DEBUG (as this did) meant a shard stalling for maxHold with no trace.
+                LOG.error(
+                        "Failed to release Redis lock for key {}; it will remain held until its TTL expires",
+                        payload.userKey,
+                        cause);
+            }
         }
+    }
+
+    /**
+     * Converts {@code maxHold} to the millisecond lease Redisson expects, never yielding zero.
+     *
+     * <p>{@link Duration#toMillis()} truncates, so any positive sub-millisecond {@code maxHold}
+     * becomes {@code 0} - and Redisson reads a non-positive {@code leaseTime} as "no lease", which
+     * activates its own renewal watchdog. The key would then be renewed for as long as the JVM
+     * lives instead of expiring, i.e. the exact opposite of the caller's request. Rounding up to
+     * 1ms keeps the lease bounded. This mirrors the documented rounding on the MySQL provider,
+     * where a sub-second {@code maxWait} rounds up to whole seconds.
+     *
+     * @param maxHold the requested hold duration; already validated as positive by the callers.
+     * @return the lease in milliseconds, at least 1.
+     */
+    static long leaseMillis(Duration maxHold) {
+        return Math.max(1L, maxHold.toMillis());
     }
 
     private String redisKey(String userKey) {

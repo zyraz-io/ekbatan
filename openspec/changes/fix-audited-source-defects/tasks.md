@@ -349,10 +349,37 @@ Section 1 is complete; the rest have not been started.
 - [ ] 5.2 `KeyedReentrantHolder` watchdog: wrap the release callback in its own
       `catch (RuntimeException | Error)` logging at ERROR, and move (or reword) the "auto-released"
       `LOG.warn` so it never claims a release that has not happened.
-- [ ] 5.3 `RedisKeyedLockProvider.backendRelease`: unwrap `CompletionException` and branch -
-      `IllegalMonitorStateException` stays DEBUG, everything else WARN/ERROR with the cause.
-- [ ] 5.4 `RedisKeyedLockProvider`: reject or round up a positive sub-millisecond `maxHold` so it
-      can never become `leaseTime = 0`.
+- [x] 5.3 `RedisKeyedLockProvider.backendRelease`: unwraps the `CompletionException` and branches -
+      `IllegalMonitorStateException` (the lease's TTL expired, nothing is held) stays DEBUG and is
+      reworded to "no longer held **by this owner**"; anything else is ERROR naming the key and
+      saying it stays held until TTL expiry.
+      **Scope correction:** the audit row implied the fix would stop the key being held. It cannot -
+      nothing can release a lock on a server it cannot reach, and the lease TTL is the only and
+      correct remedy. This is an **observability** fix: previously a shard could stall for `maxHold`
+      with the sole trace being a DEBUG line asserting the opposite of what happened.
+      The catch deliberately stays `RuntimeException`, not `CompletionException` - narrowing it
+      would let other runtime failures escape `backendRelease` and surface from the caller's
+      try-with-resources. A first draft of this fix made exactly that mistake; three tests now pin it.
+- [x] 5.4 `RedisKeyedLockProvider`: added `leaseMillis(maxHold)` = `Math.max(1, toMillis())`, applied
+      on **both** acquire paths - the audit named only `tryAcquire`, but `acquire`'s
+      `lockInterruptibly(maxHold.toMillis(), ...)` truncated identically. `Duration.toMillis()`
+      truncates, so any sub-millisecond hold reached Redisson as `leaseTime = 0`, which it reads as
+      "no lease" and answers by starting its renewal watchdog - the key then lives as long as the
+      JVM. Rounding up mirrors the documented rounding on the MySQL provider.
+- [x] 5.5 Tests. `ekbatan-keyed-lock-redis` had **no test source set at all**; added one plus three
+      unit tests on the lease conversion (sub-millisecond, exact, and a guard that long holds are not
+      clamped at the top end). Six more in the Redis integration suite: the lease's remaining TTL is
+      bounded rather than the ~30s watchdog lease; a later acquirer is not blocked; and four
+      release-failure cases proving `close()` never throws - backend failure, owner-check failure, a
+      failure arriving **without** a `CompletionException` wrapper, and that a failed release leaves
+      the provider usable for that key.
+      **A/B verified**: two of the new tests fail against the pre-fix code. The four release-failure
+      tests do not, and that is expected - the old code also swallowed everything, silently; they
+      guard the narrowing mistake rather than the original defect. Log assertions were not attempted:
+      no test classpath in this repo carries an SLF4J binding, and there is no precedent for them.
+      One correction worth recording: the "later acquirer" test initially passed against the broken
+      code because it re-acquired on the **same thread**, and Redisson's `RLock` is reentrant per
+      thread - so it proved nothing. It now acquires from another thread and discriminates.
 - [ ] 5.5 `MySQLKeyedLockProvider:106`: wrap `connectionProvider.acquire()` failures in
       `LockAcquisitionException`. Check the sibling providers for the same gap.
 - [ ] 5.6 `PostgresKeyedLockProvider:77`: do not let `Thread.interrupted()` strip the flag from

@@ -2,6 +2,7 @@ package io.ekbatan.test.keyed_lock_provider;
 
 import static io.ekbatan.keyedlock.redis.RedisKeyedLockProvider.Builder.redisKeyedLockProvider;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.redis.testcontainers.RedisContainer;
@@ -11,6 +12,7 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -407,6 +409,158 @@ class RedisKeyedLockProviderIntegrationTest {
                 (proxy, method, args) -> switch (method.getName()) {
                     case "getLock" -> lock;
                     case "toString" -> "fake-redisson-client";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.toString());
+                });
+    }
+
+    // ----- Lease bounds: a positive maxHold must never become a non-expiring lease -----
+
+    @Test
+    void sub_millisecond_max_hold_should_still_produce_an_expiring_lease() throws Exception {
+        // Duration.toMillis() truncates, so a sub-millisecond hold used to reach Redisson as
+        // leaseTime=0 - which Redisson reads as "no lease" and answers by starting its renewal
+        // watchdog, keeping the key alive for the life of the JVM. The lease must stay bounded.
+        var key = uniqueKey();
+        var lease = lock.acquire(key, Duration.ofNanos(500_000));
+
+        var ttl = redisson.getLock("ekbatan-lock:" + key).remainTimeToLive();
+
+        // -2 = key already gone, -1 = no expiry set (the defect), otherwise remaining ms. Redisson's
+        // watchdog lease is 30s by default, so anything in that region means the bug is back.
+        assertThat(ttl).isNotEqualTo(-1L);
+        assertThat(ttl).isLessThan(1_000L);
+
+        lease.close();
+    }
+
+    @Test
+    void sub_millisecond_max_hold_should_not_block_a_later_acquirer() throws Exception {
+        // The behavioural consequence of the above, and the one a user would actually hit: with a
+        // renewing lease the key is never released - not by the framework watchdog either, which
+        // deliberately skips the Redis unlock and relies on the lease expiring.
+        var key = uniqueKey();
+        var abandoned = lock.acquire(key, Duration.ofNanos(500_000));
+
+        // From ANOTHER thread on purpose. Redisson's RLock is reentrant per thread, so a second
+        // acquire on this thread would succeed through reentrancy even while the key is genuinely
+        // held - it would pass whether or not the lease expires, and prove nothing.
+        var acquiredElsewhere = CompletableFuture.supplyAsync(() -> {
+            try (var next =
+                    lock.tryAcquire(key, Duration.ofSeconds(5), FIVE_MIN).orElseThrow()) {
+                return next.isHeld();
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        });
+
+        // Never closed on purpose: expiry alone must free the key.
+        assertThat(acquiredElsewhere.get(10, TimeUnit.SECONDS)).isTrue();
+
+        abandoned.close();
+    }
+
+    // ----- Release failures must never escape close() -----
+
+    @Test
+    void close_should_not_throw_when_the_backend_release_fails() throws Exception {
+        // Redis unreachable during release. Nothing can unlock a key on a server we cannot reach,
+        // so the lease's TTL is the only remedy - but close() must not explode in the caller's
+        // try-with-resources, where it would mask whatever the block was really doing.
+        var lock = redisKeyedLockProvider()
+                .redissonClient(fakeRedisson(
+                        failingUnlockLock(new CompletionException(new IllegalStateException("Redis unreachable")))))
+                .build();
+
+        var lease = lock.acquire(uniqueKey(), FIVE_MIN);
+
+        assertThatCode(lease::close).doesNotThrowAnyException();
+    }
+
+    @Test
+    void close_should_not_throw_when_the_owner_check_fails() throws Exception {
+        // The benign case: the lease's TTL expired before we got here, so Redisson's owner check
+        // fails. Distinguished from the case above only by the cause, which is why the fix unwraps.
+        var lock = redisKeyedLockProvider()
+                .redissonClient(fakeRedisson(
+                        failingUnlockLock(new CompletionException(new IllegalMonitorStateException("not held")))))
+                .build();
+
+        var lease = lock.acquire(uniqueKey(), FIVE_MIN);
+
+        assertThatCode(lease::close).doesNotThrowAnyException();
+    }
+
+    @Test
+    void close_should_not_throw_when_unlock_fails_without_a_completion_wrapper() throws Exception {
+        // Guards the unwrap itself: not every failure arrives wrapped in a CompletionException, and
+        // narrowing the catch to CompletionException would let this one escape close().
+        var lock = redisKeyedLockProvider()
+                .redissonClient(fakeRedisson(failingUnlockLock(new IllegalStateException("raw failure"))))
+                .build();
+
+        var lease = lock.acquire(uniqueKey(), FIVE_MIN);
+
+        assertThatCode(lease::close).doesNotThrowAnyException();
+    }
+
+    @Test
+    void a_failed_release_should_not_wedge_the_provider_for_that_key() throws Exception {
+        // After a release failure the local bookkeeping must still be clean, so the same thread can
+        // take the key again rather than being blocked by its own stale entry.
+        var key = uniqueKey();
+        var lock = redisKeyedLockProvider()
+                .redissonClient(fakeRedisson(
+                        failingUnlockLock(new CompletionException(new IllegalStateException("Redis unreachable")))))
+                .build();
+
+        lock.acquire(key, FIVE_MIN).close();
+
+        try (var again = lock.acquire(key, FIVE_MIN)) {
+            assertThat(again.isHeld()).isTrue();
+        }
+    }
+
+    /** An {@link RLock} whose {@code unlockAsync} fails with {@code failure}. */
+    private static RLock failingUnlockLock(RuntimeException failure) {
+        return (RLock) Proxy.newProxyInstance(
+                RedisKeyedLockProviderIntegrationTest.class.getClassLoader(),
+                new Class<?>[] {RLock.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "lockInterruptibly" -> null;
+                    case "tryLock" -> true;
+                    case "unlockAsync" -> failedFuture(failure);
+                    case "forceUnlock" -> true;
+                    case "getName" -> "failing-lock";
+                    case "isLocked", "isHeldByThread", "isHeldByCurrentThread" -> true;
+                    case "getHoldCount" -> 1;
+                    case "remainTimeToLive" -> 1L;
+                    case "toString" -> "failing-rlock";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.toString());
+                });
+    }
+
+    /** An {@link RFuture} that fails on {@code join()}, the way a real Redisson failure surfaces. */
+    @SuppressWarnings("unchecked")
+    private static <T> RFuture<T> failedFuture(RuntimeException failure) {
+        return (RFuture<T>) Proxy.newProxyInstance(
+                RedisKeyedLockProviderIntegrationTest.class.getClassLoader(),
+                new Class<?>[] {RFuture.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "toCompletableFuture" -> {
+                        var future = new CompletableFuture<T>();
+                        future.completeExceptionally(failure);
+                        yield future;
+                    }
+                    case "join" -> throw failure;
+                    case "isDone" -> true;
+                    case "isCancelled" -> false;
+                    case "isSuccess" -> false;
+                    case "cause" -> failure;
+                    case "toString" -> "failed-rfuture";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
                     default -> throw new UnsupportedOperationException(method.toString());
