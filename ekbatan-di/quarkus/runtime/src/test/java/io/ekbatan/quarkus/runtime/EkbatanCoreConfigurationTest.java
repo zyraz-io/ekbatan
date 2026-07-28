@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.ekbatan.core.config.ShardingConfig;
+import io.smallrye.config.EnvConfigSource;
 import io.smallrye.config.PropertiesConfigSource;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
@@ -63,6 +64,31 @@ class EkbatanCoreConfigurationTest {
         }
         registered = new SmallRyeConfigBuilder()
                 .withSources(new PropertiesConfigSource(props, "test", 1000))
+                .build();
+        resolver.registerConfig(registered, cl);
+    }
+
+    /**
+     * Registers {@code props} plus a real {@link EnvConfigSource} built from {@code env}, so the
+     * environment-variable code path is exercised faithfully - including SmallRye publishing each
+     * variable under both its raw name and a synthesized lower-cased dotted alias. Using the real
+     * source rather than hand-written aliases is the point: the alias format is SmallRye's
+     * behaviour, not ours, and a hand-rolled imitation would stop catching regressions if it changed.
+     */
+    private void registerConfigWithEnv(Map<String, String> props, Map<String, String> env) {
+        var resolver = ConfigProviderResolver.instance();
+        var cl = Thread.currentThread().getContextClassLoader();
+        try {
+            resolver.releaseConfig(resolver.getConfig(cl));
+        } catch (Exception ignored) {
+            // No config registered - fine.
+        }
+        registered = new SmallRyeConfigBuilder()
+                // 250 / 300 mirror Quarkus's real ordinals for application.properties and the
+                // environment, so the override test below asserts production precedence rather than
+                // an artefact of the fixture.
+                .withSources(new PropertiesConfigSource(props, "test", 250))
+                .withSources(new EnvConfigSource(env, 300))
                 .build();
         resolver.registerConfig(registered, cl);
     }
@@ -451,6 +477,174 @@ class EkbatanCoreConfigurationTest {
             assertThatThrownBy(() -> new EkbatanCoreConfiguration().ekbatanLocalEventHandlerConfig())
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("Failed to bind 'ekbatan.local-event-handler'");
+        }
+    }
+
+    /**
+     * Environment-variable binding. SmallRye's {@code EnvConfigSource} publishes every variable
+     * twice - the raw {@code FOO_BAR} name, and a synthesized lower-cased dotted alias. Copying the
+     * alias verbatim into the Jackson input used to break the bind outright, which meant supplying a
+     * database password by environment variable (the standard container practice) could not work.
+     *
+     * <p>Note the env spelling: SmallRye maps {@code ].} in a property name to a DOUBLE underscore.
+     * {@code EKBATAN_SHARDING_GROUPS_0__MEMBERS_0__...} is the form that resolves
+     * {@code ekbatan.sharding.groups[0].members[0]...}; the single-underscore variant is a different
+     * property entirely, which is why {@link #singleUnderscoreSpellingIsADifferentPropertyAndIsRejected}
+     * exists.
+     */
+    @Nested
+    class EnvironmentVariables {
+
+        private static final String PASSWORD_ENV =
+                "EKBATAN_SHARDING_GROUPS_0__MEMBERS_0__CONFIGS_PRIMARYCONFIG_PASSWORD";
+
+        /** Topology in the file, secret in the environment - the case the defect made impossible. */
+        private static Map<String, String> topologyWithoutPassword() {
+            var p = new LinkedHashMap<>(minimalCamelCase());
+            p.remove("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password");
+            return p;
+        }
+
+        @Test
+        void bindsAValueSuppliedOnlyByAnEnvironmentVariable() {
+            registerConfigWithEnv(topologyWithoutPassword(), Map.of(PASSWORD_ENV, "s3cr3t"));
+
+            var configs = bind().groups.get(0).members.get(0).configs;
+            assertThat(configs.get("primaryConfig").password).isEqualTo("s3cr3t");
+        }
+
+        @Test
+        void doesNotCreateAPhantomLowerCasedConfigEntry() {
+            // The synthesized alias spells the map key `primaryconfig`. Left unrepaired it became a
+            // second entry in the configs map with no jdbcUrl - the actual failure mode.
+            registerConfigWithEnv(topologyWithoutPassword(), Map.of(PASSWORD_ENV, "s3cr3t"));
+
+            assertThat(bind().groups.get(0).members.get(0).configs).containsOnlyKeys("primaryConfig");
+        }
+
+        @Test
+        void environmentVariableOverridesTheSameKeyFromAFile() {
+            // Ordinals must still apply: env (300) outranks the test properties source only because
+            // we resolve through SmallRye rather than reading whichever name we enumerated first.
+            registerConfigWithEnv(minimalCamelCase(), Map.of(PASSWORD_ENV, "from-env"));
+
+            assertThat(bind().groups.get(0).members.get(0).configs.get("primaryConfig").password)
+                    .isEqualTo("from-env");
+        }
+
+        @Test
+        void repairsCasingForAKebabSpelledMapKey() {
+            // The canonical spelling is learned from a kebab-case file key, so restoring the
+            // flattened env alias has to go through the same normalisation.
+            var p = new LinkedHashMap<>(minimalCamelCase());
+            p.remove("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.jdbcUrl");
+            p.remove("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.username");
+            p.remove("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password");
+            p.put("ekbatan.sharding.groups[0].members[0].configs.primary-config.jdbc-url", "jdbc:postgresql://h/db");
+            p.put("ekbatan.sharding.groups[0].members[0].configs.primary-config.username", "u");
+            registerConfigWithEnv(p, Map.of(PASSWORD_ENV, "s3cr3t"));
+
+            var configs = bind().groups.get(0).members.get(0).configs;
+            assertThat(configs).containsOnlyKeys("primaryConfig");
+            assertThat(configs.get("primaryConfig").password).isEqualTo("s3cr3t");
+        }
+
+        @Test
+        void unrelatedEnvironmentVariablesAreIgnored() {
+            // Every variable in the process is enumerated, not just ours.
+            registerConfigWithEnv(
+                    minimalCamelCase(),
+                    Map.of("PATH", "/usr/bin", "JAVA_HOME", "/opt/java", "SOME_OTHER_APP_SETTING", "x"));
+
+            assertThat(bind().groups.get(0).members.get(0).configs.get("primaryConfig").jdbcUrl)
+                    .isEqualTo("jdbc:postgresql://h/db");
+        }
+
+        @Test
+        void bindsWithNoEnvironmentSourceAtAll() {
+            // Regression guard for the collector when getConfigSources() has no EnvConfigSource.
+            registerConfig(minimalCamelCase());
+            assertThat(bind().groups.get(0).members.get(0).configs.get("primaryConfig").password)
+                    .isEqualTo("p");
+        }
+
+        @Test
+        void singleUnderscoreSpellingIsADifferentPropertyAndIsRejected() {
+            // Documents SmallRye's rule rather than asserting our own behaviour: with single
+            // underscores the alias is `groups[0]members[0]configs...` (no dots), which is not the
+            // property the user meant. It must fail loudly rather than bind to something surprising.
+            registerConfigWithEnv(
+                    topologyWithoutPassword(),
+                    Map.of("EKBATAN_SHARDING_GROUPS_0_MEMBERS_0_CONFIGS_PRIMARYCONFIG_PASSWORD", "s3cr3t"));
+
+            assertThatThrownBy(EkbatanCoreConfigurationTest::bind)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Failed to bind 'ekbatan.sharding'");
+        }
+
+        @Test
+        void environmentOnlyCamelCaseLeafCannotBeRecoveredAndFailsLoudly() {
+            // The documented limitation, pinned so it is a known boundary rather than a surprise.
+            // SmallRye's alias for EKBATAN_JOBS_POLLING_INTERVAL is `ekbatan.jobs.polling.interval`;
+            // the property is `pollingInterval`. With no case-preserving source to restore the
+            // spelling from, it cannot be repaired - and it must fail rather than bind to nothing.
+            registerConfigWithEnv(Map.of(), Map.of("EKBATAN_JOBS_POLLING_INTERVAL", "PT2S"));
+
+            assertThatThrownBy(() -> new EkbatanCoreConfiguration().ekbatanJobsConfig())
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Failed to bind 'ekbatan.jobs'");
+        }
+
+        @Test
+        void environmentOverridesAnOptionalSubtreeValueDeclaredInAFile() {
+            // The supported shape for the optional subtrees: the file establishes the canonical
+            // spelling, the environment supplies or overrides the value.
+            registerConfigWithEnv(
+                    Map.of("ekbatan.jobs.polling-interval", "PT9S"), Map.of("EKBATAN_JOBS_POLLINGINTERVAL", "PT2S"));
+
+            assertThat(new EkbatanCoreConfiguration().ekbatanJobsConfig().pollingInterval)
+                    .contains(java.time.Duration.ofSeconds(2));
+        }
+    }
+
+    /**
+     * Empty values. SmallRye's String converter maps {@code ""} to absent, so reading through
+     * {@code getOptionalValue} silently dropped a legal empty password and startup then failed with
+     * "password is required" - while the identical configuration bound fine on Spring and Micronaut.
+     */
+    @Nested
+    class EmptyValues {
+
+        @Test
+        void bindsAnEmptyPasswordAsAnEmptyString() {
+            var p = new LinkedHashMap<>(minimalCamelCase());
+            p.put("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password", "");
+            registerConfig(p);
+
+            assertThat(bind().groups.get(0).members.get(0).configs.get("primaryConfig").password)
+                    .isEmpty();
+        }
+
+        @Test
+        void bindsAnEmptyPasswordSuppliedByAnEnvironmentVariable() {
+            var p = new LinkedHashMap<>(minimalCamelCase());
+            p.remove("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password");
+            registerConfigWithEnv(
+                    p, Map.of("EKBATAN_SHARDING_GROUPS_0__MEMBERS_0__CONFIGS_PRIMARYCONFIG_PASSWORD", ""));
+
+            assertThat(bind().groups.get(0).members.get(0).configs.get("primaryConfig").password)
+                    .isEmpty();
+        }
+
+        @Test
+        void anEmptyValueIsDistinctFromAnAbsentOne() {
+            // The whole point: absent must still fail, or the fix would have traded one silent
+            // misconfiguration for another.
+            var p = new LinkedHashMap<>(minimalCamelCase());
+            p.remove("ekbatan.sharding.groups[0].members[0].configs.primaryConfig.password");
+            registerConfig(p);
+
+            assertThatThrownBy(EkbatanCoreConfigurationTest::bind).isInstanceOf(IllegalStateException.class);
         }
     }
 }

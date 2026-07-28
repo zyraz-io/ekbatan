@@ -150,15 +150,45 @@ Section 1 is complete; the rest have not been started.
 
 ## 3. Quarkus config binding parity (design.md finding 4)
 
-- [ ] 3.1 Stop using enumerated names as Jackson keys in `EkbatanCoreConfiguration.java:73-79`
-      and in the shared `bindSubtree` helper at `:140-146`. Either filter SmallRye's
-      `toLowerCaseAndDotted` syntheses or invert the loop and look up canonical keys directly.
-- [ ] 3.2 Replace `config.getOptionalValue(name, String.class).ifPresent(...)` with
-      `config.getConfigValue(name)` + null check, so `""` survives. Both loops.
+- [x] 3.0 Reproduce before fixing. A throwaway harness registered a real
+      `EnvConfigSource` in-process and printed what SmallRye actually does. Two corrections to the
+      audit's account, both material:
+      - **The env-var spelling in the audit was wrong.** SmallRye maps `].` in a property name to a
+        **double** underscore. `EKBATAN_SHARDING_GROUPS_0__MEMBERS_0__CONFIGS_PRIMARYCONFIG_PASSWORD`
+        resolves `...groups[0].members[0]...`; the single-underscore form the audit quoted is a
+        different property and its alias is `groups[0]members[0]configs...` with the dots missing.
+      - **The failure is not an unknown-property rejection.** With the correct spelling the alias is
+        structurally right and only the map key's casing is wrong (`primaryconfig`). Since `configs`
+        is a `Map<String, DataSourceConfig>`, that is accepted as a *new map key*, producing a
+        phantom entry with no `jdbcUrl` - so the bind dies with `jdbcUrl is required`.
+- [x] 3.1 Both copy loops replaced by a shared `collectSubtree` collector. It no longer uses an
+      enumerated name as a Jackson key: names published by an `EnvConfigSource` have their casing
+      restored against the canonical spellings that case-preserving sources supply, longest-prefix
+      first.
+      Note the pure "invert the loop and look up canonical keys" option was **discarded after
+      testing**: `ShardMemberConfig.configs` is a `Map<String, DataSourceConfig>` whose keys are user
+      data, so the expected key set cannot be derived from the class. A first implementation that
+      resolved values by canonical name also broke every kebab-case test, because SmallRye only
+      resolves names as written - values are now read back under the source's own name, with
+      duplicates settled by source ordinal so an env var still overrides a file.
+- [x] 3.2 `getOptionalValue` replaced by `getConfigValue(name).getValue()`, so `""` survives. Both
+      loops, via the shared collector.
+- [x] 3.4 / 3.5 Nine `EnvironmentVariables` tests and three `EmptyValues` tests added to
+      `EkbatanCoreConfigurationTest`, built on a **real `EnvConfigSource`** rather than hand-written
+      aliases - the alias format is SmallRye's behaviour, not ours, and an imitation would stop
+      catching regressions if it changed. Fixture ordinals are 250/300 to mirror Quarkus's real
+      `application.properties` and environment precedence. **6 of the new tests fail against the
+      pre-fix binder**, verified by stashing it.
+      Coverage: value supplied only by env; no phantom lower-cased entry; env overrides file;
+      casing repaired from a kebab-spelled map key; unrelated env vars ignored; no env source at
+      all; empty password from file and from env; and empty still distinguished from absent.
+- [x] 3.5a Two boundaries pinned as tests rather than left as surprises: the single-underscore env
+      spelling is a *different property* and must fail loudly; and a camelCase leaf supplied **only**
+      by an env var (`EKBATAN_JOBS_POLLING_INTERVAL` -> alias `ekbatan.jobs.polling.interval`, but
+      the property is `pollingInterval`) cannot have its casing restored, because no case-preserving
+      source offers a spelling to restore from. Documented limitation: topology in a file plus
+      secrets in the environment works; configuring a subtree entirely from the environment does not.
 - [ ] 3.3 Align the `@IfBuildProperty` gates with the key spellings the binder accepts.
-- [ ] 3.4 Test in all three DI suites: an empty password binds as `""`.
-- [ ] 3.5 Test in the Quarkus suite: an `EKBATAN_SHARDING_..._PASSWORD` environment variable binds
-      correctly and no synthesized alias reaches the strict mapper.
 - [ ] 3.6 Test: the camelCase enable flag actually starts the local-event-handler job.
 
 ## 4. Event dispatch fault isolation (design.md findings 3 and 6)

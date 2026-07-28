@@ -12,14 +12,22 @@ import io.ekbatan.core.shard.DatabaseRegistry;
 import io.ekbatan.distributedjobs.config.JobsConfig;
 import io.ekbatan.events.localeventhandler.config.LocalEventHandlerConfig;
 import io.quarkus.arc.All;
+import io.smallrye.config.EnvConfigSource;
 import jakarta.enterprise.inject.Disposes;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Singleton;
 import java.io.IOException;
 import java.time.Clock;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
@@ -68,15 +76,7 @@ public class EkbatanCoreConfiguration {
         // The prefix has no hyphens so it's already canonical; for consistency with the optional
         // subtrees we still match against the normalised key so any future kebab parent (or a
         // weird `ekbatan.sharding.Default-Shard` from a user) bind identically.
-        var canonicalPrefix = PropertyKeyNormalizer.kebabToCamel("ekbatan.sharding.");
-        var props = new Properties();
-        for (var name : config.getPropertyNames()) {
-            var canonical = PropertyKeyNormalizer.kebabToCamel(name);
-            if (!canonical.startsWith(canonicalPrefix)) continue;
-            var sub = canonical.substring(canonicalPrefix.length());
-            if (sub.isEmpty()) continue;
-            config.getOptionalValue(name, String.class).ifPresent(v -> props.setProperty(sub, v));
-        }
+        var props = collectSubtree(config, "ekbatan.sharding.");
         if (props.isEmpty()) {
             throw new IllegalStateException(
                     "Ekbatan requires 'ekbatan.sharding' to be configured (groups[].members[].configs.primaryConfig.*). "
@@ -127,6 +127,134 @@ public class EkbatanCoreConfiguration {
     }
 
     /**
+     * Collects one {@code prefix}ed subtree of SmallRye Config into flat {@link Properties} keyed by
+     * the canonical (camelCase) property name, ready for the strict {@code JavaPropsMapper}.
+     *
+     * <p>Two things here are subtler than they look, and both were live defects:
+     *
+     * <p><b>1. An enumerated name is not necessarily a name you may write.</b> SmallRye's
+     * {@code EnvConfigSource} publishes every environment variable under <em>two</em> names: the raw
+     * {@code FOO_BAR}, and a synthesized lower-cased dotted alias. The alias is lower-cased, so every
+     * camelCase segment of an Ekbatan key is flattened - {@code configs.primaryConfig.password}
+     * arrives as {@code configs.primaryconfig.password}. Copying that verbatim into the Jackson input
+     * (as this code used to) creates a phantom {@code primaryconfig} entry in the {@code configs} map
+     * that has no {@code jdbcUrl}, and the whole bind fails with "jdbcUrl is required" - so setting a
+     * database password by environment variable, the standard container practice, could not work.
+     * We therefore restore the casing of any flattened name against the canonical spellings the
+     * non-environment sources already gave us, and resolve the <em>value</em> through
+     * {@link Config#getConfigValue(String)} under that repaired name, which lets SmallRye apply
+     * source ordinals and its own environment-variable matching.
+     *
+     * <p><b>2. {@code getOptionalValue} cannot express an empty value.</b> SmallRye's String
+     * converter maps {@code ""} to absent, so a legal empty password (MySQL root with no password,
+     * Postgres {@code trust} auth) was silently dropped and startup then failed with
+     * "password is required" - while the identical configuration bound fine on Spring and Micronaut.
+     * {@link Config#getConfigValue(String)} bypasses the converter and preserves the empty string.
+     *
+     * <p><b>Known limitation.</b> Casing can only be restored from a spelling that some non-environment
+     * source supplies. A key that exists <em>only</em> as an environment variable and whose canonical
+     * form contains uppercase letters (say {@code maximumPoolSize}, with no counterpart in any file)
+     * cannot be recovered, and the strict mapper will reject it by name. That fails loudly rather than
+     * silently, and it does not affect the usual split of topology-in-file plus secrets-in-environment.
+     *
+     * @param config the active SmallRye config.
+     * @param prefix the subtree prefix, including its trailing dot.
+     * @return flat properties relative to {@code prefix}; empty when the subtree is absent.
+     */
+    private static Properties collectSubtree(Config config, String prefix) {
+        final var canonicalPrefix = PropertyKeyNormalizer.kebabToCamel(prefix);
+        final var flattenedNames = environmentSynthesizedNames(config);
+
+        // Pass 1 - canonical spellings, taken only from sources that preserve case, so that a
+        // flattened environment alias can have its casing restored against them.
+        final var canonicalSpellings = new LinkedHashSet<String>();
+        for (var name : config.getPropertyNames()) {
+            if (flattenedNames.contains(name)) continue;
+            var canonical = PropertyKeyNormalizer.kebabToCamel(name);
+            if (canonical.startsWith(canonicalPrefix) && canonical.length() > canonicalPrefix.length()) {
+                canonicalSpellings.add(canonical);
+            }
+        }
+        final var spellings = knownSpellingsByLowerCase(canonicalSpellings);
+
+        // Pass 2 - resolve every name in the subtree. The KEY is canonical (kebab folded to camel,
+        // flattened environment aliases repaired); the VALUE is read back under the name the source
+        // actually published, because that is the only name SmallRye can resolve. Two different
+        // source names can normalise onto one canonical key (`primary-config` in a file and
+        // `primaryconfig` from the environment), so the higher source ordinal wins - which is how
+        // an environment variable keeps overriding a file.
+        final var resolved = new HashMap<String, ResolvedValue>();
+        for (var name : config.getPropertyNames()) {
+            var canonical = PropertyKeyNormalizer.kebabToCamel(name);
+            if (!canonical.startsWith(canonicalPrefix) || canonical.length() == canonicalPrefix.length()) {
+                continue;
+            }
+            if (flattenedNames.contains(name)) {
+                canonical = restoreCasing(canonical, spellings);
+                if (!canonical.startsWith(canonicalPrefix)) continue;
+            }
+            // getConfigValue, not getOptionalValue: the latter runs SmallRye's String converter,
+            // which maps "" to absent and so silently drops a legal empty password.
+            final var configValue = config.getConfigValue(name);
+            final var value = configValue.getValue();
+            if (value == null) continue;
+            final var key = canonical.substring(canonicalPrefix.length());
+            final var existing = resolved.get(key);
+            if (existing == null || configValue.getSourceOrdinal() > existing.ordinal()) {
+                resolved.put(key, new ResolvedValue(value, configValue.getSourceOrdinal()));
+            }
+        }
+
+        final var props = new Properties();
+        resolved.forEach((key, value) -> props.setProperty(key, value.value()));
+        return props;
+    }
+
+    /** A subtree value plus the ordinal of the source it came from, so overrides resolve correctly. */
+    private record ResolvedValue(String value, int ordinal) {}
+
+    /** {@return every property name published by an environment-variable config source} */
+    private static Set<String> environmentSynthesizedNames(Config config) {
+        final var names = new HashSet<String>();
+        for (var source : config.getConfigSources()) {
+            if (source instanceof EnvConfigSource) {
+                source.getPropertyNames().forEach(names::add);
+            }
+        }
+        return names;
+    }
+
+    /** Indexes every dot-prefix of every canonical name by its lower-cased form. */
+    private static Map<String, String> knownSpellingsByLowerCase(Set<String> canonicalNames) {
+        final var spellings = new HashMap<String, String>();
+        for (var canonical : canonicalNames) {
+            var prefix = new StringBuilder();
+            for (var segment : canonical.split("\\.")) {
+                if (!prefix.isEmpty()) prefix.append('.');
+                prefix.append(segment);
+                spellings.putIfAbsent(prefix.toString().toLowerCase(Locale.ROOT), prefix.toString());
+            }
+        }
+        return spellings;
+    }
+
+    /**
+     * Rebuilds {@code flattened} segment by segment, swapping in a known canonical spelling wherever
+     * the prefix so far matches one case-insensitively. Segments with no known spelling are kept
+     * as-is - see the limitation on {@link #collectSubtree}.
+     */
+    private static String restoreCasing(String flattened, Map<String, String> spellings) {
+        final var restored = new StringBuilder();
+        for (var segment : flattened.split("\\.")) {
+            var candidate = restored.isEmpty() ? segment : restored + "." + segment;
+            var known = spellings.get(candidate.toLowerCase(Locale.ROOT));
+            restored.setLength(0);
+            restored.append(known != null ? known : candidate);
+        }
+        return restored.toString();
+    }
+
+    /**
      * Shared helper for the optional Jackson-hybrid subtrees (jobs / local-event-handler). Folds
      * kebab-case segments to camelCase via {@link PropertyKeyNormalizer} BEFORE prefix matching,
      * so both the parent segment ({@code local-event-handler} vs {@code localEventHandler}) and
@@ -134,16 +262,7 @@ public class EkbatanCoreConfiguration {
      * canonical form. Falls back to {@code ifEmpty} when no keys are present.
      */
     private static <T> T bindSubtree(String prefix, Class<T> target, java.util.function.Supplier<T> ifEmpty) {
-        var config = ConfigProvider.getConfig();
-        var canonicalPrefix = PropertyKeyNormalizer.kebabToCamel(prefix);
-        var props = new Properties();
-        for (var name : config.getPropertyNames()) {
-            var canonical = PropertyKeyNormalizer.kebabToCamel(name);
-            if (!canonical.startsWith(canonicalPrefix)) continue;
-            var sub = canonical.substring(canonicalPrefix.length());
-            if (sub.isEmpty()) continue;
-            config.getOptionalValue(name, String.class).ifPresent(v -> props.setProperty(sub, v));
-        }
+        var props = collectSubtree(ConfigProvider.getConfig(), prefix);
         if (props.isEmpty()) return ifEmpty.get();
         var mapper = JavaPropsMapper.builder()
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
