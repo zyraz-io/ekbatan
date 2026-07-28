@@ -3,6 +3,7 @@ package io.ekbatan.core.config;
 import io.ekbatan.core.internal.Validate;
 import java.util.Optional;
 import org.jooq.SQLDialect;
+import org.jooq.tools.jdbc.JDBCUtils;
 import tools.jackson.databind.annotation.JsonDeserialize;
 import tools.jackson.databind.annotation.JsonPOJOBuilder;
 
@@ -51,11 +52,45 @@ public final class DataSourceConfig {
         this.leakDetectionThreshold = builder.leakDetectionThreshold;
     }
 
+    /**
+     * Resolves the dialect with jOOQ's own {@link JDBCUtils#dialect(String)} rather than scanning
+     * the URL for driver names.
+     *
+     * <p>The previous implementation asked whether the URL {@code contains} "postgresql", then
+     * "mysql", then "mariadb". Because that searched the whole string - host, database, query
+     * parameters - and checked MySQL first, a perfectly correct MariaDB URL pointing at a host
+     * carried over from a migration resolved to {@link SQLDialect#MYSQL}:
+     * {@code jdbc:mariadb://mysql-01.prod/app}, or the very common Kubernetes case
+     * {@code jdbc:mariadb://mysql.default.svc.cluster.local/db}. Nothing failed - jOOQ simply
+     * rendered MySQL-flavoured SQL against MariaDB, which mostly works, except where the two have
+     * diverged. This framework leans on exactly those places: {@code AbstractRepository} uses
+     * {@code RETURNING} on four write paths, which MariaDB 10.5+ supports and MySQL does not.
+     *
+     * <p>Using jOOQ's resolver keeps one source of truth (the library that consumes the dialect
+     * also decides it), is maintained upstream as new URL forms appear, and already handles shapes
+     * a hand-rolled scan gets wrong - multi-host failover lists, {@code jdbc:mysql:aurora://},
+     * {@code jdbc:mariadb:sequential://}.
+     *
+     * @param jdbcUrl the configured JDBC URL.
+     * @return the resolved dialect family.
+     * @throws IllegalArgumentException if the URL is unrecognised, or names a database Ekbatan does
+     *     not support.
+     */
     private static SQLDialect resolveDialect(String jdbcUrl) {
-        if (jdbcUrl.contains("postgresql")) return SQLDialect.POSTGRES;
-        if (jdbcUrl.contains("mysql")) return SQLDialect.MYSQL;
-        if (jdbcUrl.contains("mariadb")) return SQLDialect.MARIADB;
-        throw new IllegalArgumentException("Cannot determine dialect from URL: " + jdbcUrl);
+        // family() because jOOQ's commercial editions carry versioned dialects (POSTGRES_15 and
+        // friends); the family normalises those onto the constants used throughout the framework.
+        final var dialect = JDBCUtils.dialect(jdbcUrl).family();
+        return switch (dialect) {
+            case POSTGRES, MYSQL, MARIADB -> dialect;
+            // Distinguished on purpose: "could not tell" and "told, but unsupported" are
+            // different mistakes and want different fixes.
+            case DEFAULT ->
+                throw new IllegalArgumentException("Cannot determine the database dialect from URL: " + jdbcUrl);
+            default ->
+                throw new IllegalArgumentException("URL resolves to " + dialect
+                        + ", which Ekbatan does not support: " + jdbcUrl
+                        + ". Supported dialects: PostgreSQL, MySQL, MariaDB.");
+        };
     }
 
     /** Fluent builder for {@link DataSourceConfig}. Obtain via {@link #dataSourceConfig()}. */

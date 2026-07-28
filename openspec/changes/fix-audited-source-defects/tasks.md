@@ -463,8 +463,30 @@ Section 1 is complete; the rest have not been started.
       the documented ordering.
 - [ ] 7.5 `EkbatanActionsHolder.java:26`: scope or reset the process-global static so one context's
       AOT action list cannot leak into another.
-- [ ] 7.6 `DataSourceConfig.java:56`: match `mariadb` before `mysql`, and anchor the match to the
-      JDBC subprotocol rather than searching the whole URL.
+- [x] 7.6 `DataSourceConfig.resolveDialect` now delegates to jOOQ's own
+      `JDBCUtils.dialect(jdbcUrl).family()` instead of scanning the URL for driver names.
+      The old implementation asked whether the URL `contains` "postgresql", then "mysql", then
+      "mariadb" - searching the whole string and checking MySQL first. A correct MariaDB URL
+      pointing at a host carried over from a migration therefore resolved to MySQL:
+      `jdbc:mariadb://mysql-01.prod/app`, or the very common Kubernetes case
+      `jdbc:mariadb://mysql.default.svc.cluster.local/db`. Nothing failed - jOOQ simply rendered
+      MySQL-flavoured SQL against MariaDB. Mostly compatible, except where the two have diverged,
+      and this framework leans on exactly that: `AbstractRepository` uses `RETURNING` on four write
+      paths, which MariaDB 10.5+ supports and MySQL does not.
+      Anchoring to the `jdbc:<driver>:` prefix was considered and rejected in favour of jOOQ's
+      resolver: it keeps one source of truth (the library that consumes the dialect also decides
+      it), is maintained upstream, and already handles forms a hand-rolled matcher would have to
+      learn - multi-host failover lists, `jdbc:mysql:aurora://`, `jdbc:mariadb:sequential://`.
+      `java.net.URI` is not usable here: JDBC URLs are opaque URIs whose scheme is literally
+      `jdbc`, and the multi-host forms contain commas that make them invalid URIs outright.
+      Error handling improved as a side effect: `JDBCUtils` returns `DEFAULT` for an unrecognised
+      URL, so "cannot determine the dialect" and "resolves to X, which Ekbatan does not support"
+      are now distinct messages. Previously `jdbc:h2:mem:test` reported "cannot determine", which
+      pointed the reader at the wrong problem.
+- [x] 7.6a Test `DataSourceConfigDialectTest`: twelve parameterised URLs plus two error cases.
+      Five fail against the old implementation - the three hostname/database-name collisions and
+      both error-message assertions. Uses a semicolon delimiter because several fixtures contain
+      commas, which is itself the property that rules out a strict URI parser.
 - [ ] 7.7 `SingleTableJsonEventPersister.java:101`: validate the payload as the sibling
       `actionParams` path does instead of blind-casting to `ObjectNode`.
 
