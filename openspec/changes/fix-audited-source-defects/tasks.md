@@ -188,8 +188,65 @@ Section 1 is complete; the rest have not been started.
       the property is `pollingInterval`) cannot have its casing restored, because no case-preserving
       source offers a spelling to restore from. Documented limitation: topology in a file plus
       secrets in the environment works; configuring a subtree entirely from the environment does not.
-- [ ] 3.3 Align the `@IfBuildProperty` gates with the key spellings the binder accepts.
-- [ ] 3.6 Test: the camelCase enable flag actually starts the local-event-handler job.
+- [x] 3.3 Align the Quarkus `@IfBuildProperty` gate with the key spellings the binder accepts.
+      **Verified Quarkus-only** - both other integrations were probed empirically rather than assumed:
+      - **Spring: immune.** With `ekbatan.localEventHandler.handling.enabled=true`, an
+        `ApplicationContextRunner` slice still produced the `EventHandlingJob` bean. Spring Boot's
+        relaxed binding canonicalises both spellings to the same `ConfigurationPropertyName`.
+      - **Micronaut: immune.** With a camelCase source key, `env.getProperty(...)` under the
+        *kebab* name used by `@Requires` returned `Optional[true]`. Micronaut normalises property
+        names, so the gate resolves either spelling.
+      - **Quarkus: broken.** `@IfBuildProperty(name = "...")` matches the name as a literal string
+        and only knows the kebab form, while `bindSubtree` accepts both - so the config reports
+        `handling.enabled=true` while the bean is never produced. Silent no-op; notifications
+        accumulate undelivered.
+      **Fixed, in two layers.**
+      1. `EkbatanPropertyNameInterceptor` - a SmallRye `ConfigSourceInterceptor` in the extension's
+         **runtime** jar (not deployment - it must be on the augmentation classloader), registered
+         via `META-INF/services/io.smallrye.config.ConfigSourceInterceptor`. When an `ekbatan.*`
+         lookup misses, it retries the other spelling and returns the hit under the caller's own
+         name. This fixes the whole class of problem rather than this one property: every
+         name-based consumer - `@IfBuildProperty`, `@UnlessBuildProperty`, `@LookupIfProperty`,
+         `@ConfigProperty`, `getOptionalValue` - now accepts both spellings for free.
+         Deliberately: name-as-written always wins, so it can never change the meaning of an
+         explicitly-set property; only `ekbatan.` keys are touched; `iterateNames` is left as
+         pass-through so no synthetic names leak into Quarkus's config validation; and `proceed()`
+         rather than `restart()` makes recursion impossible.
+         **Every** spelling is covered, not only the two extremes. A key with N hyphens has 2^N
+         accepted spellings (`local-event-handler`, `localEventHandler`, `local-eventHandler`,
+         `localEvent-handler`), so rather than enumerate candidates - exponential, and still
+         incomplete - the interceptor folds each name to its fully-camelCase form and matches on
+         that: after a cheap direct retry it scans `iterateNames()` for the one name whose canonical
+         form equals the lookup's. The scan runs only when an `ekbatan.` lookup has already missed.
+         This made the code smaller, not bigger - the previous `camelToKebab` helper became
+         unreachable and was deleted.
+      2. `verifyHandlingJobGate` - a `@Observes StartupEvent` check in
+         `EkbatanLocalEventHandlerConfiguration` that throws when the bound config says handling is
+         enabled but no `EventHandlingJob` bean exists. With all spellings now resolving it is a
+         backstop rather than a necessity, and it still earns its place: it catches any future
+         gate/binder divergence, and a property visible to the runtime but not during augmentation.
+         One-directional on purpose - it does not complain when config says disabled but a bean
+         exists, since an app may produce its own.
+      **Verified by A/B on the real end-to-end Quarkus test**, with the example app's
+      `application.properties` switched to the camelCase spelling as the only gate key:
+      - service file present -> 2 tests pass, the gate fires;
+      - service file removed -> `Failed to start quarkus`, which is layer 2 catching it.
+      One experiment, both layers proven. Repeated afterwards with a **mixed** spelling
+      (`ekbatan.local-eventHandler.handling.enabled`) as the only gate key - also 2 tests, 0
+      failures. Config restored to kebab each time.
+      Prototyping also built a **real GraalVM native image** with the camelCase key as the only gate
+      key and `testNative` passed - no extra native configuration needed, because Quarkus's
+      `ConfigBuildSteps.nativeServiceProviders` already registers the `ConfigSourceInterceptor` SPI.
+      Two methodology notes for anyone re-running this: each gate scenario needs its own Gradle
+      invocation (Quarkus reuses augmentation across `@TestProfile` classes, so several in one JVM
+      report a leaked build), and concurrent edits to the same tree contaminate the results.
+- [x] 3.6 Test: the camelCase enable flag actually starts the local-event-handler job. Seven
+      in-process `EkbatanPropertyNameInterceptorTest` cases pin the mechanism the gate relies on -
+      kebab lookup finds a camel source and vice versa, absent stays absent, an explicit spelling is
+      never overridden by an alias, non-`ekbatan.` keys are untouched, and the interceptor is
+      discovered by `ServiceLoader`. Five more cover the mixed spellings in both directions, plus a
+      guard that the canonical fold is not too eager - two genuinely different keys must not be
+      matched to each other. Twelve in total. The end-to-end proof is the A/B recorded under 3.3.
 
 ## 4. Event dispatch fault isolation (design.md findings 3 and 6)
 

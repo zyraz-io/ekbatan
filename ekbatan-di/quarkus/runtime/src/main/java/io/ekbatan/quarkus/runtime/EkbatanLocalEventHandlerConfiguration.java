@@ -8,6 +8,9 @@ import io.ekbatan.events.localeventhandler.job.EventFanoutJob;
 import io.ekbatan.events.localeventhandler.job.EventHandlingJob;
 import io.quarkus.arc.All;
 import io.quarkus.arc.properties.IfBuildProperty;
+import io.quarkus.runtime.StartupEvent;
+import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Singleton;
 import java.time.Clock;
@@ -111,5 +114,38 @@ public class EkbatanLocalEventHandlerConfiguration {
         localEventHandlerConfig.handlingMaxBackoffCap.ifPresent(builder::maxBackoffCap);
         localEventHandlerConfig.handlingRetentionWindow.ifPresent(builder::retentionWindow);
         return builder.build();
+    }
+
+    /**
+     * Second line of defence for the build-time gate above. {@code @IfBuildProperty} is resolved by
+     * a literal-name lookup during augmentation, whereas {@link LocalEventHandlerConfig} is bound by
+     * folding every spelling onto one canonical key.
+     * {@code EkbatanPropertyNameInterceptor} keeps those two in agreement for the fully-kebab and
+     * fully-camelCase spellings, but a mixed spelling (e.g. {@code ekbatan.local-eventHandler.*})
+     * still binds while missing the gate. This observer turns any such residual disagreement into a
+     * loud boot failure instead of a silent no-op with notifications accumulating undelivered.
+     *
+     * <p>Deliberately one-directional: it does not complain when the configuration says disabled but
+     * a bean exists, because an application may legitimately produce its own {@link EventHandlingJob}.
+     *
+     * @param event the CDI startup event.
+     * @param localEventHandlerConfig the bound {@code ekbatan.local-event-handler.*} subtree.
+     * @param handlingJob the handling job, if the build-time gate produced one.
+     */
+    void verifyHandlingJobGate(
+            @Observes StartupEvent event,
+            LocalEventHandlerConfig localEventHandlerConfig,
+            Instance<EventHandlingJob> handlingJob) {
+        if (localEventHandlerConfig.handling.enabled && handlingJob.isUnsatisfied()) {
+            throw new IllegalStateException("ekbatan.local-event-handler.handling.enabled resolved to true, but the"
+                    + " EventHandlingJob bean was not produced. The bean is gated at BUILD"
+                    + " time, so the property must be visible during augmentation"
+                    + " (application.properties, a system property, or an environment"
+                    + " variable set for the build JVM) and spelled either"
+                    + " ekbatan.local-event-handler.handling.enabled or"
+                    + " ekbatan.localEventHandler.handling.enabled. Mixed spellings such as"
+                    + " ekbatan.local-eventHandler.handling.enabled bind the configuration"
+                    + " but are not recognised by the gate.");
+        }
     }
 }
