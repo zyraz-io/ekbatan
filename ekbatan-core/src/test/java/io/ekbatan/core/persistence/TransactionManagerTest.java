@@ -193,6 +193,65 @@ class TransactionManagerTest {
         inOrder.verify(connection).setAutoCommit(true);
     }
 
+    // An Error from the block is still a failed transaction. Caught as Exception it skipped the
+    // rollback, the log, and - most damagingly - the span's error status, so a transaction that
+    // died looked successful in tracing.
+
+    @Test
+    void rolls_back_when_the_block_throws_an_error() throws SQLException {
+        CheckedFunction<DSLContext, Object> failing = _ -> {
+            throw new AssertionError("boom");
+        };
+
+        assertThatThrownBy(() -> tm.inTransactionChecked(failing))
+                .isInstanceOf(AssertionError.class)
+                .hasMessage("boom");
+
+        verify(connection).rollback();
+        verify(provider).release(connection);
+        verify(provider, never()).evict(any());
+    }
+
+    @Test
+    void restores_autocommit_when_the_block_throws_an_error() throws SQLException {
+        CheckedFunction<DSLContext, Object> failing = _ -> {
+            throw new NoClassDefFoundError("com/example/OptionalDep");
+        };
+
+        assertThatThrownBy(() -> tm.inTransactionChecked(failing)).isInstanceOf(NoClassDefFoundError.class);
+
+        final var inOrder = inOrder(connection);
+        inOrder.verify(connection).setAutoCommit(false);
+        inOrder.verify(connection).rollback();
+        inOrder.verify(connection).setAutoCommit(true);
+    }
+
+    @Test
+    void evicts_when_the_block_throws_an_error_and_the_rollback_also_fails() throws SQLException {
+        // The Error path must reach the same dirty/evict machinery as the Exception path, rather
+        // than releasing a connection whose transaction is still open.
+        doThrow(new SQLException("rollback failed", "55006")).when(connection).rollback();
+        CheckedFunction<DSLContext, Object> failing = _ -> {
+            throw new AssertionError("boom");
+        };
+
+        assertThatThrownBy(() -> tm.inTransactionChecked(failing)).isInstanceOf(AssertionError.class);
+
+        verify(provider).evict(connection);
+        verify(provider, never()).release(connection);
+    }
+
+    @Test
+    void an_error_is_rethrown_unchanged_and_not_wrapped() throws SQLException {
+        // Widening the catch must not change what the caller sees.
+        final var thrown = new StackOverflowError();
+        CheckedFunction<DSLContext, Object> failing = _ -> {
+            throw thrown;
+        };
+
+        assertThatThrownBy(() -> tm.inTransactionChecked(failing)).isSameAs(thrown);
+    }
+
     @Test
     void no_release_or_evict_when_acquire_itself_throws() {
         when(provider.acquire()).thenThrow(new RuntimeException("pool exhausted"));

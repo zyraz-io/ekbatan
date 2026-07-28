@@ -140,10 +140,38 @@ Section 1 is complete; the rest have not been started.
       - The fix also removes a spurious-eviction bug on the failed-commit path: pre-fix, pgjdbc
         rejects `rollback()` when auto-commit is enabled, so every failed commit (deadlock,
         serialization failure) forced a physical reconnect.
-- [ ] 2.8 Follow-up, out of scope here (pre-existing, unaffected by this change):
-      `TransactionManager.java:174` catches `Exception`, not `Throwable`. An `Error` from the action
-      block releases a connection with `autoCommit=false` and an open transaction rather than
-      evicting it. Proven by probe against the fixed code. Related to finding 3's `classify()` gap.
+- [x] 2.8 `catch (Exception)` at boundaries that wrap user code - fixed in **five** places, not the
+      one the audit named. A sweep of every `catch (Exception` in main sources turned up the same
+      reflex across `TransactionManager` and `ActionExecutor`:
+      - `TransactionManager:174` (the audited one) - no rollback, so `dirty` stayed false and the
+        connection was RELEASED carrying an open transaction with `autoCommit=false`. HikariCP's own
+        `close()` rolls that back, so nothing corrupted - but the framework was leaning on pool
+        internals rather than its own contract. No WARN, and no `span.setStatus(ERROR)` while the
+        outer finally still ended the span, so a dead transaction was exported looking successful.
+      - `ActionExecutor:176` - wraps `action.runIn` -> `Action.perform`, i.e. **arbitrary user
+        code**, the framework's highest-traffic user boundary.
+      - `ActionExecutor:195` - the action span: an `Error` skipped the outcome attribute, the span
+        status, the recorded exception **and** `LOG.error("{} failed: ...")`, leaving no trace
+        anywhere that the action had failed.
+      - **`ActionExecutor:254` - the most consequential.** This is the partial-commit alarm. A
+        cross-shard action that commits shard A and fails on shard B does not roll back
+        automatically, and the `CRITICAL: ... PARTIALLY COMMITTED!` log plus three
+        `ekbatan.shard.*` attributes are the only notice anyone gets. An `Error` on shard B
+        produced split data in silence.
+      - `ActionExecutor:273` - the persist span's error status.
+      All five widened to `Throwable` and rethrown unchanged, so nothing is swallowed and the
+      `Exception` behaviour is identical.
+- [x] 2.8a Tests. Four in `TransactionManagerTest` (rollback on `Error`, auto-commit restored in
+      order, evict when the follow-up rollback also fails, and the `Error` rethrown unwrapped) -
+      three fail against the pre-fix catch. Two in `ActionExecutorTracingTest`, which was the right
+      home because a static `TRACER` binds to whichever OTel SDK was global at class-load time, so a
+      second `OpenTelemetryExtension` in the same forked JVM sees no spans - a standalone tracing
+      test was written, failed for exactly that reason, and was deleted rather than left red. The
+      two that landed assert the partial-commit alarm still fires when the shard dies with a
+      `NoClassDefFoundError`, and that an `Error` from `perform` marks both the perform and action
+      spans. Both fail against the pre-fix catches.
+      `buildTwoShardExecutor` gained an overload taking the shard-B failure, so the Exception and
+      Error variants share one rig instead of duplicating it.
 - [ ] 2.9 Follow-up, out of scope here: a pgjdbc lazy-`BEGIN` hazard found with `log_statement=all` -
       a cancelled `BEGIN` lets the subsequent INSERT auto-commit outside any transaction while the
       caller sees an exception. Present identically before and after this change.

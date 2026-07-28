@@ -113,6 +113,14 @@ class ActionExecutorTracingTest {
      * can decide which shards it touches and in what order.
      */
     private ActionExecutor buildTwoShardExecutor(ActionRegistry actionRegistry) throws Exception {
+        // IllegalStateException rather than StaleRecordException on purpose: the default retry
+        // policy only replays StaleRecordException, and a replay would run the partial-commit
+        // path a second time and make the span assertions ambiguous.
+        return buildTwoShardExecutor(actionRegistry, new IllegalStateException("shard B unavailable"));
+    }
+
+    private ActionExecutor buildTwoShardExecutor(ActionRegistry actionRegistry, Throwable shardBFailure)
+            throws Exception {
         var shardA = spy(transactionManagerFor(SHARD_A));
         var shardB = spy(transactionManagerFor(SHARD_B));
 
@@ -124,10 +132,7 @@ class ActionExecutorTracingTest {
                 .when(shardA)
                 .inTransactionChecked(ArgumentMatchers.<TransactionManager.CheckedConsumer<DSLContext>>any());
 
-        // IllegalStateException rather than StaleRecordException on purpose: the default retry
-        // policy only replays StaleRecordException, and a replay would run the partial-commit
-        // path a second time and make the span assertions ambiguous.
-        doThrow(new IllegalStateException("shard B unavailable"))
+        doThrow(shardBFailure)
                 .when(shardB)
                 .inTransactionChecked(ArgumentMatchers.<TransactionManager.CheckedConsumer<DSLContext>>any());
 
@@ -385,6 +390,65 @@ class ActionExecutorTracingTest {
     }
 
     @Test
+    void partial_cross_shard_failure_is_recorded_even_when_the_shard_fails_with_an_error() throws Exception {
+        // The twin of the test above, with shard B dying from an Error instead of an Exception.
+        // This is the highest-stakes instance of the catch(Exception) gap in the codebase: a
+        // cross-shard action does NOT roll back committed shards, so this log and these attributes
+        // are the only notice anyone gets that data is now split. Caught as Exception, an Error on
+        // shard B produced a partial commit in complete silence.
+        var config = ExecutionConfiguration.Builder.executionConfiguration()
+                .allowCrossShard(true)
+                .build();
+        var executor = buildTwoShardExecutor(
+                actionRegistry()
+                        .withAction(CreateOnBothShardsAction.class, new CreateOnBothShardsAction(clock))
+                        .build(),
+                new NoClassDefFoundError("com/example/OptionalDep"));
+
+        // WHEN - shard A commits, then shard B dies with an Error
+        assertThatThrownBy(() -> executor.execute(
+                        () -> "user", CreateOnBothShardsAction.class, new CreateOnBothShardsAction.Params(), config))
+                .isInstanceOf(NoClassDefFoundError.class);
+
+        // THEN - the partial-commit alarm still fires, naming both sides
+        var persistSpan = findSpan("ekbatan.action.persist");
+        assertThat(persistSpan.getAttributes().get(AttributeKey.booleanKey("ekbatan.shard.partial_commit_failure")))
+                .isTrue();
+        assertThat(persistSpan.getAttributes().get(AttributeKey.stringKey("ekbatan.shard.committed_shards")))
+                .contains(SHARD_A.toString())
+                .doesNotContain(SHARD_B.toString());
+        assertThat(persistSpan.getAttributes().get(AttributeKey.stringKey("ekbatan.shard.failed_shard")))
+                .isEqualTo(SHARD_B.toString());
+        assertThat(persistSpan.getStatus().getStatusCode()).isEqualTo(StatusCode.ERROR);
+
+        // AND - the action and perform spans report the failure too, rather than looking successful
+        assertThat(findSpan("ekbatan.action.execute").getStatus().getStatusCode())
+                .isEqualTo(StatusCode.ERROR);
+        assertThat(findSpan("ekbatan.action.execute")
+                        .getAttributes()
+                        .get(AttributeKey.stringKey("ekbatan.action.outcome")))
+                .isEqualTo("error");
+    }
+
+    @Test
+    void an_error_from_perform_is_recorded_on_the_perform_span() throws Exception {
+        // action.runIn -> Action.perform is arbitrary user code; an Error from it must not leave a
+        // clean-looking span behind.
+        var executor = buildTwoShardExecutor(actionRegistry()
+                .withAction(ErrorThrowingAction.class, new ErrorThrowingAction())
+                .build());
+
+        assertThatThrownBy(() ->
+                        executor.execute(() -> "user", ErrorThrowingAction.class, new ErrorThrowingAction.Params()))
+                .isInstanceOf(AssertionError.class);
+
+        assertThat(findSpan("ekbatan.action.perform").getStatus().getStatusCode())
+                .isEqualTo(StatusCode.ERROR);
+        assertThat(findSpan("ekbatan.action.execute").getStatus().getStatusCode())
+                .isEqualTo(StatusCode.ERROR);
+    }
+
+    @Test
     void failure_before_any_shard_commits_is_not_flagged_as_partial() throws Exception {
         // GIVEN - an action touching only the failing shard, so nothing commits first
         var executor = buildTwoShardExecutor(actionRegistry()
@@ -519,6 +583,20 @@ class ActionExecutorTracingTest {
             plan().add(Item.createItem("a-item", clock.instant()).build());
             plan().add(Item.createItem("b-item", clock.instant()).build());
             return null;
+        }
+    }
+
+    /** Dies from an Error inside perform, i.e. inside arbitrary user code. */
+    static class ErrorThrowingAction extends Action<ErrorThrowingAction.Params, Void> {
+        record Params() {}
+
+        ErrorThrowingAction() {
+            super(java.time.Clock.systemUTC());
+        }
+
+        @Override
+        protected Void perform(Principal principal, Params params) {
+            throw new AssertionError("perform exploded");
         }
     }
 

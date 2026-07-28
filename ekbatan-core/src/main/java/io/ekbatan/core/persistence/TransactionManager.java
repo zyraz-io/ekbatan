@@ -171,16 +171,27 @@ public class TransactionManager implements AutoCloseable {
                     transactionRef.commit();
                     LOG.debug("Transaction committed [shard=({},{})]", shardIdentifier.group, shardIdentifier.member);
                     return result;
-                } catch (Exception e) {
+                } catch (Throwable t) {
+                    // Throwable, not Exception. An Error from the block - a NoClassDefFoundError
+                    // from a missing optional dependency, an AssertionError under -ea, a
+                    // StackOverflowError from recursive domain code - is still a failed
+                    // transaction. Caught as Exception it skipped every line below: no rollback,
+                    // so `dirty` stayed false and the finally RELEASED a connection carrying an
+                    // open transaction with autoCommit=false (HikariCP's own close() rolls that
+                    // back, so nothing corrupted - but the framework was relying on pool internals
+                    // rather than its own contract); no WARN; and, worst of the three, no
+                    // span.setStatus(ERROR) or recordException, so the trace showed a transaction
+                    // that had died as though it had succeeded.
+                    // Nothing is swallowed: `throw t` rethrows unchanged.
                     transactionRef.rollback();
                     LOG.warn(
                             "Transaction rolled back [shard=({},{})]: {}",
                             shardIdentifier.group,
                             shardIdentifier.member,
-                            e.getClass().getSimpleName());
-                    span.setStatus(StatusCode.ERROR, e.getMessage());
-                    span.recordException(e);
-                    throw e;
+                            t.getClass().getSimpleName());
+                    span.setStatus(StatusCode.ERROR, t.getMessage());
+                    span.recordException(t);
+                    throw t;
                 }
             });
         } finally {
