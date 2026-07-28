@@ -299,6 +299,14 @@ public final class EventHandlingJob extends DistributedJob {
         recordHandled(failedExpired, OUTCOME_EXPIRED_POSTFAILURE);
         failedRetryByAttempts.values().forEach(rows -> recordHandled(rows, OUTCOME_FAILED_RETRY));
 
+        // Expiry is the only outcome that loses data, and it used to be the only one with no log at
+        // all - a handler that could never succeed (a missing optional dependency, say) produced
+        // thousands of ERROR lines while retrying and then nothing whatsoever at the moment its
+        // event was discarded. Deliberately grouped per handler rather than per row: an expiry
+        // batch after an outage can be large, and one line per notification would bury the point.
+        logDiscarded(failedExpired, "exhausted the retention window after repeated handler failures");
+        logDiscarded(preflightExpired, "was already past the retention window when it was claimed");
+
         for (var n : succeeded) {
             DELIVERY_LAG.record(
                     Duration.between(n.eventDate, postInvokeNow).toNanos() / NANOS_PER_SECOND,
@@ -306,6 +314,32 @@ public final class EventHandlingJob extends DistributedJob {
         }
 
         return notifications.size();
+    }
+
+    /**
+     * Reports discarded notifications at ERROR, one line per handler, naming the count and one
+     * example event so the loss is traceable back to a specific handler and payload.
+     *
+     * @param rows the notifications transitioned to EXPIRED.
+     * @param reason why they were discarded, phrased to complete "... because it {reason}".
+     */
+    private void logDiscarded(List<EventNotification> rows, String reason) {
+        if (rows.isEmpty()) {
+            return;
+        }
+        final var byHandler = new HashMap<String, List<EventNotification>>();
+        for (var n : rows) {
+            byHandler.computeIfAbsent(n.handlerName, _ -> new ArrayList<>()).add(n);
+        }
+        byHandler.forEach((handler, discarded) -> LOG.error(
+                "DISCARDED {} event notification(s) for handler '{}' - each {} ({}). "
+                        + "These events will never be delivered. Example event: {} (attempts={}).",
+                discarded.size(),
+                handler,
+                reason,
+                retentionWindow,
+                discarded.getFirst().eventId,
+                discarded.getFirst().attempts));
     }
 
     private static List<UUID> idsOf(List<EventNotification> notifications) {

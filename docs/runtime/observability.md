@@ -81,6 +81,16 @@ Metrics come from the **local event handler** only. `ekbatan-core` emits spans b
 
 `ekbatan.events.handler.duration` uses a deliberately narrower `outcome`: just `succeeded` or `failed`. At the moment a handler returns, the only known fact is whether it threw — whether that failure becomes a retry or an expiry is decided afterwards, against the post-invocation clock. `expired_preflight` never appears in the histogram at all, because no handler ran.
 
+### What to alert on
+
+Two of these are worth a rule rather than a dashboard panel.
+
+**`ekbatan.events.delivery.lag`** rising steadily is the one that matters most. A shard falling behind still reports healthy `handled{outcome="succeeded"}` counts, so no counter can tell you delivery is drifting - only the lag can.
+
+**`ekbatan.events.handled{outcome="expired_postfailure"}` above zero means events were discarded.** A notification only reaches this state after failing repeatedly for the whole `retentionWindow` (7 days by default), so any occurrence is a delivery that was permanently given up on. Each one is also logged at ERROR with the handler name and an example event id.
+
+A steady stream of `handled{outcome="failed_retry"}` concentrated on a **single** `handler` value usually means that handler cannot succeed at all - the classic case being a `NoClassDefFoundError` from a missing optional dependency, which no amount of retrying will fix. Alerting on that catches the problem within minutes, whereas the discard alert above only fires a week later, once the events are already gone.
+
 ### Known caveat
 
 `ekbatan.events.fanned_out` currently counts rows **read** from the read replica, not rows written to the primary. On a deployment with a real replica and non-zero replication lag, a round can re-read events it has already delivered, so the counter over-reports. Treat it as an upper bound until that is fixed.

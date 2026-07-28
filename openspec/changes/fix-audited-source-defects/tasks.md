@@ -338,7 +338,30 @@ Section 1 is complete; the rest have not been started.
       (as `docs/` correctly said).
       Noted the known caveat in both: `ekbatan.events.fanned_out` counts rows read from the replica,
       not rows written, so it over-reports under replication lag (see 4.4).
-- [ ] 4.2a Alerting on handler `Error`s is still an open question, deliberately. A dedicated
+- [x] 4.2a Alerting on handler `Error`s. Closed with a log line and documentation rather than a
+      metric - the counter data already existed once `HANDLED` gained its `handler` dimension.
+      First, a correction to how this was recorded: it said the failure "silently expires". The
+      opposite is true of the retries - a handler that can never succeed produces roughly **2,000
+      ERROR lines** over the default 7-day window (backoff caps at 5 minutes). What was silent was
+      the *expiry itself*: `markExpiredAllPostFailure` had no log at all, so the one moment that
+      actually loses data - discarding a business event - was the quietest thing in the sequence.
+      Fixed:
+      - `logDiscarded(...)` logs every expiry at ERROR, naming the handler, the count, the reason
+        and an example event id. Grouped per handler rather than per row, because an expiry batch
+        after an outage can be large and one line per notification would bury the point. Covers
+        both the post-failure and the pre-flight expiry paths.
+      - `docs/runtime/observability.md` + the website mirror gained a "What to alert on" section:
+        `delivery.lag` as the primary rule (a shard falling behind still reports healthy success
+        counts, so no counter can reveal it), `expired_postfailure > 0` as proof events were
+        discarded, and a note that `failed_retry` concentrated on a **single** `handler` value
+        catches an unrecoverable handler in minutes rather than a week later once the events are
+        already gone.
+      Not done, deliberately: treating a `LinkageError` as terminal so it expires immediately
+      instead of retrying for 7 days. It would stop the futile retries, but the retention window is
+      exactly the grace period for a redeploy to fix a missing dependency - failing fast would
+      discard events that a deploy an hour later would have delivered.
+      No test: asserting a log line needs an SLF4J binding on a test classpath, which no module in
+      this repo has, and there is no precedent for log assertions in the suite. A dedicated
       `ekbatan.events.handler.errors` counter was added and then removed: the job already exposes a
       single `HANDLED` counter tagged by outcome, and bolting a second counter onto one case breaks
       that symmetry. If handler-level visibility is wanted, it should be a consistent dimension
