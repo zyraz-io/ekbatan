@@ -12,10 +12,30 @@ repositories {
     mavenCentral()
 }
 
+// The real published ActionEvent schema. The tests encode and then decode against it rather than
+// a hand-built stand-in, so a change to ActionEvent.avsc that outruns the column binding table
+// fails here instead of in production.
+val actionEventSchemaFile: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
 dependencies {
+    actionEventSchemaFile(
+        project(
+            mapOf(
+                "path" to ":ekbatan-events-streaming-action-event-avro",
+                "configuration" to "actionEventSchema",
+            ),
+        ),
+    )
+
     // Provided by the Kafka Connect worker at runtime
     compileOnly("org.apache.kafka:connect-api:${project.property("kafkaClientsVersion")}")
     compileOnly("org.apache.kafka:connect-transforms:${project.property("kafkaClientsVersion")}")
+
+    // Shared Debezium value conversions, bundled into the fat JAR by Shadow.
+    implementation(project(":ekbatan-events-streaming-debezium-smt-common"))
 
     implementation("org.apache.avro:avro:${project.property("avroVersion")}")
 
@@ -28,6 +48,10 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    inputs.files(actionEventSchemaFile)
+    doFirst {
+        systemProperty("ekbatan.actionEventSchema", actionEventSchemaFile.singleFile.absolutePath)
+    }
 }
 
 // Shadow produces the fat JAR (all runtime deps bundled) that Kafka Connect loads as a plugin.

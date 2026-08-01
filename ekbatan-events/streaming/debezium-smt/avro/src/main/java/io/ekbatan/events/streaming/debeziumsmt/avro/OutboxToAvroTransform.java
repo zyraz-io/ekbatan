@@ -2,6 +2,8 @@ package io.ekbatan.events.streaming.debeziumsmt.avro;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.ekbatan.events.streaming.debeziumsmt.common.ActionEventFields;
+import io.ekbatan.events.streaming.debeziumsmt.common.OutboxColumns;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -97,6 +99,9 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
 
         var actionEventPath = (String) parsed.get(ACTION_EVENT_SCHEMA_CONFIG);
         this.actionEventSchema = loadSchema(actionEventPath);
+        ActionEventFields.verifyBindable(
+                actionEventSchema.getFields().stream().map(Schema.Field::name).toList(),
+                "loaded from " + actionEventPath);
     }
 
     private static Schema loadSchema(String path) {
@@ -219,21 +224,52 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
     private byte[] encodeActionEvent(Struct row, byte[] payloadBytes) {
         var record = new GenericData.Record(actionEventSchema);
         for (var field : actionEventSchema.getFields()) {
-            if (field.name().equals(payloadField)) {
+            // configure() has already proven every field here has a binding.
+            var kind = ActionEventFields.kindOf(field.name());
+            if (kind == ActionEventFields.Kind.PAYLOAD) {
                 record.put(field.name(), java.nio.ByteBuffer.wrap(payloadBytes));
                 continue;
             }
-            var rowField = row.schema().field(field.name());
-            if (rowField == null) {
+            var column = row.schema().field(sourceColumn(field.name()));
+            if (column == null) {
+                // The row does not carry this column at all; leave the field unset rather than
+                // inventing a value.
                 continue;
             }
-            record.put(field.name(), row.get(rowField));
+            try {
+                switch (kind) {
+                    case TEXT -> record.put(field.name(), OutboxColumns.text(row, column));
+                    case EPOCH_MICROS -> record.put(field.name(), OutboxColumns.epochMicros(row, column));
+                    case BOOL -> record.put(field.name(), OutboxColumns.bool(row, column));
+                    default -> throw new IllegalStateException("Unhandled binding kind: " + kind);
+                }
+            } catch (DataException e) {
+                throw e;
+            } catch (RuntimeException e) {
+                throw new DataException(
+                        "Failed to encode ActionEvent field '" + field.name() + "' from outbox column '"
+                                + sourceColumn(field.name()) + "'",
+                        e);
+            }
         }
         try {
             return writeBinary(actionEventSchema, record);
         } catch (IOException e) {
             throw new DataException("Failed to encode ActionEvent to Avro", e);
         }
+    }
+
+    /**
+     * The outbox column an {@code ActionEvent} field reads from - the same name, except for the
+     * one field whose source column is configurable.
+     *
+     * <p>Note that {@code payload.field} and {@code event.type.field} name the source <em>column
+     * on the row</em>, never the target field in the {@code ActionEvent} schema. Both were
+     * previously used for both purposes, so overriding either silently emitted every message with
+     * that field unset.
+     */
+    private String sourceColumn(String actionEventFieldName) {
+        return ActionEventFields.EVENT_TYPE_FIELD.equals(actionEventFieldName) ? eventTypeField : actionEventFieldName;
     }
 
     private static byte[] writeBinary(Schema schema, GenericRecord record) throws IOException {

@@ -7,6 +7,8 @@ import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.util.JsonFormat;
+import io.ekbatan.events.streaming.debeziumsmt.common.ActionEventFields;
+import io.ekbatan.events.streaming.debeziumsmt.common.OutboxColumns;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -94,6 +96,11 @@ public class OutboxToProtobufTransform<R extends ConnectRecord<R>> implements Tr
 
         var actionEventPath = (String) parsed.get(ACTION_EVENT_DESCRIPTOR_CONFIG);
         this.actionEventDescriptor = loadMessageDescriptor(actionEventPath, "ActionEvent");
+        ActionEventFields.verifyBindable(
+                actionEventDescriptor.getFields().stream()
+                        .map(com.google.protobuf.Descriptors.FieldDescriptor::getName)
+                        .toList(),
+                "loaded from " + actionEventPath);
     }
 
     private static Descriptor loadMessageDescriptor(String descriptorPath, String messageName) {
@@ -228,17 +235,56 @@ public class OutboxToProtobufTransform<R extends ConnectRecord<R>> implements Tr
     private byte[] encodeActionEvent(Struct row, byte[] payloadBytes) {
         var builder = DynamicMessage.newBuilder(actionEventDescriptor);
         for (var field : actionEventDescriptor.getFields()) {
-            if (field.getName().equals(payloadField)) {
+            // configure() has already proven every field here has a binding.
+            var kind = ActionEventFields.kindOf(field.getName());
+            if (kind == ActionEventFields.Kind.PAYLOAD) {
                 builder.setField(field, ByteString.copyFrom(payloadBytes));
                 continue;
             }
-            var rowField = row.schema().field(field.getName());
-            if (rowField == null) continue;
-            var value = row.get(rowField);
-            if (value == null) continue;
-            builder.setField(field, value);
+            var column = row.schema().field(sourceColumn(field.getName()));
+            if (column == null) {
+                // The row does not carry this column at all; leave the field unset rather than
+                // inventing a value.
+                continue;
+            }
+            try {
+                switch (kind) {
+                    case TEXT -> {
+                        var text = OutboxColumns.text(row, column);
+                        if (text != null) {
+                            builder.setField(field, text);
+                        }
+                    }
+                    case EPOCH_MICROS -> builder.setField(field, OutboxColumns.epochMicros(row, column));
+                    case BOOL -> builder.setField(field, OutboxColumns.bool(row, column));
+                    default -> throw new IllegalStateException("Unhandled binding kind: " + kind);
+                }
+            } catch (DataException e) {
+                throw e;
+            } catch (RuntimeException e) {
+                // protobuf's setField raises IllegalArgumentException on a type mismatch. The
+                // documented contract for this SMT is DataException, and the operator needs the
+                // field name to act on it.
+                throw new DataException(
+                        "Failed to encode ActionEvent field '" + field.getName() + "' from outbox column '"
+                                + sourceColumn(field.getName()) + "'",
+                        e);
+            }
         }
         return builder.build().toByteArray();
+    }
+
+    /**
+     * The outbox column an {@code ActionEvent} field reads from - the same name, except for the
+     * one field whose source column is configurable.
+     *
+     * <p>Note that {@code payload.field} and {@code event.type.field} name the source <em>column
+     * on the row</em>, never the target field in the {@code ActionEvent} schema. Both were
+     * previously used for both purposes, so overriding either silently emitted every message with
+     * that field unset.
+     */
+    private String sourceColumn(String actionEventFieldName) {
+        return ActionEventFields.EVENT_TYPE_FIELD.equals(actionEventFieldName) ? eventTypeField : actionEventFieldName;
     }
 
     @Override
