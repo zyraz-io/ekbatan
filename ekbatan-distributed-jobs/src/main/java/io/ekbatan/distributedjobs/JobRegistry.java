@@ -232,7 +232,15 @@ public final class JobRegistry {
 
             List<RecurringTask<Void>> tasks = new ArrayList<>();
             for (var job : jobs) {
-                tasks.add(Tasks.recurring(job.name(), job.schedule()).execute((_, ctx) -> {
+                // Asked once and checked here, because nothing downstream will. db-scheduler stores
+                // the schedule without looking at it, then dereferences it during start() - and
+                // Scheduler#executeOnStartup catches whatever that throws, logs one line and
+                // continues. The scheduler comes up, every other job registers, and this one is
+                // simply never written to scheduled_tasks: nothing ever becomes due for it, so it
+                // never runs at all, while start() reports success and names it in the log.
+                var schedule = job.schedule();
+                Validate.notNull(schedule, "DistributedJob '%s' returned a null schedule()", job.name());
+                tasks.add(Tasks.recurring(job.name(), schedule).execute((_, ctx) -> {
                     LOG.info("Job '{}' execution started", job.name());
                     try {
                         job.execute(ctx);
