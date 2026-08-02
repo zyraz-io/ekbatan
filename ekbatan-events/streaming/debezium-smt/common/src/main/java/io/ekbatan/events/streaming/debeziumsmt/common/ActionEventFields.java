@@ -40,6 +40,15 @@ public final class ActionEventFields {
     /** Name of the {@code ActionEvent} field carrying the event type discriminator. */
     public static final String EVENT_TYPE_FIELD = "event_type";
 
+    /**
+     * Name of the flag the in-process fanout sets once it has handled a row.
+     *
+     * <p>Load-bearing beyond its own column: when an unwrapped record carries no {@code op}, this
+     * is the only way to tell an insert from the fanout's {@code UPDATE}. See
+     * {@code OutboxRecords.classify}.
+     */
+    public static final String DELIVERED_FIELD = "delivered";
+
     private static final Map<String, Kind> FIELDS = Map.ofEntries(
             Map.entry("id", Kind.TEXT),
             Map.entry("namespace", Kind.TEXT),

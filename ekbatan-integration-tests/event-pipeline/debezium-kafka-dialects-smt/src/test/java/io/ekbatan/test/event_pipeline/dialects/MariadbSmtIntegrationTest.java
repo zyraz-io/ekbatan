@@ -32,15 +32,15 @@ import org.testcontainers.utility.MountableFile;
 /**
  * The MariaDB half of the encoding pipeline, end to end against real Debezium.
  *
- * <p>MariaDB is the interesting one. Like MySQL it has no boolean type, so {@code delivered}
- * arrives as an INT16. Unlike MySQL, {@code EventEntityRepository} binds {@code id} and
- * {@code action_id} as <em>native</em> {@code UUID} columns, which MariaDB stores as
- * {@code BINARY(16)} - so this is the deployment where the SMT's binary-to-UUID handling is
- * reachable at all.
+ * <p>Like MySQL, MariaDB has no boolean type, so {@code delivered} arrives as an INT16. Unlike
+ * MySQL, {@code EventEntityRepository} binds {@code id} and {@code action_id} as <em>native</em>
+ * {@code UUID} columns, which MariaDB stores as {@code BINARY(16)}.
  *
- * <p>That branch was written from the specification because it could not be measured at the time.
- * This test is what measures it: whatever Debezium actually sends for a native {@code UUID}
- * column, the identifiers below have to come out as canonical UUID strings.
+ * <p>That last point was the open question this test was built to settle, and the answer was not
+ * the expected one: Debezium 3.5 renders a native {@code UUID} column as a UUID <em>string</em>,
+ * not as bytes. So the SMT's binary-to-UUID branch is not on the MariaDB path at all, and MariaDB
+ * takes the same route as MySQL. The assertion below pins the measured behaviour rather than the
+ * assumed one.
  */
 class MariadbSmtIntegrationTest {
 
@@ -164,8 +164,9 @@ class MariadbSmtIntegrationTest {
                 .with("table.include.list", "eventlog.events")
                 .with("schema.history.internal.kafka.bootstrap.servers", "kafka:19092")
                 .with("schema.history.internal.kafka.topic", "schema-changes.eventlog")
-                // See MysqlSmtIntegrationTest: audit finding 2 is still open.
-                .with("include.schema.changes", "false")
+                // See MysqlSmtIntegrationTest: the regression test for audit finding 2.
+                .with("include.schema.changes", "true")
+                .with("heartbeat.interval.ms", "1000")
                 .with("value.converter", "org.apache.kafka.connect.converters.ByteArrayConverter")
                 .with("transforms", "encodeProto")
                 .with(

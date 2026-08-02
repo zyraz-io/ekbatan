@@ -158,12 +158,44 @@ Both:
 - **Skip sentinel rows** where `event_type IS NULL`.
 - **Throw `DataException` for corrupt event rows** such as `event_type IS NOT NULL` with `payload IS NULL`, missing Avro schema / protobuf descriptor mappings, or payloads that cannot be encoded. Sentinel rows are skipped; malformed real events should be visible to operators.
 - **Convert each column through its Connect schema** rather than copying the raw value across. The same logical column reaches the SMT as a different Java type depending on the database, the column's precision and the connector's `time.precision.mode`: `BOOLEAN` is a real boolean on PostgreSQL but `TINYINT(1)` (an INT16) on MySQL and MariaDB, and a timestamp arrives as epoch millis, micros, nanos, an ISO-8601 string or a `java.util.Date`. All timestamps are normalised to **epoch microseconds**, which is lossless for every form Debezium produces here and leaves PostgreSQL's bytes unchanged. There is no dialect setting: the SMT branches on what the record says its columns are, so the same row yields identical bytes on all three databases. A column it cannot convert raises `DataException` naming the column, its Connect schema and the runtime type.
+- **Never pass a record through untouched.** Because the SMT emits `byte[]`, its connector runs `ByteArrayConverter`, which can serialize only bytes or null - so handing back an unrecognised record guarantees the converter throws and the task dies. Every record therefore gets one of four outcomes: an outbox row is **encoded**; something recognised but deliberately not published is **skipped** silently (the `UPDATE` that flips `delivered`, a delete, and the tombstone that accompanies it); Debezium's own housekeeping - heartbeats, schema-change notices, transaction metadata - is **dropped** with a WARN logged once; and a data row from a table that is *not* the outbox raises **`DataException`**, because silently discarding someone else's data is worse than stopping. Housekeeping is told apart structurally, by the absence of the `after` field, rather than by a list of Debezium class names.
+- **Prefer running this SMT before any unwrap transform.** The `c`/`r` filter reads Debezium's `op`, which lives on the envelope, so `ExtractNewRecordState` running first takes it away. The SMT still filters correctly in that case - it falls back to the row's `delivered` column - but there is one snapshot limitation to know about. See [Unwrapped records and `ExtractNewRecordState`](#unwrapped-records-and-extractnewrecordstate).
+- **Tombstones are not republished.** A delete produces both a change event and a tombstone under the same key. Since the outbox key is the row id the `ActionEvent` was published under, forwarding the tombstone would let a compacted topic erase an event that had already been delivered - so pruning old `eventlog.events` rows can never unpublish the facts they recorded.
 - **Validate the `ActionEvent` schema at startup.** Every field of the configured schema must have a column binding; one that does not fails the connector immediately rather than shipping that field unset on every message. A schema carrying only a subset of the fields is accepted.
 - **Load schemas/descriptors from file paths** passed as transform properties at Kafka Connect startup. The schemas are exposed as Gradle named configurations on the consumer-side `action-event:avro` / `action-event:protobuf` modules so containerised setups can mount them in.
 
 > `payload.field` and `event.type.field` name the source **column on the outbox row**, never the target field in the `ActionEvent` schema. The target field names are fixed by the schema.
 
 The integration tests under [`ekbatan-integration-tests/event-pipeline`](../../ekbatan-integration-tests/event-pipeline) (the `debezium-kafka-avro-smt` and `debezium-kafka-protobuf-smt` subprojects) wire up Debezium + Kafka + the SMT in TestContainers as a working reference, against PostgreSQL. `debezium-kafka-dialects-smt` runs the same pipeline against MySQL and MariaDB, writing through the real event persister so the dialect-specific column bindings are the ones under test.
+
+### Unwrapped records and `ExtractNewRecordState`
+
+Debezium normally delivers each change inside an **envelope**: `{ before, after, source, op, ts_ms }`, where the row itself sits in `after` and `op` says what happened. Debezium 3.5 defines six operations - `c` insert, `r` snapshot read, `u` update, `d` delete, `t` truncate, `m` logical-decoding message - and both SMTs read that shape and publish only `c` and `r`. The filter is an allow-list, so any operation a future Debezium release adds is withheld rather than published unexamined.
+
+Some pipelines put Debezium's `ExtractNewRecordState` transform in front, which **unwraps** the envelope: the record value becomes the row's columns directly. The SMTs support that shape too - if the value carries the configured payload and event-type columns, it is treated as the row.
+
+**The catch: unwrapping discards `op`.** It lives on the envelope, and the envelope is gone. The SMT then has no way to tell an `INSERT` from an `UPDATE`.
+
+**When that matters.** Only if something updates `eventlog.events`, and exactly one thing in this framework does: the **`local-event-handler`** module sets `delivered = TRUE` on every row it fans out. So:
+
+| Deployment | Effect of unwrapping without `op` |
+|---|---|
+| Kafka only, no `local-event-handler` | Harmless - nothing ever updates the outbox, so there are no `UPDATE` events to mistake for inserts |
+| `local-event-handler` **and** Debezium on the same outbox | The flip would be republished as a duplicate event, so the SMT filters it on `delivered` instead - see below |
+
+The duplicate carries the same `id` and the same payload; only `delivered` differs. Consumers that deduplicate on `id` will not notice, but anything treating each message as a distinct fact will double-process.
+
+**What the SMT does about it.** It falls back to the row's own `delivered` column, which carries the same information for the only `UPDATE` this table ever sees. `SingleTableJsonEventPersister` inserts every row with `delivered = FALSE`, and the sole writer that sets it `TRUE` is the `local-event-handler` fanout - so `delivered = TRUE` *is* the flip, and `delivered = FALSE` *is* the insert. Duplicates are filtered without any configuration on your part.
+
+That couples the SMT to a framework invariant defined in another module, so the invariant is pinned from both ends: `EventEntityDeliveredDefaultTest` in `ekbatan-core` guards it at the source, and the unwrapped scenario in the `debezium-kafka-dialects-smt` module performs both writes against real Debezium and asserts the second publishes nothing. If the persister ever starts inserting rows already delivered, those fail rather than letting the SMT silently publish nothing.
+
+**One consequence worth knowing:** during an initial snapshot, rows already marked `delivered` are *not* replayed, because a snapshot read is indistinguishable from the flip without `op`. If you need the full history on a topic bootstrapped from an outbox that `local-event-handler` has already processed, use one of the options below. The SMT logs a WARN once when it takes this fallback, naming the limitation.
+
+**Preferred configurations**, which sidestep the question entirely:
+
+1. **Run the SMT before the unwrap transform** - `transforms=encodeAvro,unwrap` rather than `transforms=unwrap,encodeAvro`. The SMT sees the envelope and filters on `op`.
+2. **Carry `op` through the unwrap.** Configure `ExtractNewRecordState` with `add.fields=op`, which adds `__op` to the row. The SMTs honour it - and an explicit `op` always wins over the inferred `delivered` signal, so snapshot replay works again. A bare `op` is also accepted if you set an empty `add.fields.prefix`.
+3. **Do not run both delivery paths against one outbox.** If Kafka is the only consumer, drop `local-event-handler`; nothing then updates the table.
 
 ### SMT error handling
 

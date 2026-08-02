@@ -17,6 +17,8 @@ repositories {
 dependencies {
     // Provided by the Kafka Connect worker at runtime, so it is never bundled.
     compileOnly("org.apache.kafka:connect-api:${project.property("kafkaClientsVersion")}")
+    // Provided by the Connect worker; never bundled.
+    compileOnly("org.slf4j:slf4j-api:${project.property("slf4jVersion")}")
 
     testImplementation("org.apache.kafka:connect-api:${project.property("kafkaClientsVersion")}")
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))

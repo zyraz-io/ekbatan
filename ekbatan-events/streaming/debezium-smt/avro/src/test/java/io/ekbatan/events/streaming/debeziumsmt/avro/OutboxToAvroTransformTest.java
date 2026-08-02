@@ -190,6 +190,51 @@ class OutboxToAvroTransformTest {
         assertThat(transformed.value()).isInstanceOf(byte[].class);
     }
 
+    /**
+     * A heartbeat previously came back untouched, and {@code ByteArrayConverter} cannot serialize
+     * a Struct - so one heartbeat killed the connector task. Verified end to end in
+     * {@code MysqlSmtIntegrationTest}, which now runs with heartbeats and schema changes enabled.
+     */
+    @Test
+    void debezium_housekeeping_is_dropped_rather_than_passed_through() throws Exception {
+        var transform = configuredTransform();
+        var heartbeat = new Struct(SchemaBuilder.struct()
+                .name("io.debezium.connector.common.Heartbeat")
+                .field("ts_ms", org.apache.kafka.connect.data.Schema.OPTIONAL_INT64_SCHEMA)
+                .build());
+
+        assertThat(transform.apply(rawRecord(heartbeat))).isNull();
+    }
+
+    /** A real row from another table must stop the connector, not vanish. */
+    @Test
+    void a_row_from_another_table_raises_a_data_exception() throws Exception {
+        var transform = configuredTransform();
+        var other = new Struct(SchemaBuilder.struct()
+                        .name("inventory.customers.Value")
+                        .field("id", org.apache.kafka.connect.data.Schema.INT32_SCHEMA)
+                        .build())
+                .put("id", 7);
+
+        assertThatThrownBy(() -> transform.apply(record(other)))
+                .isInstanceOf(DataException.class)
+                .hasMessageContaining("inventory.customers.Value")
+                .hasMessageContaining("table.include.list");
+    }
+
+    /** Finding 26: the tombstone companion to a delete used to be published. */
+    @Test
+    void a_tombstone_is_not_published() throws Exception {
+        var transform = configuredTransform();
+        var tombstone = new SourceRecord(Map.of(), Map.of(), "topic", null, "key", null, null);
+
+        assertThat(transform.apply(tombstone)).isNull();
+    }
+
+    private static SourceRecord rawRecord(Struct value) {
+        return new SourceRecord(Map.of(), Map.of(), "topic", value.schema(), value);
+    }
+
     // --- rows as each database's Debezium connector actually produces them -------------------
 
     private static Struct postgresRow() {

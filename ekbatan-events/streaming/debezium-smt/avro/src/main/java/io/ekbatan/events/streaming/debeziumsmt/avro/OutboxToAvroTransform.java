@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.ekbatan.events.streaming.debeziumsmt.common.ActionEventFields;
 import io.ekbatan.events.streaming.debeziumsmt.common.OutboxColumns;
+import io.ekbatan.events.streaming.debeziumsmt.common.OutboxRecords;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -12,6 +13,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericDatumWriter;
@@ -22,6 +25,8 @@ import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.transforms.Transformation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Encodes a Debezium outbox record end-to-end into Avro binary: the JSON {@code payload} field is
@@ -70,7 +75,13 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
                     ConfigDef.Importance.LOW,
                     "Name of the event type field on the record value");
 
+    private static final Logger LOG = LoggerFactory.getLogger(OutboxToAvroTransform.class);
+
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /** Schemas already reported as dropped, so routine housekeeping logs once rather than forever. */
+    private final Set<String> warnedDroppedSchemas = ConcurrentHashMap.newKeySet();
+
     private final Map<String, Schema> schemasByEventType = new HashMap<>();
     private Schema actionEventSchema;
     private String payloadField;
@@ -112,80 +123,33 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
         }
     }
 
-    /**
-     * Returns {@code true} when the SMT should emit a record for a Debezium change event
-     * with the given {@code op} value.
-     *
-     * <p>The {@code eventlog.events} outbox is append-only from the application's
-     * perspective. The only {@code op} values that represent real business events are
-     * <ul>
-     *   <li>{@code "c"} (create) - a new event row inserted by the action persister, atomic
-     *       with the action's data writes.</li>
-     *   <li>{@code "r"} (read) - an existing row delivered during Debezium's initial
-     *       snapshot. From the consumer's perspective this is a past business event being
-     *       (re)played.</li>
-     * </ul>
-     *
-     * <p>Other ops are filtered out so they never become Kafka messages:
-     * <ul>
-     *   <li>{@code "u"} (update) - fires when the in-process consumer path
-     *       ({@code local-event-handler}) flips {@code delivered = TRUE} after fanout. This
-     *       is internal bookkeeping, not a new fact.</li>
-     *   <li>{@code "d"} (delete) - events are append-only; a deletion is either a
-     *       housekeeping action or noise, never a business fact.</li>
-     * </ul>
-     *
-     * <p>A {@code null} {@code op} (rare - record without a Debezium envelope, or an
-     * envelope schema lacking the {@code op} field) is passed through: we don't drop
-     * records we don't have enough information to classify.
-     */
-    private static boolean shouldEmitForOp(String op) {
-        return op == null || op.equals("c") || op.equals("r");
-    }
-
     @Override
     public R apply(R record) {
-        if (record.value() == null) {
-            return record;
+        // Every record gets one of the four outcomes; none of them is "hand it back untouched",
+        // because this SMT emits byte[] and its connector runs ByteArrayConverter. See
+        // OutboxRecords.
+        final var classified = OutboxRecords.classify(record.value(), eventTypeField, payloadField);
+        switch (classified.disposition) {
+            case SKIP:
+                return null;
+            case DROP:
+                warnOnceAbout(classified.reason);
+                return null;
+            case FAIL:
+                throw new DataException(classified.reason);
+            default:
+                if (classified.reason != null) {
+                    warnOnceAbout(classified.reason);
+                }
+                return encodeRow(record, classified.row);
         }
-        if (!(record.value() instanceof Struct struct)) {
-            throw new DataException("Expected schemaful Struct record, got: "
-                    + record.value().getClass().getName());
-        }
-        return applyStruct(record, struct);
     }
 
-    private R applyStruct(R record, Struct envelope) {
-        // Debezium wraps the row in an envelope: { before, after, source, op, ts_ms, ... }.
-        // For inserts/snapshots the row of interest is in `after`. If there's no envelope wrapper,
-        // the SMT operates on the value directly.
-        final var afterField = envelope.schema().field("after");
-        Struct row;
-        if (afterField != null) {
-            // Drop non-INSERT operations. The `eventlog.events` table is append-only from
-            // the application's perspective, but the in-process consumer path (the
-            // `local-event-handler` module) flips `delivered = TRUE` after fanout, which
-            // generates UPDATE events that don't represent new business facts. We emit
-            // only creates ('c') and snapshot reads ('r') as outbox messages.
-            final var opField = envelope.schema().field("op");
-            final var op = opField != null ? envelope.getString("op") : null;
-            if (!shouldEmitForOp(op)) {
-                return null; // drop the record from the stream
-            }
-            row = envelope.getStruct("after");
-            if (row == null) {
-                return record; // delete event or tombstone
-            }
-        } else {
-            row = envelope;
-        }
+    private R encodeRow(R record, Struct row) {
 
         var rowSchema = row.schema();
         var eventTypeFieldOnRow = rowSchema.field(eventTypeField);
         var payloadFieldOnRow = rowSchema.field(payloadField);
-        if (eventTypeFieldOnRow == null || payloadFieldOnRow == null) {
-            return record;
-        }
         var eventType = (String) row.get(eventTypeFieldOnRow);
         if (eventType == null) {
             return null;
@@ -268,6 +232,15 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
      * previously used for both purposes, so overriding either silently emitted every message with
      * that field unset.
      */
+    private void warnOnceAbout(String reason) {
+        if (warnedDroppedSchemas.add(reason)) {
+            LOG.warn(
+                    "Dropping records the outbox SMT does not recognise: {}. Further records with this"
+                            + " schema are dropped silently.",
+                    reason);
+        }
+    }
+
     private String sourceColumn(String actionEventFieldName) {
         return ActionEventFields.EVENT_TYPE_FIELD.equals(actionEventFieldName) ? eventTypeField : actionEventFieldName;
     }

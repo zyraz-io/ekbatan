@@ -32,6 +32,8 @@ dependencies {
 
     // Provided by the Kafka Connect worker at runtime
     compileOnly("org.apache.kafka:connect-api:${project.property("kafkaClientsVersion")}")
+    // Provided by the Connect worker; never bundled.
+    compileOnly("org.slf4j:slf4j-api:${project.property("slf4jVersion")}")
     compileOnly("org.apache.kafka:connect-transforms:${project.property("kafkaClientsVersion")}")
 
     // Shared Debezium value conversions, bundled into the fat JAR by Shadow.
@@ -41,6 +43,7 @@ dependencies {
     implementation("com.google.protobuf:protobuf-java-util:${project.property("protobufVersion")}")
 
     testImplementation("org.apache.kafka:connect-api:${project.property("kafkaClientsVersion")}")
+    testRuntimeOnly("org.slf4j:slf4j-simple:${project.property("slf4jVersion")}")
     testImplementation(platform("org.junit:junit-bom:${project.property("junitBomVersion")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.assertj:assertj-core:${project.property("assertjVersion")}")
