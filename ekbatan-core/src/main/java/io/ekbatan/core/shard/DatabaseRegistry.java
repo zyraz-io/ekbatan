@@ -150,9 +150,18 @@ public final class DatabaseRegistry implements AutoCloseable {
             for (var member : group.members) {
                 var shardIdentifier = ShardIdentifier.of(group.group, member.member);
                 var primaryDataSourceConfig = member.primaryConfig();
-                var secondaryDataSourceConfig = member.secondaryConfig().orElse(primaryDataSourceConfig);
                 var primaryProvider = ConnectionProvider.hikariConnectionProvider(primaryDataSourceConfig);
-                var secondaryProvider = ConnectionProvider.hikariConnectionProvider(secondaryDataSourceConfig);
+                // Fall back on the primary *provider*, not on its config. Falling back on the
+                // config still ran the factory a second time, and identical settings do not
+                // produce the same pool - they produce a second one against the same database,
+                // with its own connections and housekeeping threads. A member with no replica
+                // therefore opened twice the configured maximum: eight shards at 20 held 320
+                // connections where the operator had budgeted 160, invisibly, because both pools
+                // were perfectly healthy. TransactionManager#close already assumes sharing - it
+                // closes the secondary only when it is a different object.
+                var secondaryProvider = member.secondaryConfig()
+                        .map(ConnectionProvider::hikariConnectionProvider)
+                        .orElse(primaryProvider);
                 var tm = new TransactionManager(
                         primaryProvider, secondaryProvider, primaryDataSourceConfig.dialect, shardIdentifier);
                 if (shardIdentifier.equals(config.defaultShard)) {
