@@ -84,6 +84,20 @@ public class ConnectionProvider implements AutoCloseable {
     }
 
     /**
+     * {@return the JDBC URL this pool was configured with}
+     *
+     * <p>Exposed because the dialect can be resolved from it <em>without opening a connection</em>.
+     * That matters wherever a component must choose dialect-specific behaviour at construction
+     * time: pools are built with {@code initializationFailTimeout = -1} so an application can
+     * start before its database is reachable, which means a connection obtained at that moment may
+     * not exist yet. Anything that decides on the strength of such a connection risks deciding
+     * wrongly and keeping that decision. Reading the URL cannot fail that way.
+     */
+    public String jdbcUrl() {
+        return pool.getJdbcUrl();
+    }
+
+    /**
      * Closes the underlying Hikari pool. Idempotent - safe to call multiple times.
      * After {@code close()}, no further {@link #acquire()} calls are valid.
      */

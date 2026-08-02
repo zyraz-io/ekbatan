@@ -4,6 +4,10 @@ import static com.github.kagkarlsson.scheduler.SchedulerBuilder.DEFAULT_POLLING_
 
 import com.github.kagkarlsson.scheduler.Scheduler;
 import com.github.kagkarlsson.scheduler.SchedulerBuilder;
+import com.github.kagkarlsson.scheduler.jdbc.JdbcCustomization;
+import com.github.kagkarlsson.scheduler.jdbc.MariaDBJdbcCustomization;
+import com.github.kagkarlsson.scheduler.jdbc.MySQL8JdbcCustomization;
+import com.github.kagkarlsson.scheduler.jdbc.PostgreSqlJdbcCustomization;
 import com.github.kagkarlsson.scheduler.task.helper.RecurringTask;
 import com.github.kagkarlsson.scheduler.task.helper.Tasks;
 import io.ekbatan.core.internal.Validate;
@@ -15,6 +19,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import org.jooq.tools.jdbc.JDBCUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,6 +62,44 @@ public final class JobRegistry {
         LOG.info("Stopping JobRegistry");
         scheduler.stop();
         LOG.info("JobRegistry stopped");
+    }
+
+    /**
+     * The db-scheduler SQL flavour for a JDBC URL, resolved without opening a connection.
+     *
+     * <p>Left to itself, db-scheduler decides this once inside {@code Scheduler.create(...)} by
+     * reading {@code DatabaseMetaData} from a connection, and on failure logs and keeps
+     * {@code DefaultJdbcCustomization} for the scheduler's lifetime. Ekbatan's pools use
+     * {@code initializationFailTimeout = -1} so an application may start before its database is
+     * reachable, which makes that failure ordinary. The consequence is not subtle: the generic
+     * customization emits {@code OFFSET 0 ROWS FETCH FIRST n ROWS ONLY} where every dialect
+     * override emits {@code LIMIT n}, and MySQL and MariaDB cannot parse the former - so a
+     * scheduler that lost the race issues an invalid poll query forever while the application
+     * reports healthy.
+     *
+     * <p>The URL is known before any I/O, so it decides instead.
+     *
+     * @param jdbcUrl the jobs pool's URL.
+     * @return the customization to pin, or {@code null} to leave db-scheduler to detect.
+     */
+    private static JdbcCustomization jdbcCustomizationFor(String jdbcUrl) {
+        if (jdbcUrl == null || jdbcUrl.isBlank()) {
+            return null;
+        }
+        return switch (JDBCUtils.dialect(jdbcUrl).family()) {
+            case POSTGRES -> new PostgreSqlJdbcCustomization(false, false);
+            case MARIADB -> new MariaDBJdbcCustomization(false);
+            // MySQLJdbcCustomization and MySQL8JdbcCustomization differ only in
+            // supportsGenericLockAndFetch(); both emit LIMIT, which is what decides whether the
+            // poll query parses. A URL cannot reveal the server version, so this assumes 8 or
+            // later - what Ekbatan's migrations and examples target. A pre-8 server needs the
+            // older one, set through Builder#customizeScheduler.
+            case MYSQL -> new MySQL8JdbcCustomization(false);
+            // Unreachable today: ConnectionProvider's only construction path is a DataSourceConfig,
+            // which rejects any URL outside these three. Kept so the switch degrades to
+            // db-scheduler's own detection rather than to a wrong dialect.
+            default -> null;
+        };
     }
 
     /** {@return a fresh builder for {@link JobRegistry}} */
@@ -206,12 +249,22 @@ public final class JobRegistry {
                 }));
             }
 
+            var customization = jdbcCustomizationFor(connectionProvider.jdbcUrl());
+
             var schedulerBuilder = Scheduler.create(connectionProvider.getDataSource())
                     .startTasks(tasks)
                     .threads(jobs.size())
                     .heartbeatInterval(heartbeatInterval)
                     .executorService(Executors.newVirtualThreadPerTaskExecutor())
                     .pollingInterval(pollInterval);
+
+            if (customization != null) {
+                schedulerBuilder.jdbcCustomization(customization);
+            } else {
+                LOG.warn("Could not resolve a db-scheduler jdbc-customization from the jobs pool URL; leaving"
+                        + " detection to db-scheduler, which falls back to generic SQL for the scheduler's"
+                        + " lifetime if the database is unreachable at startup.");
+            }
 
             if (shutdownMaxWait != null) {
                 schedulerBuilder.shutdownMaxWait(shutdownMaxWait);

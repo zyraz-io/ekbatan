@@ -33,4 +33,9 @@ dependencies {
     // module's test classpath; the JobRegistryBuilderTest fixture needs a real pool, so pull
     // Hikari in for tests explicitly.
     testRuntimeOnly("com.zaxxer:HikariCP:${project.property("hikariCpVersion")}")
+    // JobRegistryDialectPinningTest builds a pool per dialect against unreachable hosts, to
+    // prove the customization is pinned from the URL alone. Hikari resolves the driver through
+    // DriverManager before it ever tries to connect, so each driver must be present.
+    testRuntimeOnly("com.mysql:mysql-connector-j:${project.property("mysqlConnectorVersion")}")
+    testRuntimeOnly("org.mariadb.jdbc:mariadb-java-client:${project.property("mariadbJavaClientVersion")}")
 }

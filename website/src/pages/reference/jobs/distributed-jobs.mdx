@@ -139,6 +139,21 @@ ekbatan:
 
 `JobRegistry.start()` is wired to your DI container's lifecycle (Spring `initMethod`/`destroyMethod`, Quarkus `@Observes StartupEvent`/`ShutdownEvent`, Micronaut `ApplicationEventListener<StartupEvent>`).
 
+
+### Database dialect
+
+db-scheduler needs dialect-specific SQL, and by default works out which by opening a connection at `Scheduler.create(...)` and reading `DatabaseMetaData`. If that connection fails it logs an error and keeps generic SQL **for the scheduler's lifetime**. Ekbatan's pools are built with `initializationFailTimeout = -1` so an application can start before its database is reachable, which makes that failure ordinary rather than exotic - and the generic SQL emits `OFFSET 0 ROWS FETCH FIRST n ROWS ONLY`, which MySQL and MariaDB cannot parse. The result would be a scheduler issuing an invalid poll query forever, while the application reports healthy.
+
+So `JobRegistry` resolves the dialect from the pool's **JDBC URL** instead and pins it before the scheduler is created. No connection is involved, so an unreachable database at startup cannot change the outcome, and `build()` does not block waiting for one.
+
+One assumption is worth knowing: a URL cannot reveal the server version, and db-scheduler distinguishes MySQL 8+ from older releases (they differ only in whether generic lock-and-fetch is used; both emit `LIMIT`). Ekbatan assumes **MySQL 8 or later**, matching its own migrations and examples. On an older server, override it:
+
+```java
+JobRegistry.jobRegistry()
+    .customizeScheduler(b -> b.jdbcCustomization(new MySQLJdbcCustomization(false)))
+```
+
+
 The `ekbatan.jobs.*` properties also accept camelCase aliases: `polling-interval` / `pollingInterval`, `heartbeat-interval` / `heartbeatInterval`, and `shutdown-max-wait` / `shutdownMaxWait`.
 
 ## Use a dedicated connection pool
