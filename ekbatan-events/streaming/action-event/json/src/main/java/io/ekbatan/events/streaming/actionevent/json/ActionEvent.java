@@ -1,5 +1,7 @@
 package io.ekbatan.events.streaming.actionevent.json;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.UUID;
 import tools.jackson.databind.node.ObjectNode;
@@ -51,7 +53,16 @@ public class ActionEvent {
     public final boolean delivered;
 
     /**
-     * All-args constructor used by Jackson during JSON deserialization on the consumer side.
+     * All-args constructor, annotated so Jackson can construct the type. Without a creator Jackson
+     * refuses outright - "no Creators, like default constructor, exist" - because the fields are
+     * final, there is no no-arg constructor, and the jar is not compiled with {@code -parameters},
+     * so the parameter names are not in the bytecode for Jackson to match against.
+     *
+     * <p>This binds the shape this class itself serializes to. A Debezium topic carries something
+     * different - snake_case column names, JSON columns as strings rather than nested objects, and
+     * timestamps as bare epoch microseconds - so a consumer reading raw CDC output still maps the
+     * message onto this type itself, rather than calling {@code readValue} on it. See
+     * {@code RetryingEventConsumer} in the event-pipeline integration tests for a worked example.
      *
      * @param id stable per-event identifier.
      * @param namespace logical namespace (typically the producer application identifier).
@@ -67,20 +78,21 @@ public class ActionEvent {
      * @param eventDate when the event was logically produced.
      * @param delivered whether the eventlog row has been forwarded by the pipeline.
      */
+    @JsonCreator
     public ActionEvent(
-            UUID id,
-            String namespace,
-            UUID actionId,
-            String actionName,
-            ObjectNode actionParams,
-            Instant startedDate,
-            Instant completionDate,
-            String modelId,
-            String modelType,
-            String eventType,
-            ObjectNode payload,
-            Instant eventDate,
-            boolean delivered) {
+            @JsonProperty("id") UUID id,
+            @JsonProperty("namespace") String namespace,
+            @JsonProperty("actionId") UUID actionId,
+            @JsonProperty("actionName") String actionName,
+            @JsonProperty("actionParams") ObjectNode actionParams,
+            @JsonProperty("startedDate") Instant startedDate,
+            @JsonProperty("completionDate") Instant completionDate,
+            @JsonProperty("modelId") String modelId,
+            @JsonProperty("modelType") String modelType,
+            @JsonProperty("eventType") String eventType,
+            @JsonProperty("payload") ObjectNode payload,
+            @JsonProperty("eventDate") Instant eventDate,
+            @JsonProperty("delivered") boolean delivered) {
         this.id = id;
         this.namespace = namespace;
         this.actionId = actionId;
