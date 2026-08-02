@@ -43,7 +43,7 @@ Your App
 Your handlers (in-process, virtual threads)
 ```
 
-Both jobs are `DistributedJob`s registered with the existing `JobRegistry`, so cluster exclusivity, heartbeating, and crash recovery are inherited — only one instance per cluster runs the fan-out job, only one runs the handling job.
+Both jobs are `DistributedJob`s registered with the existing `JobRegistry`, so cluster exclusivity, heartbeating, and crash recovery are inherited — a single instance per cluster runs the fan-out job and a single instance runs the handling job. As with any `DistributedJob` that is the normal case rather than a guarantee — a stalled instance can have its execution revived elsewhere — but both jobs are written to be safe under a repeat.
 
 ## Defining a handler
 

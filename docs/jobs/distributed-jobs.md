@@ -1,6 +1,6 @@
 # Distributed background jobs
 
-For periodic background work that should run on **at most one** instance across a cluster — daily reports, hourly cleanups, periodic reconciliation — Ekbatan ships `JobRegistry` in the `ekbatan-distributed-jobs` module. It's a thin, opinionated facade over [db-scheduler](https://github.com/kagkarlsson/db-scheduler) that handles the tricky parts (atomic claim across instances, heartbeat-based crash recovery, graceful shutdown, per-task virtual-thread workers) while keeping the user-facing API tiny.
+For periodic background work that should run on **a single** instance across a cluster — daily reports, hourly cleanups, periodic reconciliation — Ekbatan ships `JobRegistry` in the `ekbatan-distributed-jobs` module. It's a thin, opinionated facade over [db-scheduler](https://github.com/kagkarlsson/db-scheduler) that handles the tricky parts (atomic claim across instances, heartbeat-based crash recovery, graceful shutdown, per-task virtual-thread workers) while keeping the user-facing API tiny.
 
 ## Defining a job
 
@@ -38,7 +38,7 @@ The `@EkbatanDistributedJob` annotation marks the class for discovery by the DI 
 
 - Every instance polls the shared `scheduled_tasks` table.
 - When a task's `execution_time` arrives, exactly one instance wins the atomic claim per scheduled slot — that instance runs it.
-- Each running instance heartbeats periodically. If a heartbeat goes stale (instance crashed, network partitioned), another instance reclaims the row.
+- Each running instance heartbeats periodically. If a heartbeat goes stale (instance crashed, network partitioned, JVM stalled), another instance reclaims the row **and runs the job again** — while the original may still be part-way through `execute()`. The claim protects the row, not your method: db-scheduler stops the stale instance from recording a result, but cannot undo side effects it has already caused. **Write `execute()` so that running the same slot twice is harmless.**
 - Tasks that throw are retried per their `Schedule`; the row's `consecutive_failures` increments.
 
 This is at-most-one *per scheduled slot*, not at-most-one ever. A daily-at-02:00 job runs once at 02:00 across the cluster; if 02:00 passes while every node is down, the missed slot is picked up by the next live node when it polls.
