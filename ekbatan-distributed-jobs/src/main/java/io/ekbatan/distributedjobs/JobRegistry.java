@@ -249,6 +249,21 @@ public final class JobRegistry {
                 }));
             }
 
+            // Same reasoning as JobsConfig: db-scheduler's Waiter skips waiting entirely when the
+            // duration is not positive, so a zero interval is a tight poll loop rather than a fast
+            // one. Checked here as well because a hand-wired registry never passes through
+            // JobsConfig.
+            Validate.isTrue(
+                    pollInterval != null && !pollInterval.isZero() && !pollInterval.isNegative(),
+                    "pollInterval must be positive, but was " + pollInterval);
+            Validate.isTrue(
+                    heartbeatInterval != null && !heartbeatInterval.isZero() && !heartbeatInterval.isNegative(),
+                    "heartbeatInterval must be positive, but was " + heartbeatInterval
+                            + ". db-scheduler also derives its dead-execution window from it (interval x 2).");
+            Validate.isTrue(
+                    shutdownMaxWait == null || !shutdownMaxWait.isNegative(),
+                    "shutdownMaxWait cannot be negative, but was " + shutdownMaxWait);
+
             var customization = jdbcCustomizationFor(connectionProvider.jdbcUrl());
 
             var schedulerBuilder = Scheduler.create(connectionProvider.getDataSource())

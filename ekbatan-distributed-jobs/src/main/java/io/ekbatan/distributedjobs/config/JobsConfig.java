@@ -1,5 +1,6 @@
 package io.ekbatan.distributedjobs.config;
 
+import io.ekbatan.core.internal.Validate;
 import java.time.Duration;
 import java.util.Optional;
 import tools.jackson.databind.annotation.JsonDeserialize;
@@ -28,9 +29,38 @@ public final class JobsConfig {
     public final Optional<Duration> shutdownMaxWait;
 
     private JobsConfig(Builder builder) {
-        this.pollingInterval = builder.pollingInterval;
-        this.heartbeatInterval = builder.heartbeatInterval;
-        this.shutdownMaxWait = builder.shutdownMaxWait;
+        this.pollingInterval = requirePositive(builder.pollingInterval, "ekbatan.jobs.polling-interval");
+        this.heartbeatInterval = requirePositive(builder.heartbeatInterval, "ekbatan.jobs.heartbeat-interval");
+        this.shutdownMaxWait = requireNonNegative(builder.shutdownMaxWait, "ekbatan.jobs.shutdown-max-wait");
+    }
+
+    /**
+     * Rejects zero and negative intervals.
+     *
+     * <p>db-scheduler waits between iterations with a {@code Waiter}, whose {@code doWait()} is
+     * {@code if (duration.toMillis() > 0) { ...sleep... }} - so a zero or negative value does not
+     * mean "wait briefly", it means <em>do not wait at all</em>, and the poll loop spins against
+     * the database as fast as the CPU allows. Nothing throws and nothing is logged.
+     *
+     * <p>The heartbeat is worse than it looks: db-scheduler derives the dead-execution window from
+     * it as {@code heartbeatInterval * 2}, so a tiny value also makes healthy executions look dead
+     * and eligible for revival elsewhere.
+     */
+    private static Optional<Duration> requirePositive(Optional<Duration> value, String property) {
+        value.ifPresent(d -> Validate.isTrue(
+                !d.isZero() && !d.isNegative(),
+                property + " must be positive, but was " + d + ". A zero or negative interval makes db-scheduler"
+                        + " skip its wait entirely and poll in a tight loop."));
+        return value;
+    }
+
+    /**
+     * Rejects negative waits. Zero is allowed here and means "do not wait for in-flight jobs at
+     * shutdown", which is a legitimate choice for a container that is about to be killed anyway.
+     */
+    private static Optional<Duration> requireNonNegative(Optional<Duration> value, String property) {
+        value.ifPresent(d -> Validate.isTrue(!d.isNegative(), property + " cannot be negative, but was " + d + "."));
+        return value;
     }
 
     /** {@return a {@link JobsConfig} with no overrides -- every knob falls through to framework defaults} */
