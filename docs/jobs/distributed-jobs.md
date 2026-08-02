@@ -116,9 +116,9 @@ With the `@EkbatanDistributedJob` annotation in place, the DI integration regist
 ```yaml
 ekbatan:
   jobs:
-    polling-interval: 10s
-    heartbeat-interval: 30s
-    shutdown-max-wait: 30s
+    polling-interval: PT10S
+    heartbeat-interval: PT30S
+    shutdown-max-wait: PT30S
 
   sharding:
     groups:
@@ -131,6 +131,8 @@ ekbatan:
                 password: ${APP_PASSWORD}
                 maximum-pool-size: 5
 ```
+
+> **Durations are ISO-8601.** `PT10S` (10 seconds), `PT0.2S` (200 ms), `PT5M` (5 minutes). Spring Boot's shorthand - `10s`, `200ms` - is **not** accepted: the value is bound by Jackson's `Duration` deserializer, which calls `Duration.parse`, so a shorthand value fails at startup with `Cannot deserialize value of type java.time.Duration`.
 
 `JobRegistry.start()` is wired to your DI container's lifecycle (Spring `initMethod`/`destroyMethod`, Quarkus `@Observes StartupEvent`/`ShutdownEvent`, Micronaut `ApplicationEventListener<StartupEvent>`).
 

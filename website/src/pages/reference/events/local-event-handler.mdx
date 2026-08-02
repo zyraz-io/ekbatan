@@ -186,11 +186,13 @@ With `@EkbatanEventHandler`-annotated handlers and the local-event-handler modul
 ```yaml
 ekbatan:
   local-event-handler:
-    fanout-poll-delay: 1s
-    handling-poll-delay: 1s
+    fanout-poll-delay: PT1S
+    handling-poll-delay: PT1S
     handling:
       enabled: true            # opt in to running EventHandlingJob in this process
 ```
+
+> **Durations are ISO-8601.** `PT10S` (10 seconds), `PT0.2S` (200 ms), `PT5M` (5 minutes). Spring Boot's shorthand - `10s`, `200ms` - is **not** accepted: the value is bound by Jackson's `Duration` deserializer, which calls `Duration.parse`, so a shorthand value fails at startup with `Cannot deserialize value of type java.time.Duration`.
 
 The opt-in for `EventHandlingJob` exists because some deployments want the fan-out path on (so events leave the outbox into `event_notifications`) without running handlers locally — e.g. a separate worker process picks them up. Default is **off**.
 
