@@ -168,6 +168,21 @@ Both:
 
 The integration tests under [`ekbatan-integration-tests/event-pipeline`](../../ekbatan-integration-tests/event-pipeline) (the `debezium-kafka-avro-smt` and `debezium-kafka-protobuf-smt` subprojects) wire up Debezium + Kafka + the SMT in TestContainers as a working reference, against PostgreSQL. `debezium-kafka-dialects-smt` runs the same pipeline against MySQL and MariaDB, writing through the real event persister so the dialect-specific column bindings are the ones under test.
 
+### Payload encoding
+
+The `payload` column holds JSON, which the SMT re-encodes against the per-`event_type` schema you configure. Protobuf delegates this to `JsonFormat.parser()`; Avro has no equivalent, so `JsonToAvro` does it. (Avro's `DecoderFactory.jsonDecoder` is not that equivalent - it reads Avro's *own* JSON encoding, in which a union value must be tagged with its type, `{"amount":{"string":"77.10"}}`, rather than the plain form Jackson writes.)
+
+The rule is that **the schema decides the type**, and a value that does not fit **fails, naming the field path** - it is never coerced to a default:
+
+| Situation | Behaviour |
+|---|---|
+| Value's type disagrees with the schema | `DataException` naming the field, e.g. `Field 'WalletDeposit.count' is declared LONG so it needs a number, but the payload has a STRING` |
+| `["null", T]` - Avro's spelling of "optional" | Decided by the schema alone: `null` to the null branch, otherwise `T` |
+| A union with several non-null branches | The branch that converts *and* accounts for the most of the JSON's keys; ties break toward the tighter schema, then declaration order with a WARN |
+| `decimal`, `timestamp-millis`/`-micros`, `date`, `uuid` | Handled as those types. A decimal too precise for the schema's scale fails rather than rounding silently |
+| Field absent from the JSON | Its schema default, or `DataException` if it has none |
+| Field present in the JSON but not in the schema | Dropped, with a WARN logged once - so an additive change to an event class cannot take the pipeline down, but the drift is visible |
+
 ### Unwrapped records and `ExtractNewRecordState`
 
 Debezium normally delivers each change inside an **envelope**: `{ before, after, source, op, ts_ms }`, where the row itself sits in `after` and `op` says what happened. Debezium 3.5 defines six operations - `c` insert, `r` snapshot read, `u` update, `d` delete, `t` truncate, `m` logical-decoding message - and both SMTs read that shape and publish only `c` and `r`. The filter is an allow-list, so any operation a future Debezium release adds is withheld rather than published unexamined.

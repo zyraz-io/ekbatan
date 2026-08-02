@@ -39,6 +39,10 @@ class OutboxToAvroTransformTest {
     private static final UUID EVENT_ID = UUID.fromString("0198f4a2-1c3d-7e4f-8a9b-0c1d2e3f4a5b");
     private static final UUID ACTION_ID = UUID.fromString("0198f4a2-1c3d-7e4f-8a9b-0c1d2e3f4a5c");
 
+    /** `ref` holds text in a long-or-string union - the value the old converter turned into 0. */
+    private static final String PAYLOAD_JSON =
+            "{\"name\":\"Ada\",\"amount\":77.10,\"at\":\"" + WHEN + "\",\"ref\":\"ORDER-123\"}";
+
     private static Path actionEventSchemaPath;
     private static Schema actionEventSchema;
 
@@ -180,6 +184,27 @@ class OutboxToAvroTransformTest {
         assertThat(transform.apply(record(row))).isNull();
     }
 
+    /**
+     * Decodes the embedded payload, which no test did before - which is why a decimal crashed and a
+     * multi-branch union silently wrote 0 over the real value.
+     */
+    @Test
+    void the_payload_decodes_with_its_real_values() throws Exception {
+        var transform = configuredTransform();
+        var payloadSchema = new org.apache.avro.Schema.Parser().parse(Files.readString(lastPayloadSchema));
+
+        var envelope = decode(transform.apply(record(postgresRow())));
+        var payload = new GenericDatumReader<GenericRecord>(payloadSchema)
+                .read(null, DecoderFactory.get().binaryDecoder(((ByteBuffer) envelope.get("payload")).array(), null));
+
+        assertThat(payload.get("name").toString()).isEqualTo("Ada");
+        assertThat(payload.get("at")).isEqualTo(WHEN.toEpochMilli());
+        assertThat(new java.math.BigDecimal(new java.math.BigInteger(((ByteBuffer) payload.get("amount")).array()), 2))
+                .isEqualByComparingTo(new java.math.BigDecimal("77.10"));
+        // The regression: text in a ["null","long","string"] union used to arrive as 0.
+        assertThat(payload.get("ref").toString()).isEqualTo("ORDER-123");
+    }
+
     @Test
     void the_emitted_value_is_raw_bytes() throws Exception {
         var transform = configuredTransform();
@@ -317,7 +342,7 @@ class OutboxToAvroTransformTest {
                 .put("model_id", "wallet-1")
                 .put("model_type", "Wallet")
                 .put("event_type", "TestEvent")
-                .put("payload", "{\"name\":\"Ada\"}")
+                .put("payload", PAYLOAD_JSON)
                 .put("event_date", timestamp)
                 .put("delivered", delivered);
     }
@@ -364,14 +389,23 @@ class OutboxToAvroTransformTest {
         return newTransform(config);
     }
 
+    private static Path lastPayloadSchema;
+
     private OutboxToAvroTransform<SourceRecord> newTransform(Map<String, String> config) throws Exception {
         var payloadSchema = tempDir.resolve("TestEvent.avsc");
+        lastPayloadSchema = payloadSchema;
+        // Deliberately not just a string: a decimal, a timestamp and a multi-branch union are the
+        // shapes the old hand-rolled converter got wrong, and the shapes no payload test covered.
         Files.writeString(payloadSchema, """
                 {
                   "type": "record",
                   "name": "TestEvent",
                   "fields": [
-                    {"name": "name", "type": "string"}
+                    {"name": "name", "type": "string"},
+                    {"name": "amount", "type":
+                      {"type": "bytes", "logicalType": "decimal", "precision": 10, "scale": 2}},
+                    {"name": "at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+                    {"name": "ref", "type": ["null", "long", "string"], "default": null}
                   ]
                 }
                 """);

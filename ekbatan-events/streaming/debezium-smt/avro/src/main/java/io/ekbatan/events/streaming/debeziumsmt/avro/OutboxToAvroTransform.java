@@ -1,6 +1,5 @@
 package io.ekbatan.events.streaming.debeziumsmt.avro;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.ekbatan.events.streaming.debeziumsmt.common.ActionEventFields;
 import io.ekbatan.events.streaming.debeziumsmt.common.OutboxColumns;
@@ -9,9 +8,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -78,6 +75,9 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
     private static final Logger LOG = LoggerFactory.getLogger(OutboxToAvroTransform.class);
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /** Payload JSON to Avro. Warnings go through the same warn-once set as everything else. */
+    private final JsonToAvro jsonToAvro = new JsonToAvro(this::warnOnceAbout);
 
     /** Schemas already reported as dropped, so routine housekeeping logs once rather than forever. */
     private final Set<String> warnedDroppedSchemas = ConcurrentHashMap.newKeySet();
@@ -178,7 +178,7 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
         }
         try {
             final var json = objectMapper.readTree(payloadJson);
-            final var record = jsonToGenericRecord(json, schema);
+            final var record = jsonToAvro.convert(json, schema, eventType);
             return writeBinary(schema, record);
         } catch (IOException e) {
             throw new DataException("Failed to encode payload to Avro for " + eventType, e);
@@ -251,67 +251,6 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
         new GenericDatumWriter<GenericRecord>(schema).write(record, encoder);
         encoder.flush();
         return out.toByteArray();
-    }
-
-    private GenericRecord jsonToGenericRecord(JsonNode json, Schema schema) {
-        var record = new GenericData.Record(schema);
-        for (var field : schema.getFields()) {
-            var node = json.get(field.name());
-            if (node == null || node.isNull()) {
-                continue;
-            }
-            record.put(field.name(), convertValue(node, field.schema()));
-        }
-        return record;
-    }
-
-    private Object convertValue(JsonNode node, Schema schema) {
-        try {
-            return switch (schema.getType()) {
-                case NULL -> null;
-                case STRING -> node.asText();
-                case INT -> node.asInt();
-                case LONG -> node.asLong();
-                case FLOAT -> (float) node.asDouble();
-                case DOUBLE -> node.asDouble();
-                case BOOLEAN -> node.asBoolean();
-                case BYTES -> node.binaryValue();
-                case FIXED -> new GenericData.Fixed(schema, node.binaryValue());
-                case ENUM -> new GenericData.EnumSymbol(schema, node.asText());
-                case RECORD -> jsonToGenericRecord(node, schema);
-                case ARRAY -> {
-                    var list = new ArrayList<>(node.size());
-                    for (var element : node) {
-                        list.add(convertValue(element, schema.getElementType()));
-                    }
-                    yield list;
-                }
-                case MAP -> {
-                    var map = new LinkedHashMap<String, Object>();
-                    for (var entry : node.properties()) {
-                        map.put(entry.getKey(), convertValue(entry.getValue(), schema.getValueType()));
-                    }
-                    yield map;
-                }
-                case UNION -> convertUnion(node, schema);
-            };
-        } catch (IOException e) {
-            throw new DataException("Failed to convert value for schema " + schema, e);
-        }
-    }
-
-    private Object convertUnion(JsonNode node, Schema unionSchema) {
-        for (var branch : unionSchema.getTypes()) {
-            if (branch.getType() == Schema.Type.NULL) {
-                continue;
-            }
-            try {
-                return convertValue(node, branch);
-            } catch (Exception ignored) {
-                // try next branch
-            }
-        }
-        throw new DataException("No matching union branch for value: " + node);
     }
 
     @Override
