@@ -2,6 +2,7 @@ package io.ekbatan.distributedjobs;
 
 import static com.github.kagkarlsson.scheduler.SchedulerBuilder.DEFAULT_POLLING_INTERVAL;
 
+import com.github.kagkarlsson.scheduler.ScheduledExecutionsFilter;
 import com.github.kagkarlsson.scheduler.Scheduler;
 import com.github.kagkarlsson.scheduler.SchedulerBuilder;
 import com.github.kagkarlsson.scheduler.jdbc.JdbcCustomization;
@@ -42,15 +43,61 @@ public final class JobRegistry {
     private final Scheduler scheduler;
     private final List<String> jobNames;
 
-    private JobRegistry(Scheduler scheduler, List<String> jobNames) {
+    /**
+     * The subset of {@link #jobNames} that must have a row in {@code scheduled_tasks} once
+     * started. Jobs whose {@code Schedule.isDisabled()} are excluded: db-scheduler deliberately
+     * writes no execution for those, so their absence is correct rather than a failure.
+     */
+    private final List<String> namesRequiringRegistration;
+
+    private JobRegistry(Scheduler scheduler, List<String> jobNames, List<String> namesRequiringRegistration) {
         this.scheduler = scheduler;
         this.jobNames = jobNames;
+        this.namesRequiringRegistration = namesRequiringRegistration;
     }
 
     /** Begins polling and executing registered jobs. */
     public void start() {
         LOG.info("Starting JobRegistry with {} job(s): {}", jobNames.size(), jobNames);
         scheduler.start();
+        verifyEveryJobRegistered();
+    }
+
+    /**
+     * Confirms that starting actually registered the jobs, because nothing else will say otherwise.
+     *
+     * <p>Registering a job means writing a row to {@code scheduled_tasks}; the scheduler finds work
+     * only by reading that table. db-scheduler performs those writes inside {@code start()} through
+     * {@code executeOnStartup}, which catches whatever each one throws, logs it and continues - so
+     * {@code scheduler.start()} returns normally whether every row was written or none were. A
+     * missing table, a database that is down, or a jobs pool without write permission all end the
+     * same way: the application boots, health checks pass, the scheduler polls an empty table, and
+     * no job ever runs. Not late - never.
+     */
+    private void verifyEveryJobRegistered() {
+        final List<String> missing;
+        try {
+            // ScheduledExecutionsFilter.all(), not the no-argument lookup: that one applies
+            // .withPicked(false) and so hides an execution that is currently running. A job that
+            // fired in the moment between start() and this check would otherwise look
+            // unregistered and take the application's startup down with it.
+            missing = namesRequiringRegistration.stream()
+                    .filter(name -> scheduler
+                            .getScheduledExecutionsForTask(name, Object.class, ScheduledExecutionsFilter.all())
+                            .isEmpty())
+                    .toList();
+        } catch (RuntimeException e) {
+            throw new IllegalStateException(
+                    "JobRegistry.start() could not verify that its jobs were registered. The scheduler is running"
+                            + " but may have no work: " + namesRequiringRegistration,
+                    e);
+        }
+        if (!missing.isEmpty()) {
+            throw new IllegalStateException("JobRegistry.start() completed but " + missing.size() + " of "
+                    + namesRequiringRegistration.size() + " job(s) were not registered: " + missing
+                    + ". db-scheduler logs the cause at ERROR during startup - usually a missing scheduled_tasks"
+                    + " table, or a database the jobs pool cannot write to. Those jobs would never run.");
+        }
     }
 
     /**
@@ -231,6 +278,9 @@ public final class JobRegistry {
                     names);
 
             List<RecurringTask<Void>> tasks = new ArrayList<>();
+            // A disabled schedule is deliberately never written to scheduled_tasks, so its absence
+            // after start() is correct - only the rest are expected to appear.
+            List<String> namesRequiringRegistration = new ArrayList<>();
             for (var job : jobs) {
                 // Asked once and checked here, because nothing downstream will. db-scheduler stores
                 // the schedule without looking at it, then dereferences it during start() - and
@@ -240,6 +290,9 @@ public final class JobRegistry {
                 // never runs at all, while start() reports success and names it in the log.
                 var schedule = job.schedule();
                 Validate.notNull(schedule, "DistributedJob '%s' returned a null schedule()", job.name());
+                if (!schedule.isDisabled()) {
+                    namesRequiringRegistration.add(job.name());
+                }
                 tasks.add(Tasks.recurring(job.name(), schedule).execute((_, ctx) -> {
                     LOG.info("Job '{}' execution started", job.name());
                     try {
@@ -299,7 +352,8 @@ public final class JobRegistry {
                 schedulerCustomizer.accept(schedulerBuilder);
             }
 
-            return new JobRegistry(schedulerBuilder.build(), List.copyOf(names));
+            return new JobRegistry(
+                    schedulerBuilder.build(), List.copyOf(names), List.copyOf(namesRequiringRegistration));
         }
     }
 }
