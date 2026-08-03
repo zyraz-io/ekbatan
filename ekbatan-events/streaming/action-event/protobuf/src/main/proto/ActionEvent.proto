@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package io.ekbatan.events.streaming.actionevent.protobuf;
 
+import "google/protobuf/timestamp.proto";
+
 option java_package = "io.ekbatan.events.streaming.actionevent.protobuf";
 option java_outer_classname = "ActionEventProto";
 option java_multiple_files = true;
@@ -12,12 +14,12 @@ message ActionEvent {
   string action_id = 3;
   string action_name = 4;
   string action_params = 5;
-  int64 started_date = 6;
-  int64 completion_date = 7;
+  google.protobuf.Timestamp started_date = 6;
+  google.protobuf.Timestamp completion_date = 7;
   optional string model_id = 8;
   optional string model_type = 9;
   optional string event_type = 10;
   optional bytes payload = 11;
-  int64 event_date = 12;
+  google.protobuf.Timestamp event_date = 12;
   bool delivered = 13;
 }

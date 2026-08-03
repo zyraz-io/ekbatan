@@ -8,13 +8,13 @@
     {"name": "action_id", "type": "string"},
     {"name": "action_name", "type": "string"},
     {"name": "action_params", "type": "string"},
-    {"name": "started_date", "type": "long"},
-    {"name": "completion_date", "type": "long"},
+    {"name": "started_date", "type": {"type": "long", "logicalType": "timestamp-micros"}},
+    {"name": "completion_date", "type": {"type": "long", "logicalType": "timestamp-micros"}},
     {"name": "model_id", "type": ["null", "string"], "default": null},
     {"name": "model_type", "type": ["null", "string"], "default": null},
     {"name": "event_type", "type": ["null", "string"], "default": null},
     {"name": "payload", "type": ["null", "bytes"], "default": null},
-    {"name": "event_date", "type": "long"},
+    {"name": "event_date", "type": {"type": "long", "logicalType": "timestamp-micros"}},
     {"name": "delivered", "type": "boolean"}
   ]
 }

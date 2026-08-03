@@ -4,6 +4,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FileDescriptorSet;
 import com.google.protobuf.Descriptors.Descriptor;
+import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.util.JsonFormat;
@@ -15,6 +16,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -77,6 +80,9 @@ public class OutboxToProtobufTransform<R extends ConnectRecord<R>> implements Tr
 
     private static final Logger LOG = LoggerFactory.getLogger(OutboxToProtobufTransform.class);
 
+    /** The well-known type every {@code EPOCH_MICROS} field must be declared as. */
+    private static final String TIMESTAMP_TYPE = "google.protobuf.Timestamp";
+
     private final Map<String, Descriptor> payloadDescriptorsByEventType = new HashMap<>();
 
     /** Schemas already reported as dropped, so routine housekeeping logs once rather than forever. */
@@ -109,9 +115,10 @@ public class OutboxToProtobufTransform<R extends ConnectRecord<R>> implements Tr
         this.actionEventDescriptor = loadMessageDescriptor(actionEventPath, "ActionEvent");
         ActionEventFields.verifyBindable(
                 actionEventDescriptor.getFields().stream()
-                        .map(com.google.protobuf.Descriptors.FieldDescriptor::getName)
+                        .map(FieldDescriptor::getName)
                         .toList(),
                 "loaded from " + actionEventPath);
+        verifyTimestampFields(actionEventDescriptor, "loaded from " + actionEventPath);
     }
 
     private static Descriptor loadMessageDescriptor(String descriptorPath, String messageName) {
@@ -129,21 +136,57 @@ public class OutboxToProtobufTransform<R extends ConnectRecord<R>> implements Tr
         }
     }
 
-    private static List<FileDescriptor> buildFileDescriptors(FileDescriptorSet set)
+    /**
+     * Resolves a descriptor set into built {@link FileDescriptor}s, imports first.
+     *
+     * <p>Package-private so the tests build fixtures through the same resolver they ship.
+     *
+     * <p>This walks imports recursively instead of trusting the order files appear in the set, and
+     * refuses to build a file whose import is absent. The previous version did neither: it took the
+     * set in order and silently dropped any dependency it had not already built. That was invisible
+     * while {@code ActionEvent.proto} imported nothing, and became a startup failure the moment it
+     * imported {@code google/protobuf/timestamp.proto} - reported by protobuf as a bare "type not
+     * found", naming the type rather than the missing import.
+     */
+    static List<FileDescriptor> buildFileDescriptors(FileDescriptorSet set)
             throws com.google.protobuf.Descriptors.DescriptorValidationException {
-        var byName = new HashMap<String, FileDescriptor>();
-        var result = new ArrayList<FileDescriptor>();
+        var protosByName = new LinkedHashMap<String, FileDescriptorProto>();
         for (FileDescriptorProto proto : set.getFileList()) {
-            var deps = new ArrayList<FileDescriptor>();
-            for (var depName : proto.getDependencyList()) {
-                var dep = byName.get(depName);
-                if (dep != null) deps.add(dep);
-            }
-            var file = FileDescriptor.buildFrom(proto, deps.toArray(new FileDescriptor[0]));
-            byName.put(proto.getName(), file);
-            result.add(file);
+            protosByName.put(proto.getName(), proto);
         }
-        return result;
+        var built = new LinkedHashMap<String, FileDescriptor>();
+        for (var name : protosByName.keySet()) {
+            resolveFile(name, protosByName, built, new LinkedHashSet<>());
+        }
+        return List.copyOf(built.values());
+    }
+
+    private static FileDescriptor resolveFile(
+            String name,
+            Map<String, FileDescriptorProto> protosByName,
+            Map<String, FileDescriptor> built,
+            Set<String> resolving)
+            throws com.google.protobuf.Descriptors.DescriptorValidationException {
+        var already = built.get(name);
+        if (already != null) {
+            return already;
+        }
+        var proto = protosByName.get(name);
+        if (proto == null) {
+            throw new IllegalArgumentException("Descriptor set does not contain imported file '" + name
+                    + "'. Regenerate it with --include_imports so the imports travel with it.");
+        }
+        if (!resolving.add(name)) {
+            throw new IllegalArgumentException("Circular import involving proto file '" + name + "'");
+        }
+        var deps = new ArrayList<FileDescriptor>();
+        for (var depName : proto.getDependencyList()) {
+            deps.add(resolveFile(depName, protosByName, built, resolving));
+        }
+        resolving.remove(name);
+        var file = FileDescriptor.buildFrom(proto, deps.toArray(new FileDescriptor[0]));
+        built.put(name, file);
+        return file;
     }
 
     @Override
@@ -231,7 +274,8 @@ public class OutboxToProtobufTransform<R extends ConnectRecord<R>> implements Tr
                             builder.setField(field, text);
                         }
                     }
-                    case EPOCH_MICROS -> builder.setField(field, OutboxColumns.epochMicros(row, column));
+                    case EPOCH_MICROS ->
+                        builder.setField(field, timestampOf(field, OutboxColumns.epochMicros(row, column)));
                     case BOOL -> builder.setField(field, OutboxColumns.bool(row, column));
                     default -> throw new IllegalStateException("Unhandled binding kind: " + kind);
                 }
@@ -248,6 +292,55 @@ public class OutboxToProtobufTransform<R extends ConnectRecord<R>> implements Tr
             }
         }
         return builder.build().toByteArray();
+    }
+
+    /**
+     * Wraps an epoch-microsecond column in the {@code google.protobuf.Timestamp} its field expects.
+     *
+     * <p>These fields used to be a bare {@code int64} of microseconds, which a consumer had no way
+     * to distinguish from milliseconds: reading one as the other silently yields the year 58535 or
+     * three weeks past the epoch. {@code Timestamp} carries seconds and nanos separately, so the
+     * unit travels with the value and the mistake cannot be expressed.
+     *
+     * <p>Split with {@link Math#floorDiv} and {@link Math#floorMod} rather than {@code /} and
+     * {@code %} so instants before 1970 still produce the non-negative {@code nanos} protobuf
+     * requires.
+     */
+    private static DynamicMessage timestampOf(FieldDescriptor field, long epochMicros) {
+        var timestamp = field.getMessageType();
+        return DynamicMessage.newBuilder(timestamp)
+                .setField(timestamp.findFieldByName("seconds"), Math.floorDiv(epochMicros, 1_000_000L))
+                .setField(timestamp.findFieldByName("nanos"), (int) Math.floorMod(epochMicros, 1_000_000L) * 1_000)
+                .build();
+    }
+
+    /**
+     * Fails at startup unless every timestamp field really is a {@code google.protobuf.Timestamp}.
+     *
+     * <p>Checked here rather than per record so that a descriptor built from an {@code ActionEvent
+     * .proto} which reverted these fields to {@code int64} stops the connector, instead of encoding
+     * the first row and throwing on a {@code setField} type mismatch.
+     */
+    private static void verifyTimestampFields(Descriptor descriptor, String schemaDescription) {
+        for (var field : descriptor.getFields()) {
+            if (ActionEventFields.kindOf(field.getName()) != ActionEventFields.Kind.EPOCH_MICROS) {
+                continue;
+            }
+            var isTimestamp = field.getJavaType() == FieldDescriptor.JavaType.MESSAGE
+                    && TIMESTAMP_TYPE.equals(field.getMessageType().getFullName());
+            if (!isTimestamp) {
+                throw new IllegalArgumentException("ActionEvent schema " + schemaDescription + " declares field '"
+                        + field.getName() + "' as " + describeType(field) + "; expected " + TIMESTAMP_TYPE
+                        + ". A bare integer cannot say whether it counts millis or micros, which is why"
+                        + " this field is a message.");
+            }
+        }
+    }
+
+    private static String describeType(FieldDescriptor field) {
+        return field.getJavaType() == FieldDescriptor.JavaType.MESSAGE
+                ? field.getMessageType().getFullName()
+                : field.getType().name().toLowerCase(java.util.Locale.ROOT);
     }
 
     /**

@@ -16,7 +16,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 import org.jooq.SQLDialect;
 import org.junit.jupiter.api.AfterAll;
@@ -126,14 +126,25 @@ class MariadbSmtIntegrationTest {
         assertThat(event.getDelivered()).isFalse();
     }
 
+    /**
+     * Timestamps have to arrive as instants a consumer cannot misread. These were once a bare
+     * {@code int64} of microseconds, which is indistinguishable from milliseconds: guessing wrong
+     * placed the event in the year 58535 or three weeks after the epoch, silently. They are now a
+     * {@code google.protobuf.Timestamp}, so the unit travels inside the value.
+     */
     @Test
-    void timestamps_are_epoch_micros() {
+    void timestamps_arrive_as_instants_in_the_present() {
         var thisYear = Instant.now().atZone(ZoneOffset.UTC).getYear();
-        for (var micros : new long[] {event.getStartedDate(), event.getCompletionDate(), event.getEventDate()}) {
-            var when = Instant.EPOCH.plus(micros, ChronoUnit.MICROS);
+        for (var timestamp : List.of(event.getStartedDate(), event.getCompletionDate(), event.getEventDate())) {
+            var when = Instant.ofEpochSecond(timestamp.getSeconds(), timestamp.getNanos());
+
             assertThat(when.atZone(ZoneOffset.UTC).getYear())
-                    .as("epoch micros %d decodes to %s", micros, when)
+                    .as("%s decodes to %s", timestamp, when)
                     .isEqualTo(thisYear);
+            assertThat(timestamp.getNanos() % 1_000)
+                    .as("DATETIME(6) stores microseconds, so the nanosecond digits must be zero;"
+                            + " anything else means precision was invented on the way")
+                    .isZero();
         }
     }
 

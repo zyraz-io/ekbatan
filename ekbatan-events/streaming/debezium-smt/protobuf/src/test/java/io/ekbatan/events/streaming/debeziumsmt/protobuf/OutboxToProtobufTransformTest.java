@@ -9,12 +9,14 @@ import com.google.protobuf.DescriptorProtos.FieldDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FileDescriptorSet;
 import com.google.protobuf.Descriptors.Descriptor;
-import com.google.protobuf.Descriptors.FileDescriptor;
+import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.Timestamp;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.apache.kafka.connect.data.Schema;
@@ -77,9 +79,9 @@ class OutboxToProtobufTransformTest {
         assertThat(stringField(message, "action_id")).isEqualTo(ACTION_ID.toString());
         assertThat(stringField(message, "action_name")).isEqualTo("DepositMoney");
         assertThat(stringField(message, "action_params")).isEqualTo("{\"amount\":\"5.00\"}");
-        assertThat(longField(message, "started_date")).isEqualTo(WHEN_MICROS);
-        assertThat(longField(message, "completion_date")).isEqualTo(WHEN_MICROS);
-        assertThat(longField(message, "event_date")).isEqualTo(WHEN_MICROS);
+        assertThat(timestampMicros(message, "started_date")).isEqualTo(WHEN_MICROS);
+        assertThat(timestampMicros(message, "completion_date")).isEqualTo(WHEN_MICROS);
+        assertThat(timestampMicros(message, "event_date")).isEqualTo(WHEN_MICROS);
         assertThat(stringField(message, "model_id")).isEqualTo("wallet-1");
         assertThat(stringField(message, "model_type")).isEqualTo("Wallet");
         assertThat(stringField(message, "event_type")).isEqualTo("TestEvent");
@@ -94,7 +96,7 @@ class OutboxToProtobufTransformTest {
         var message = decode(transform.apply(record(postgresRow())));
 
         assertThat(stringField(message, "id")).isEqualTo(EVENT_ID.toString());
-        assertThat(longField(message, "started_date")).isEqualTo(WHEN_MICROS);
+        assertThat(timestampMicros(message, "started_date")).isEqualTo(WHEN_MICROS);
         assertThat(boolField(message, "delivered")).isFalse();
     }
 
@@ -143,6 +145,110 @@ class OutboxToProtobufTransformTest {
 
         assertThat(stringField(message, "event_type")).isEqualTo("TestEvent");
         assertThat(bytesField(message, "payload")).isNotEmpty();
+    }
+
+    /**
+     * The unit tripwire. These fields were once a bare {@code int64} of microseconds, which no
+     * consumer could tell from milliseconds; reading one as the other is silently wrong by a factor
+     * of a thousand, putting the instant in the year 58535 or three weeks after the epoch.
+     *
+     * <p>{@code google.protobuf.Timestamp} carries seconds and nanos separately, so the unit is part
+     * of the type and the mistake cannot be expressed. Anyone reverting these to a scalar to "keep
+     * it simple" has to delete this test first.
+     */
+    @Test
+    void every_timestamp_field_is_a_google_protobuf_timestamp() {
+        for (var name : List.of("started_date", "completion_date", "event_date")) {
+            var field = actionEvent.findFieldByName(name);
+
+            assertThat(field.getJavaType())
+                    .as(
+                            "%s must not be a scalar - a bare number cannot say whether it counts millis"
+                                    + " or micros",
+                            name)
+                    .isEqualTo(FieldDescriptor.JavaType.MESSAGE);
+            assertThat(field.getMessageType().getFullName()).isEqualTo("google.protobuf.Timestamp");
+        }
+    }
+
+    /**
+     * That the declared type and the written value actually agree. The declaration alone is worth
+     * nothing if the encoder puts millis in it, so this decodes the emitted bytes as a real
+     * {@link Timestamp} and compares against the instant that went in.
+     */
+    @Test
+    void the_encoded_timestamp_is_the_instant_that_went_in() throws Exception {
+        var transform = configuredTransform();
+
+        var message = decode(transform.apply(record(postgresRow())));
+        var encoded = timestampField(message, "event_date");
+
+        assertThat(Instant.ofEpochSecond(encoded.getSeconds(), encoded.getNanos()))
+                .isEqualTo(WHEN);
+    }
+
+    /**
+     * Protobuf requires {@code nanos} in {@code [0, 999999999]} even when {@code seconds} is
+     * negative, so the split uses {@link Math#floorDiv} / {@link Math#floorMod} rather than
+     * {@code /} and {@code %}. With the latter a pre-1970 instant encodes a negative {@code nanos},
+     * which is a malformed Timestamp that most consumers reject and some read as a different time.
+     */
+    @Test
+    void an_instant_before_1970_keeps_the_non_negative_nanos_protobuf_requires() throws Exception {
+        var transform = configuredTransform();
+        var apollo = Instant.parse("1969-07-20T20:17:40.123456Z");
+        var micros = apollo.getEpochSecond() * 1_000_000L + apollo.getNano() / 1_000L;
+        var row = replaceColumn(postgresRow(), "event_date", debezium("MicroTimestamp", Schema.Type.INT64), micros);
+
+        var encoded = timestampField(decode(transform.apply(record(row))), "event_date");
+
+        assertThat(encoded.getSeconds()).isNegative();
+        assertThat(encoded.getNanos()).isBetween(0, 999_999_999);
+        assertThat(Instant.ofEpochSecond(encoded.getSeconds(), encoded.getNanos()))
+                .isEqualTo(apollo);
+    }
+
+    /**
+     * The startup guard. A descriptor whose timestamps went back to {@code int64} would otherwise
+     * encode nothing until the first row arrived, then fail on a {@code setField} type mismatch -
+     * per record, in the connector's error handler, rather than once at startup.
+     */
+    @Test
+    void a_timestamp_field_reverted_to_int64_is_refused_at_startup() throws Exception {
+        var reverted = writeDescriptorSet(
+                tempDir.resolve("Reverted.desc"),
+                file(
+                        "Reverted.proto",
+                        message("ActionEvent", stringField("event_type", 1), int64Field("started_date", 2))));
+
+        assertThatThrownBy(() -> newTransform(
+                        Map.of(OutboxToProtobufTransform.ACTION_EVENT_DESCRIPTOR_CONFIG, reverted.toString())))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("started_date")
+                .hasMessageContaining("google.protobuf.Timestamp");
+    }
+
+    /**
+     * Descriptor sets are resolved imports-first. Before {@code ActionEvent.proto} imported
+     * anything, the resolver took the set in order and silently dropped dependencies it had not
+     * already built - so this failed as an unrelated "type not found" naming the type rather than
+     * the absent file.
+     */
+    @Test
+    void a_descriptor_set_missing_an_import_names_the_file_it_needs() throws Exception {
+        var incomplete = FileDescriptorProto.newBuilder()
+                .setName("Incomplete.proto")
+                .setSyntax("proto3")
+                .addDependency("google/protobuf/timestamp.proto")
+                .addMessageType(message("ActionEvent", stringField("event_type", 1)))
+                .build();
+        var path = writeDescriptorSet(tempDir.resolve("Incomplete.desc"), incomplete);
+
+        assertThatThrownBy(() ->
+                        newTransform(Map.of(OutboxToProtobufTransform.ACTION_EVENT_DESCRIPTOR_CONFIG, path.toString())))
+                .rootCause()
+                .hasMessageContaining("google/protobuf/timestamp.proto")
+                .hasMessageContaining("--include_imports");
     }
 
     /**
@@ -396,8 +502,21 @@ class OutboxToProtobufTransformTest {
         return (String) message.getField(actionEvent.findFieldByName(name));
     }
 
-    private static long longField(DynamicMessage message, String name) {
-        return (Long) message.getField(actionEvent.findFieldByName(name));
+    /**
+     * Reads a timestamp field back as a real {@link Timestamp}.
+     *
+     * <p>Re-parsed from the field's own bytes rather than read through the dynamic descriptor, so
+     * the assertion covers the encoded form actually being a well-formed {@code
+     * google.protobuf.Timestamp} and not merely a message shaped like one.
+     */
+    private static Timestamp timestampField(DynamicMessage message, String name) throws Exception {
+        var value = message.getField(actionEvent.findFieldByName(name));
+        return Timestamp.parseFrom(((com.google.protobuf.Message) value).toByteString());
+    }
+
+    private static long timestampMicros(DynamicMessage message, String name) throws Exception {
+        var timestamp = timestampField(message, name);
+        return Math.addExact(Math.multiplyExact(timestamp.getSeconds(), 1_000_000L), timestamp.getNanos() / 1_000);
     }
 
     private static boolean boolField(DynamicMessage message, String name) {
@@ -410,10 +529,11 @@ class OutboxToProtobufTransformTest {
 
     private static Descriptor parseActionEvent(Path descriptorSet) throws Exception {
         try (var in = Files.newInputStream(descriptorSet)) {
-            var set = FileDescriptorSet.parseFrom(in);
-            for (var proto : set.getFileList()) {
-                var built = FileDescriptor.buildFrom(proto, new FileDescriptor[0]);
-                var found = built.findMessageTypeByName("ActionEvent");
+            // Built through the production resolver rather than a second copy of the logic: this
+            // fixture used to pass no dependencies at all, which worked only for as long as
+            // ActionEvent.proto imported nothing.
+            for (var file : OutboxToProtobufTransform.buildFileDescriptors(FileDescriptorSet.parseFrom(in))) {
+                var found = file.findMessageTypeByName("ActionEvent");
                 if (found != null) {
                     return found;
                 }
@@ -443,6 +563,15 @@ class OutboxToProtobufTransformTest {
             builder.addField(field);
         }
         return builder.build();
+    }
+
+    private static FieldDescriptorProto int64Field(String name, int number) {
+        return FieldDescriptorProto.newBuilder()
+                .setName(name)
+                .setNumber(number)
+                .setLabel(FieldDescriptorProto.Label.LABEL_OPTIONAL)
+                .setType(FieldDescriptorProto.Type.TYPE_INT64)
+                .build();
     }
 
     private static FieldDescriptorProto stringField(String name, int number) {

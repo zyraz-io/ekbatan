@@ -94,7 +94,7 @@ The framework writes only **JSON** to `eventlog.events.payload`. Binary encoding
 
 ## Consumer-side envelope contracts
 
-Three small modules are published; pick the one matching your wire format. Each carries the same 12-field shape (id, namespace, action_id/name, action_params, timestamps, model_id/type, event_type, payload, event_date) — only the encoding differs.
+Three small modules are published; pick the one matching your wire format. Each carries the same 13-field shape (id, namespace, action_id/name, action_params, started_date, completion_date, model_id/type, event_type, payload, event_date, delivered) — only the encoding differs. See [Envelope timestamps](#envelope-timestamps) for how the three date fields are declared in each.
 
 | Module | Format | What's in it |
 |---|---|---|
@@ -183,6 +183,24 @@ The rule is that **the schema decides the type**, and a value that does not fit 
 | `decimal`, `timestamp-millis`/`-micros`, `date`, `uuid` | Handled as those types. A decimal too precise for the schema's scale fails rather than rounding silently |
 | Field absent from the JSON | Its schema default, or `DataException` if it has none |
 | Field present in the JSON but not in the schema | Dropped, with a WARN logged once - so an additive change to an event class cannot take the pipeline down, but the drift is visible |
+
+### Envelope timestamps
+
+`started_date`, `completion_date` and `event_date` are declared as **date types, not numbers**, in both binary formats:
+
+| Format | Declaration | What a consumer's generated code hands them |
+|---|---|---|
+| Avro | `{"type": "long", "logicalType": "timestamp-micros"}` | `java.time.Instant` |
+| Protobuf | `google.protobuf.Timestamp` | `Timestamp` (seconds + nanos) |
+| JSON | ISO-8601 string, via Jackson's default | a string you parse |
+
+This matters more than it looks. These fields used to be a bare `long` / `int64` counting microseconds, and a bare integer cannot say what it counts. A consumer reaching for the usual Java reflex — `Instant.ofEpochMilli(...)` — got a timestamp in the year 58535, with nothing anywhere raising an error; the reverse mistake lands three weeks after the epoch. The unit was recorded only in this document, so a correct consumer was one that happened to read it. Now the unit is part of the type, and the mistake cannot be expressed.
+
+Both are microsecond resolution, because that is what the source holds: `TIMESTAMP` on PostgreSQL and `DATETIME(6)` on MySQL and MariaDB are all six fractional digits. Protobuf's `Timestamp` has a nanosecond field, so its last three digits are always zero. Avro is deliberately **not** `timestamp-nanos`: that logical type only arrived in Avro 1.12, so consumers on 1.11 would silently fall back to a bare long — reintroducing the exact ambiguity — and it would advertise precision no supported database can store.
+
+> **Upgrading from `1.0.0-RC1` or earlier.** This is a breaking change to the published wire contract, taken deliberately before `1.0.0` froze it. Avro consumers are unaffected on the wire — a logical type annotates its underlying primitive, so the bytes are unchanged and an old schema still decodes them — but regenerating gives `Instant` where you had `long`. Protobuf consumers **must** regenerate: a message field is length-delimited where an `int64` is a varint, so old and new cannot read each other's bytes.
+
+Timestamps *inside* `payload` are a separate matter and were never ambiguous: Jackson 3 writes `java.time` values as ISO-8601 strings by default. If your application enables `WRITE_DATES_AS_TIMESTAMPS` on the `ObjectMapper` it hands to `ActionExecutor`, its payload timestamps become bare numbers again, with all of the ambiguity described above — the framework has no opinion there, and does not override the mapper you supply.
 
 ### Unwrapped records and `ExtractNewRecordState`
 

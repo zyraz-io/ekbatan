@@ -8,9 +8,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
+import org.apache.avro.data.TimeConversions;
+import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.io.DecoderFactory;
@@ -112,6 +116,76 @@ class OutboxToAvroTransformTest {
         assertThat(mysql).isEqualTo(postgres);
         assertThat(mysqlMillis).isEqualTo(postgres);
         assertThat(binaryUuid).isEqualTo(postgres);
+    }
+
+    /**
+     * The unit tripwire. These fields were once a bare {@code long}, and a long of microseconds is
+     * indistinguishable from a long of milliseconds: a consumer guessing wrong lands in the year
+     * 58535 or three weeks after the epoch, silently. Declaring the logical type moves the unit out
+     * of our prose and into the schema, where a consumer's code generator applies it for them.
+     *
+     * <p>Deliberately {@code timestamp-micros} and not {@code timestamp-nanos}: Avro only learned
+     * the nanosecond type in 1.12, so consumers on 1.11 would silently fall back to a bare long -
+     * reintroducing exactly this ambiguity - and the outbox columns are {@code TIMESTAMP} /
+     * {@code DATETIME(6)}, which hold no nanoseconds to carry.
+     */
+    @Test
+    void every_timestamp_field_declares_its_unit() {
+        for (var name : List.of("started_date", "completion_date", "event_date")) {
+            var field = actionEventSchema.getField(name);
+
+            assertThat(field.schema().getLogicalType())
+                    .as(
+                            "%s must declare its unit; a bare long cannot say whether it counts millis" + " or micros",
+                            name)
+                    .isEqualTo(LogicalTypes.timestampMicros());
+        }
+    }
+
+    /**
+     * That the declared unit and the written value agree. The declaration is worth nothing on its
+     * own - it would be actively harmful if the encoder wrote millis into a field advertising
+     * micros - so this reads the emitted bytes back through a conversion-aware reader, the way a
+     * consumer's generated class does, and compares against the instant that went in.
+     */
+    @Test
+    void a_consumer_applying_the_declared_unit_recovers_the_original_instant() throws Exception {
+        var transform = configuredTransform();
+        var model = new GenericData();
+        model.addLogicalTypeConversion(new TimeConversions.TimestampMicrosConversion());
+
+        var bytes = (byte[]) transform.apply(record(postgresRow())).value();
+        var record = (GenericRecord) new GenericDatumReader<>(actionEventSchema, actionEventSchema, model)
+                .read(null, DecoderFactory.get().binaryDecoder(bytes, null));
+
+        assertThat(record.get("started_date")).isEqualTo(WHEN);
+        assertThat(record.get("completion_date")).isEqualTo(WHEN);
+        assertThat(record.get("event_date")).isEqualTo(WHEN);
+    }
+
+    /**
+     * Declaring the unit was a free change on the wire, and this pins that so it stays free. A
+     * logical type annotates its underlying primitive rather than replacing it, so the bytes are
+     * those of a plain long and a consumer still holding the old schema keeps reading them.
+     *
+     * <p>Without this, a later "improvement" to a type that does change the encoding - a string, or
+     * a record of seconds and nanos - would break every deployed consumer with nothing to catch it.
+     */
+    @Test
+    void declaring_the_unit_did_not_change_the_bytes() throws Exception {
+        var transform = configuredTransform();
+        var beforeTheChange = new Schema.Parser()
+                .parse(Files.readString(actionEventSchemaPath)
+                        .replace("{\"type\": \"long\", \"logicalType\": \"timestamp-micros\"}", "\"long\""));
+
+        var bytes = (byte[]) transform.apply(record(postgresRow())).value();
+        var record = (GenericRecord) new GenericDatumReader<>(actionEventSchema, beforeTheChange)
+                .read(null, DecoderFactory.get().binaryDecoder(bytes, null));
+
+        assertThat(beforeTheChange.getField("started_date").schema().getLogicalType())
+                .as("the stand-in for the old schema must really be the un-annotated one")
+                .isNull();
+        assertThat(record.get("started_date")).isEqualTo(WHEN_MICROS);
     }
 
     /**
