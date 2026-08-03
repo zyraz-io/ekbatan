@@ -79,7 +79,7 @@ public final class JobRegistry {
         try {
             // ScheduledExecutionsFilter.all(), not the no-argument lookup: that one applies
             // .withPicked(false) and so hides an execution that is currently running. A job that
-            // fired in the moment between start() and this check would otherwise look
+            // fired at the moment between start() and this check would otherwise look
             // unregistered and take the application's startup down with it.
             missing = namesRequiringRegistration.stream()
                     .filter(name -> scheduler
@@ -271,7 +271,27 @@ public final class JobRegistry {
             Validate.notNull(connectionProvider, "connectionProvider is required");
             Validate.notEmpty(jobs, "at least one DistributedJob must be registered");
 
-            var names = jobs.stream().map(DistributedJob::name).toList();
+            // Each job is asked for its name exactly once, and that captured value is used for
+            // everything afterwards: the uniqueness check, the task registration, the
+            // registration check in start(), and every log line. name() is an ordinary method a
+            // user writes, and nothing obliges it to answer the same way twice - a name built
+            // from a date, a UUID, or a field the DI container has not injected yet will not.
+            // Asking repeatedly meant the row could be written under one name while the
+            // uniqueness check examined another and the logs reported a third, leaving nothing
+            // that mentions the job by the name it actually has in the database.
+            var names = jobs.stream()
+                    .map(job -> {
+                        var name = job.name();
+                        // The name is what would normally identify the offending job, and here it
+                        // is the broken thing - so the class is what the message can point at.
+                        Validate.notBlank(
+                                name,
+                                "DistributedJob %s returned a blank name(); the name is the row's"
+                                        + " primary key in scheduled_tasks",
+                                job.getClass().getName());
+                        return name;
+                    })
+                    .toList();
             Validate.isTrue(
                     names.size() == new HashSet<>(names).size(),
                     "DistributedJob names must be unique within a JobRegistry; got: %s",
@@ -281,7 +301,9 @@ public final class JobRegistry {
             // A disabled schedule is deliberately never written to scheduled_tasks, so its absence
             // after start() is correct - only the rest are expected to appear.
             List<String> namesRequiringRegistration = new ArrayList<>();
-            for (var job : jobs) {
+            for (var i = 0; i < jobs.size(); i++) {
+                final var job = jobs.get(i);
+                final var name = names.get(i);
                 // Asked once and checked here, because nothing downstream will. db-scheduler stores
                 // the schedule without looking at it, then dereferences it during start() - and
                 // Scheduler#executeOnStartup catches whatever that throws, logs one line and
@@ -289,19 +311,19 @@ public final class JobRegistry {
                 // simply never written to scheduled_tasks: nothing ever becomes due for it, so it
                 // never runs at all, while start() reports success and names it in the log.
                 var schedule = job.schedule();
-                Validate.notNull(schedule, "DistributedJob '%s' returned a null schedule()", job.name());
+                Validate.notNull(schedule, "DistributedJob '%s' returned a null schedule()", name);
                 if (!schedule.isDisabled()) {
-                    namesRequiringRegistration.add(job.name());
+                    namesRequiringRegistration.add(name);
                 }
-                tasks.add(Tasks.recurring(job.name(), schedule).execute((_, ctx) -> {
-                    LOG.info("Job '{}' execution started", job.name());
+                tasks.add(Tasks.recurring(name, schedule).execute((_, ctx) -> {
+                    LOG.info("Job '{}' execution started", name);
                     try {
                         job.execute(ctx);
-                        LOG.info("Job '{}' execution finished", job.name());
+                        LOG.info("Job '{}' execution finished", name);
                     } catch (RuntimeException re) {
                         LOG.error(
                                 "Job '{}' execution failed: {}: {}",
-                                job.name(),
+                                name,
                                 re.getClass().getSimpleName(),
                                 re.getMessage(),
                                 re);

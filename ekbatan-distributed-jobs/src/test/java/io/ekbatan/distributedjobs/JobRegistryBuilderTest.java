@@ -10,7 +10,10 @@ import com.github.kagkarlsson.scheduler.task.ExecutionContext;
 import com.github.kagkarlsson.scheduler.task.schedule.FixedDelay;
 import com.github.kagkarlsson.scheduler.task.schedule.Schedule;
 import io.ekbatan.core.persistence.ConnectionProvider;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class JobRegistryBuilderTest {
 
@@ -90,6 +93,53 @@ class JobRegistryBuilderTest {
             @Override
             public void execute(ExecutionContext ctx) {}
         };
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   ", "\t"})
+    void build_throws_whenAJobsNameIsBlank(String blank) {
+        assertThatThrownBy(() -> jobRegistry()
+                        .connectionProvider(fakeConnectionProvider())
+                        .withJob(noopJob(blank))
+                        .build())
+                // The name is normally what identifies the offending job in a message; when it is
+                // the broken thing, the class has to stand in for it.
+                .hasMessageContaining("returned a blank name()")
+                .hasMessageContaining("JobRegistryBuilderTest");
+    }
+
+    /**
+     * The name is asked for once and that value used everywhere. It used to be re-read at each of
+     * seven sites, so a name that answered differently each time could be registered under one
+     * value while the uniqueness check examined another and the logs reported a third.
+     */
+    @Test
+    void theNameIsReadOnlyOnce_soAnUnstableNameCannotDisagreeWithItself() {
+        var calls = new AtomicInteger();
+        var job = new DistributedJob() {
+            @Override
+            public String name() {
+                return "unstable-" + calls.incrementAndGet();
+            }
+
+            @Override
+            public Schedule schedule() {
+                return FixedDelay.ofMillis(100);
+            }
+
+            @Override
+            public void execute(ExecutionContext ctx) {}
+        };
+
+        jobRegistry()
+                .connectionProvider(fakeConnectionProvider())
+                .withJob(job)
+                .registerShutdownHook(false)
+                .build();
+
+        assertThat(calls.get())
+                .as("name() must be consulted exactly once per job during build()")
+                .isEqualTo(1);
     }
 
     private static DistributedJob noopJob(String name) {

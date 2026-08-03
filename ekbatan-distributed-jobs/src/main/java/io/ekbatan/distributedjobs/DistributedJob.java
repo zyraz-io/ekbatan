@@ -27,7 +27,22 @@ public abstract class DistributedJob {
     /** No-arg constructor for subclasses; instantiated by your DI framework or by the JobRegistry builder. */
     protected DistributedJob() {}
 
-    /** {@return cluster-wide unique identifier for this job; persisted in the {@code scheduled_tasks} table} */
+    /**
+     * {@return cluster-wide unique identifier for this job}
+     *
+     * <p>This is not a label. It is the primary key of the job's row in {@code scheduled_tasks},
+     * and it is how every instance in the cluster recognises a job as the same job - which is what
+     * stops five servers from each running the daily report.
+     *
+     * <p>It must therefore be <strong>non-blank</strong> and <strong>stable</strong>: the same
+     * value on every call, on every instance, and across restarts. A name derived from
+     * {@code UUID.randomUUID()}, from the current date, or from a field the DI container has not
+     * populated yet breaks that - each boot writes a fresh row, the previous one is orphaned, and
+     * the job never actually recurs.
+     *
+     * <p>{@code JobRegistry} asks for the name once and rejects a blank one at build time. It
+     * cannot check stability across restarts, so that part is on the implementation.
+     */
     public abstract String name();
 
     /** {@return when the job should run next; computed by db-scheduler from the previous execution} */
