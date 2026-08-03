@@ -169,6 +169,35 @@ Both:
 
 The integration tests under [`ekbatan-integration-tests/event-pipeline`](../../ekbatan-integration-tests/event-pipeline) (the `debezium-kafka-avro-smt` and `debezium-kafka-protobuf-smt` subprojects) wire up Debezium + Kafka + the SMT in TestContainers as a working reference, against PostgreSQL. `debezium-kafka-dialects-smt` runs the same pipeline against MySQL and MariaDB, writing through the real event persister so the dialect-specific column bindings are the ones under test.
 
+### SMT configuration
+
+Each transform takes four properties. The two schema properties are mandatory; the connector will not start without them.
+
+| Property | Avro | Protobuf | Default | Meaning |
+|---|---|---|---|---|
+| per-event-type schemas | `payloadSchemas` | `payloadDescriptors` | *(required)* | Comma-separated `EventType:/path/to/file` pairs — one per event type you publish. An event type with no entry raises `DataException`. |
+| envelope schema | `actionEventSchema` | `actionEventDescriptor` | *(required)* | Path to `ActionEvent.avsc`, or to the protobuf `.desc` descriptor set. |
+| `payload.field` | ✔ | ✔ | `payload` | Outbox **column** holding the JSON payload. |
+| `event.type.field` | ✔ | ✔ | `event_type` | Outbox **column** holding the event-type discriminator. |
+
+The transform class names are `io.ekbatan.events.streaming.debeziumsmt.avro.OutboxToAvroTransform` and `io.ekbatan.events.streaming.debeziumsmt.protobuf.OutboxToProtobufTransform`.
+
+```properties
+transforms=outbox
+transforms.outbox.type=io.ekbatan.events.streaming.debeziumsmt.avro.OutboxToAvroTransform
+transforms.outbox.actionEventSchema=/kafka/schemas/ActionEvent.avsc
+transforms.outbox.payloadSchemas=WalletCreatedEvent:/kafka/schemas/WalletCreatedEvent.avsc,\
+  WalletMoneyDepositedEvent:/kafka/schemas/WalletMoneyDepositedEvent.avsc
+
+# Mandatory. The SMT emits byte[]; every other converter rejects it.
+value.converter=org.apache.kafka.connect.converters.ByteArrayConverter
+key.converter=org.apache.kafka.connect.storage.StringConverter
+```
+
+Note the two naming styles: the schema properties are camelCase and the column properties are dotted. That is an inconsistency in the SMT's own `ConfigDef`, not a typo here.
+
+The SMT JARs are **not published to Maven Central** — Kafka Connect loads plugins from the filesystem. Build one with `./gradlew :ekbatan-events-streaming-debezium-smt-avro:shadowJar` and install it in **its own directory** under the worker's `plugin.path`. The separate directory matters: Connect gives each plugin directory its own classloader, which is what stops a plugin's bundled dependencies from colliding with anything else's. See the streaming module's `README.md` for the full install walkthrough.
+
 ### Payload encoding
 
 The `payload` column holds JSON, which the SMT re-encodes against the per-`event_type` schema you configure. Protobuf delegates this to `JsonFormat.parser()`; Avro has no equivalent, so `JsonToAvro` does it. (Avro's `DecoderFactory.jsonDecoder` is not that equivalent - it reads Avro's *own* JSON encoding, in which a union value must be tagged with its type, `{"amount":{"string":"77.10"}}`, rather than the plain form Jackson writes.)
