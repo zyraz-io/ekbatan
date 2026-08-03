@@ -184,6 +184,21 @@ The rule is that **the schema decides the type**, and a value that does not fit 
 | Field absent from the JSON | Its schema default, or `DataException` if it has none |
 | Field present in the JSON but not in the schema | Dropped, with a WARN logged once - so an additive change to an event class cannot take the pipeline down, but the drift is visible |
 
+### How to read the bytes
+
+| Format | Envelope | Payload |
+|---|---|---|
+| Avro | `ActionEvent.fromByteBuffer(value)` | `MyEvent.fromByteBuffer(event.getPayload())` |
+| Protobuf | `ActionEvent.parseFrom(value)` | `MyEvent.parseFrom(event.getPayload())` |
+
+In both formats the same call works at both levels, and in both it is the method the generated class already gives you — there is nothing to hand-roll.
+
+For Avro this is true because the SMT emits **single-object encoding**: a two-byte marker, the schema's 8-byte fingerprint, then the record. `fromByteBuffer` reads exactly that.
+
+> **Upgrading from `1.0.0-RC1` or earlier — Avro only.** The SMT previously emitted bare Avro binary with no framing, which `fromByteBuffer` cannot read at all; it fails with `BadHeaderException: Not enough header bytes`. Anyone who worked around that by hand-rolling a `SpecificDatumReader` over a `binaryDecoder` should now delete that code and call `fromByteBuffer`. Messages gain 10 bytes each. Protobuf is unaffected — `parseFrom` always worked.
+
+The fingerprint is a bonus worth knowing about: it identifies *which* schema wrote each message, so a consumer holding several versions can resolve the right one via a `SchemaStore` rather than guessing. Note that Avro's parsing canonical form ignores logical types, so the `timestamp-micros` declaration above does not change the fingerprint and does not divide old readers from new.
+
 ### Envelope timestamps
 
 `started_date`, `completion_date` and `event_date` are declared as **date types, not numbers**, in both binary formats:

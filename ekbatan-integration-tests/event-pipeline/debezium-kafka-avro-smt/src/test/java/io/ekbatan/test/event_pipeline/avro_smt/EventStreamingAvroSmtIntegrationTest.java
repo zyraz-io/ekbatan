@@ -28,8 +28,6 @@ import java.sql.DriverManager;
 import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
-import org.apache.avro.io.DecoderFactory;
-import org.apache.avro.specific.SpecificDatumReader;
 import org.jooq.SQLDialect;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -182,6 +180,20 @@ class EventStreamingAvroSmtIntegrationTest {
         assertThat(event.getModelId()).isNotNull();
     }
 
+    /**
+     * The only end-to-end coverage of a {@code decimal} payload field, which is what money is.
+     *
+     * <p>{@code WalletMoneyDepositedEvent.avsc} declares {@code amount} as a decimal because the
+     * event carries a {@link BigDecimal} and Jackson writes that as a JSON <em>number</em>. It used
+     * to declare a {@code string}, which had never been right - the old lenient JSON-to-Avro
+     * converter simply called {@code asText()} on the number and the mismatch stayed invisible.
+     * Once the converter was made strict ("the schema decides the type, and a value that does not
+     * fit fails"), it correctly refused to encode, the payload never reached Kafka, and this test
+     * sat on its 31-second timeout - looking like a broken pipeline rather than a wrong fixture.
+     *
+     * <p>So do not "simplify" this field back to a string: it would encode by accident, and it would
+     * take the framework's only e2e decimal coverage with it.
+     */
     @Test
     void wallet_deposit_event_is_fully_avro_encoded() throws Exception {
         var consumer = new AvroRetryingEventConsumer(
@@ -201,7 +213,7 @@ class EventStreamingAvroSmtIntegrationTest {
         var deposit = consumer.getHandled().getFirst();
         var event = decode(deposit.getPayload().array(), WalletMoneyDepositedEvent.class);
         assertThat(event.getModelName()).isEqualTo("Wallet");
-        assertThat(new BigDecimal(event.getAmount())).isEqualByComparingTo(new BigDecimal("123.45"));
+        assertThat(event.getAmount()).isEqualByComparingTo(new BigDecimal("123.45"));
     }
 
     @Test
@@ -243,11 +255,18 @@ class EventStreamingAvroSmtIntegrationTest {
         }
     }
 
+    /**
+     * Decodes a payload through the generated class's own {@code fromByteBuffer}, reached
+     * reflectively because the payload type varies per test.
+     *
+     * <p>Both the envelope and the payload carry Avro's single-object framing, so a consumer makes
+     * the same call at both levels. Reading either with a bare {@code binaryDecoder} - as this did -
+     * only ever confirmed that the SMT agreed with itself.
+     */
     private static <T> T decode(byte[] avroBytes, Class<T> avroClass) {
         try {
-            var reader = new SpecificDatumReader<T>(avroClass);
-            var decoder = DecoderFactory.get().binaryDecoder(avroBytes, null);
-            return reader.read(null, decoder);
+            var fromByteBuffer = avroClass.getMethod("fromByteBuffer", java.nio.ByteBuffer.class);
+            return avroClass.cast(fromByteBuffer.invoke(null, java.nio.ByteBuffer.wrap(avroBytes)));
         } catch (Exception e) {
             throw new RuntimeException("Failed to decode Avro bytes for " + avroClass.getSimpleName(), e);
         }

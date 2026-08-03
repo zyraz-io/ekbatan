@@ -15,9 +15,8 @@ import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.avro.data.TimeConversions;
 import org.apache.avro.generic.GenericData;
-import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericRecord;
-import org.apache.avro.io.DecoderFactory;
+import org.apache.avro.message.BinaryMessageDecoder;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.DataException;
@@ -119,6 +118,63 @@ class OutboxToAvroTransformTest {
     }
 
     /**
+     * The contract test that was missing, and whose absence hid a defect for the life of the module.
+     *
+     * <p>Avro's generator puts {@code fromByteBuffer} on every generated class, so this is the first
+     * thing a consumer holding {@code ekbatan-action-event-avro} will call. It reads only Avro's
+     * single-object encoding, and this SMT used to emit the bare binary form - so the reader we
+     * published could not read a single message we sent, failing with {@code BadHeaderException}.
+     *
+     * <p>Nothing caught it because all seven decode sites in this repository used
+     * {@code binaryDecoder} directly. That mirrors the encoder, so it can only ever confirm that the
+     * implementation agrees with itself. This test deliberately goes through the <em>published</em>
+     * class instead, which is the only thing a consumer actually experiences.
+     */
+    @Test
+    void the_published_consumer_api_can_read_what_this_smt_emits() throws Exception {
+        var transform = configuredTransform();
+
+        var bytes = (byte[]) transform.apply(record(postgresRow())).value();
+        // Precisely what the generated class does: its fromByteBuffer delegates to a
+        // BinaryMessageDecoder built from this same schema. The generated class cannot be depended
+        // on from here - it targets Java 25 while this module targets 21 for the Connect worker - so
+        // AvroRetryingEventConsumer calls fromByteBuffer for real and this covers the path cheaply.
+        var event = new BinaryMessageDecoder<GenericRecord>(GenericData.get(), actionEventSchema).decode(bytes);
+
+        assertThat(text(event, "id")).isEqualTo(EVENT_ID.toString());
+        assertThat(text(event, "event_type")).isEqualTo("TestEvent");
+        assertThat(event.get("started_date")).isEqualTo(WHEN_MICROS);
+        assertThat(event.get("delivered")).isEqualTo(false);
+    }
+
+    /**
+     * The same guarantee one level down. {@code payload} is encoded by the very same method, so
+     * framing only the envelope would have left an identical trap for the consumer's second call -
+     * exactly the mistake of fixing a defect in one layer and leaving it in the next.
+     */
+    @Test
+    void the_payload_is_framed_the_same_way_as_the_envelope() throws Exception {
+        var transform = configuredTransform();
+
+        var bytes = (byte[]) transform.apply(record(postgresRow())).value();
+        var event = new BinaryMessageDecoder<GenericRecord>(GenericData.get(), actionEventSchema).decode(bytes);
+        var payload = (ByteBuffer) event.get("payload");
+
+        assertThat(payload).isNotNull();
+        // The two-byte marker Avro's single-object encoding puts in front of every message.
+        assertThat(payload.get(payload.position())).isEqualTo((byte) 0xC3);
+        assertThat(payload.get(payload.position() + 1)).isEqualTo((byte) 0x01);
+
+        // ...and it really decodes as such, rather than merely starting with the right two bytes.
+        var payloadBytes = new byte[payload.remaining()];
+        payload.duplicate().get(payloadBytes);
+        var decoded = new BinaryMessageDecoder<GenericRecord>(
+                        GenericData.get(), new Schema.Parser().parse(Files.readString(lastPayloadSchema)))
+                .decode(payloadBytes);
+        assertThat(decoded.get("name").toString()).isEqualTo("Ada");
+    }
+
+    /**
      * The unit tripwire. These fields were once a bare {@code long}, and a long of microseconds is
      * indistinguishable from a long of milliseconds: a consumer guessing wrong lands in the year
      * 58535 or three weeks after the epoch, silently. Declaring the logical type moves the unit out
@@ -155,8 +211,7 @@ class OutboxToAvroTransformTest {
         model.addLogicalTypeConversion(new TimeConversions.TimestampMicrosConversion());
 
         var bytes = (byte[]) transform.apply(record(postgresRow())).value();
-        var record = (GenericRecord) new GenericDatumReader<>(actionEventSchema, actionEventSchema, model)
-                .read(null, DecoderFactory.get().binaryDecoder(bytes, null));
+        var record = new BinaryMessageDecoder<GenericRecord>(model, actionEventSchema).decode(bytes);
 
         assertThat(record.get("started_date")).isEqualTo(WHEN);
         assertThat(record.get("completion_date")).isEqualTo(WHEN);
@@ -179,8 +234,10 @@ class OutboxToAvroTransformTest {
                         .replace("{\"type\": \"long\", \"logicalType\": \"timestamp-micros\"}", "\"long\""));
 
         var bytes = (byte[]) transform.apply(record(postgresRow())).value();
-        var record = (GenericRecord) new GenericDatumReader<>(actionEventSchema, beforeTheChange)
-                .read(null, DecoderFactory.get().binaryDecoder(bytes, null));
+        // A decoder built from the OLD schema, reading bytes written with the new one. Avro's
+        // parsing canonical form strips logical types, so both schemas fingerprint identically and
+        // the framed message resolves against either.
+        var record = new BinaryMessageDecoder<GenericRecord>(GenericData.get(), beforeTheChange).decode(bytes);
 
         assertThat(beforeTheChange.getField("started_date").schema().getLogicalType())
                 .as("the stand-in for the old schema must really be the un-annotated one")
@@ -268,8 +325,10 @@ class OutboxToAvroTransformTest {
         var payloadSchema = new org.apache.avro.Schema.Parser().parse(Files.readString(lastPayloadSchema));
 
         var envelope = decode(transform.apply(record(postgresRow())));
-        var payload = new GenericDatumReader<GenericRecord>(payloadSchema)
-                .read(null, DecoderFactory.get().binaryDecoder(((ByteBuffer) envelope.get("payload")).array(), null));
+        var payloadBuffer = (ByteBuffer) envelope.get("payload");
+        var payloadBytes = new byte[payloadBuffer.remaining()];
+        payloadBuffer.duplicate().get(payloadBytes);
+        var payload = new BinaryMessageDecoder<GenericRecord>(GenericData.get(), payloadSchema).decode(payloadBytes);
 
         assertThat(payload.get("name").toString()).isEqualTo("Ada");
         assertThat(payload.get("at")).isEqualTo(WHEN.toEpochMilli());
@@ -490,11 +549,16 @@ class OutboxToAvroTransformTest {
         return transform;
     }
 
+    /**
+     * Decodes through Avro's single-object framing, which is what this SMT emits and what the
+     * generated {@code ActionEvent.fromByteBuffer} expects. This helper used to call
+     * {@code binaryDecoder} directly - the encoder's mirror image - so it agreed with the SMT no
+     * matter what either of them did, and never noticed the published reader could not.
+     */
     private static GenericRecord decode(SourceRecord transformed) throws Exception {
         assertThat(transformed).isNotNull();
-        var reader = new GenericDatumReader<GenericRecord>(actionEventSchema);
-        var decoder = DecoderFactory.get().binaryDecoder((byte[]) transformed.value(), null);
-        return reader.read(null, decoder);
+        return new BinaryMessageDecoder<GenericRecord>(GenericData.get(), actionEventSchema)
+                .decode((byte[]) transformed.value());
     }
 
     private static String text(GenericRecord record, String field) {

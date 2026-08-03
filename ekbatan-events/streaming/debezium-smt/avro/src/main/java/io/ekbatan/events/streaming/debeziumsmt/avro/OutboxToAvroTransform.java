@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.ekbatan.events.streaming.debeziumsmt.common.ActionEventFields;
 import io.ekbatan.events.streaming.debeziumsmt.common.OutboxColumns;
 import io.ekbatan.events.streaming.debeziumsmt.common.OutboxRecords;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,9 +13,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
-import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.generic.GenericRecord;
-import org.apache.avro.io.EncoderFactory;
+import org.apache.avro.message.BinaryMessageEncoder;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.data.Struct;
@@ -83,6 +81,10 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
     private final Set<String> warnedDroppedSchemas = ConcurrentHashMap.newKeySet();
 
     private final Map<String, Schema> schemasByEventType = new HashMap<>();
+
+    /** One encoder per schema - constructing one fingerprints the schema. See {@link #writeBinary}. */
+    private final Map<Schema, BinaryMessageEncoder<GenericRecord>> encoders = new ConcurrentHashMap<>();
+
     private Schema actionEventSchema;
     private String payloadField;
     private String eventTypeField;
@@ -245,12 +247,34 @@ public class OutboxToAvroTransform<R extends ConnectRecord<R>> implements Transf
         return ActionEventFields.EVENT_TYPE_FIELD.equals(actionEventFieldName) ? eventTypeField : actionEventFieldName;
     }
 
-    private static byte[] writeBinary(Schema schema, GenericRecord record) throws IOException {
-        var out = new ByteArrayOutputStream();
-        var encoder = EncoderFactory.get().binaryEncoder(out, null);
-        new GenericDatumWriter<GenericRecord>(schema).write(record, encoder);
-        encoder.flush();
-        return out.toByteArray();
+    /**
+     * Encodes a record in Avro's <em>single-object encoding</em>: a two-byte marker, the schema's
+     * 8-byte fingerprint, then the record's binary form.
+     *
+     * <p>This used to write the bare binary form, which nothing published could read. Avro's code
+     * generator puts {@code fromByteBuffer} on every generated class, so a consumer holding our
+     * {@code ekbatan-action-event-avro} jar reaches for it first - and it speaks only this framed
+     * form, failing on unframed bytes with {@code BadHeaderException: Not enough header bytes}. The
+     * reader we shipped could not read the messages we sent, and no test noticed because every
+     * decode site in this repository used {@code binaryDecoder} directly, mirroring the encoder
+     * rather than exercising the published contract.
+     *
+     * <p>Deliberately the one method behind both the envelope and the payload, so a consumer can use
+     * the same call at both levels - {@code ActionEvent.fromByteBuffer(value)} and then
+     * {@code MyEvent.fromByteBuffer(event.getPayload())}. Framing only the envelope would have left
+     * the identical trap one level down.
+     *
+     * <p>The fingerprint is the reason to cache an encoder per schema: constructing one hashes the
+     * schema's canonical form, which is far too costly to repeat per record.
+     */
+    private byte[] writeBinary(Schema schema, GenericRecord record) throws IOException {
+        var buffer = encoders.computeIfAbsent(schema, s -> new BinaryMessageEncoder<>(GenericData.get(), s))
+                .encode(record);
+        // encode() hands back a buffer whose backing array may be larger than the message, so copy
+        // out what is actually between position and limit rather than calling array().
+        var bytes = new byte[buffer.remaining()];
+        buffer.get(bytes);
+        return bytes;
     }
 
     @Override
