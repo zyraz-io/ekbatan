@@ -29,14 +29,14 @@ repositories {
 dependencies {
     // (2) The starter — pulls ekbatan-core, the local event handler,
     // and distributed jobs transitively.
-    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-spring-boot-starter:1.0.0")
     // Programmatic shard-aware Flyway migration from ekbatan.sharding.*.
-    implementation("io.github.zyraz-io:ekbatan-flyway:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:1.0.0")
 
     // (3) @AutoBuilder is compile-time only: compileOnly exposes the annotation to javac,
     // annotationProcessor runs the processor that emits *Builder.java.
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:1.0.0")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:1.0.0")
+    compileOnly("io.github.ekbatan-io:ekbatan-annotation-processor:1.0.0")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-annotation-processor:1.0.0")
 
     implementation("org.springframework.boot:spring-boot-starter-web")
 
@@ -81,13 +81,13 @@ dependencies {
 
     // (2) The Quarkus extension — pulls ekbatan-core + the local-event-handler +
     // distributed-jobs transitively.
-    implementation("io.github.zyraz-io:ekbatan-quarkus:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-quarkus:1.0.0")
     // Programmatic shard-aware Flyway migration from ekbatan.sharding.*.
-    implementation("io.github.zyraz-io:ekbatan-flyway:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:1.0.0")
 
     // (3) @AutoBuilder is compile-time only: compileOnly + annotationProcessor.
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:1.0.0")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:1.0.0")
+    compileOnly("io.github.ekbatan-io:ekbatan-annotation-processor:1.0.0")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-annotation-processor:1.0.0")
 
     implementation("io.quarkus:quarkus-rest")
     implementation("io.quarkus:quarkus-rest-jackson")
@@ -140,18 +140,18 @@ micronaut {
 
 dependencies {
     // (2) The integration jar — pulls ekbatan-core + handlers + jobs transitively.
-    implementation("io.github.zyraz-io:ekbatan-micronaut:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-micronaut:1.0.0")
     // Programmatic shard-aware Flyway migration from ekbatan.sharding.*.
-    implementation("io.github.zyraz-io:ekbatan-flyway:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:1.0.0")
     // (5) REQUIRED on Micronaut: the EkbatanStereotypeVisitor lives in ekbatan-micronaut
     // and must be on the annotationProcessor classpath so it sees @EkbatanAction etc.
     // during *your* compile. Without this, no BeanDefinition is generated for your
     // annotated classes and Micronaut treats them as plain non-beans at runtime.
-    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:1.0.0")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-micronaut:1.0.0")
 
     // (3) @AutoBuilder is compile-time only: compileOnly + annotationProcessor.
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:1.0.0")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:1.0.0")
+    compileOnly("io.github.ekbatan-io:ekbatan-annotation-processor:1.0.0")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-annotation-processor:1.0.0")
 
     implementation("io.micronaut:micronaut-jackson-databind")
 
@@ -184,21 +184,21 @@ repositories {
 
 dependencies {
     // ── Required ────────────────────────────────────────────────────────────
-    implementation("io.github.zyraz-io:ekbatan-core:1.0.0")
-    implementation("io.github.zyraz-io:ekbatan-flyway:1.0.0") // FlywayMigrator
+    implementation("io.github.ekbatan-io:ekbatan-core:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:1.0.0") // FlywayMigrator
 
     // ── Optional capabilities — add only what you need ──────────────────────
 
     // @AutoBuilder code generation — generates *Builder classes for Models/Entities.
     // Skip if you'd rather write the builders by hand.
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:1.0.0")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:1.0.0")
+    compileOnly("io.github.ekbatan-io:ekbatan-annotation-processor:1.0.0")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-annotation-processor:1.0.0")
 
     // In-process event handlers (fan-out + handling jobs over the eventlog).
-    implementation("io.github.zyraz-io:ekbatan-local-event-handler:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-local-event-handler:1.0.0")
 
     // Distributed background jobs (db-scheduler facade; cluster-exclusive scheduling).
-    implementation("io.github.zyraz-io:ekbatan-distributed-jobs:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-distributed-jobs:1.0.0")
 
     implementation("org.flywaydb:flyway-core:12.0.0")
     implementation("org.flywaydb:flyway-database-postgresql:12.0.0")
@@ -229,10 +229,10 @@ Quarkus' BOM doesn't pin jOOQ, but the codegen plugin's default version may not 
 
 | Stack | Coordinate | Pulls transitively |
 |---|---|---|
-| Spring Boot | `io.github.zyraz-io:ekbatan-spring-boot-starter` | `ekbatan-core`, `ekbatan-local-event-handler`, `ekbatan-distributed-jobs` |
-| Quarkus | `io.github.zyraz-io:ekbatan-quarkus` | same set |
-| Micronaut | `io.github.zyraz-io:ekbatan-micronaut` | same set |
-| Plain Java | `io.github.zyraz-io:ekbatan-core` (+ each optional module explicitly) | nothing transitively — see below |
+| Spring Boot | `io.github.ekbatan-io:ekbatan-spring-boot-starter` | `ekbatan-core`, `ekbatan-local-event-handler`, `ekbatan-distributed-jobs` |
+| Quarkus | `io.github.ekbatan-io:ekbatan-quarkus` | same set |
+| Micronaut | `io.github.ekbatan-io:ekbatan-micronaut` | same set |
+| Plain Java | `io.github.ekbatan-io:ekbatan-core` (+ each optional module explicitly) | nothing transitively — see below |
 
 The four `@Ekbatan*` annotations (`@EkbatanAction`, `@EkbatanRepository`, `@EkbatanEventHandler`, `@EkbatanDistributedJob`) live in `ekbatan-di-annotations` and come with the integration jars. You don't add them explicitly.
 
@@ -242,10 +242,10 @@ The four `@Ekbatan*` annotations (`@EkbatanAction`, `@EkbatanRepository`, `@Ekba
 
 ```kotlin
 // compile classpath only — so javac sees @AutoBuilder without adding the jar at runtime
-compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:1.0.0")
+compileOnly("io.github.ekbatan-io:ekbatan-annotation-processor:1.0.0")
 
 // annotation processor classpath — so the processor actually runs and emits *Builder.java
-annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:1.0.0")
+annotationProcessor("io.github.ekbatan-io:ekbatan-annotation-processor:1.0.0")
 ```
 
 This isn't redundant — `annotationProcessor` is isolated from the main compile classpath. Dropping one or the other breaks differently:
@@ -273,7 +273,7 @@ Same requirement applies on Maven (`<parameters>true</parameters>` under `maven-
 
 This one bites. The `ekbatan-micronaut` jar ships an `EkbatanStereotypeVisitor` that hooks into Micronaut's compile-time annotation processor and lifts your `@Ekbatan*`-annotated classes to `@Singleton`. **The visitor only runs on classes compiled with the jar on the annotation-processor classpath.**
 
-If you only have `implementation("io.github.zyraz-io:ekbatan-micronaut:…")` and forget the `annotationProcessor` line:
+If you only have `implementation("io.github.ekbatan-io:ekbatan-micronaut:…")` and forget the `annotationProcessor` line:
 
 - Build succeeds.
 - Runtime: Micronaut finds no `BeanDefinition` for your `@EkbatanAction` / `@EkbatanRepository` / `@EkbatanEventHandler` / `@EkbatanDistributedJob` classes.
@@ -287,22 +287,22 @@ The DI integration dependencies pull the common runtime modules such as the loca
 
 ```kotlin
 // Programmatic Flyway migration from one DataSource or every primary shard in ShardingConfig.
-implementation("io.github.zyraz-io:ekbatan-flyway:1.0.0")
+implementation("io.github.ekbatan-io:ekbatan-flyway:1.0.0")
 
 // Redis-backed distributed KeyedLockProvider (Redisson under the hood).
-implementation("io.github.zyraz-io:ekbatan-keyed-lock-redis:1.0.0")
+implementation("io.github.ekbatan-io:ekbatan-keyed-lock-redis:1.0.0")
 
 // GraalVM native-image Features (auto-loaded; include only if you build native binaries).
-implementation("io.github.zyraz-io:ekbatan-native:1.0.0")
+implementation("io.github.ekbatan-io:ekbatan-native:1.0.0")
 
 // ActionSpec, ActionAssert, VirtualClock, and classpath-resource Testcontainers helpers.
-testImplementation("io.github.zyraz-io:ekbatan-test-support:1.0.0")
+testImplementation("io.github.ekbatan-io:ekbatan-test-support:1.0.0")
 
 // Wire-format DTOs for Kafka consumer apps reading from the eventlog. Pick the one
 // matching your Kafka serializer; NOT needed in the producer app itself.
-implementation("io.github.zyraz-io:ekbatan-action-event-json:1.0.0")
-implementation("io.github.zyraz-io:ekbatan-action-event-avro:1.0.0")
-implementation("io.github.zyraz-io:ekbatan-action-event-protobuf:1.0.0")
+implementation("io.github.ekbatan-io:ekbatan-action-event-json:1.0.0")
+implementation("io.github.ekbatan-io:ekbatan-action-event-avro:1.0.0")
+implementation("io.github.ekbatan-io:ekbatan-action-event-protobuf:1.0.0")
 ```
 
 The wire-format jars are tagged "not needed in the producer app" because the framework writes events to the outbox using its own internal payload format — the wire-format DTOs are POJOs you deserialize *back into* on the consumer side (whatever app reads Kafka or polls the eventlog from outside the producing JVM).

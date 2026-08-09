@@ -19,7 +19,7 @@ The GraalVM native-image variant of [`spring-boot-wallet-rest-gradle-pg`](../spr
 ## What this project adds on top of the JVM sibling
 
 - **`org.graalvm.buildtools.native` Gradle plugin** — provides `nativeCompile` / `nativeRun` / `nativeTest`. The Spring Boot plugin auto-applies its AOT integration once this is on the classpath.
-- **`io.github.zyraz-io:ekbatan-native` dependency** — ships GraalVM Features (Jackson 3 record reflection, generated builder/jOOQ metadata, HikariCP metadata, etc.) that auto-apply when native-image runs.
+- **`io.github.ekbatan-io:ekbatan-native` dependency** — ships GraalVM Features (Jackson 3 record reflection, generated builder/jOOQ metadata, HikariCP metadata, etc.) that auto-apply when native-image runs.
 - **Spring Boot Flyway stays in charge** — the app uses `spring-boot-starter-flyway` and a `@FlywayDataSource` bean, not raw programmatic Flyway. The bean is built from `ekbatan.sharding.*`, so runtime pools and Flyway still share one database config source.
 - **`graalvmNative { ... }` block** — requires a Java 25 toolchain that can run `native-image` (auto-detected from SDKMAN/asdf/system installs via Gradle's `javaToolchains`), bundles `db/migration/*.sql` into the image, enables the published reachability-metadata repository, and tells `Jackson3RecordsFeature` to scan `io.example` (in addition to its default `io.ekbatan` scan root) so record components for our `Action.Params` records are reflectively registered.
 

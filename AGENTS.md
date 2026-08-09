@@ -1062,7 +1062,7 @@ All Maven wallet examples consume Ekbatan from Maven Central and use the `fabric
 
 ## Release & Publishing
 
-Ekbatan is published on Maven Central under groupId `io.github.zyraz-io`. Note that Maven groupId and Java package names are deliberately not aligned — source imports remain `io.ekbatan.*` while the published coordinate is `io.github.zyraz-io:*`. This split is normal practice (Picocli ships as `info.picocli` with `picocli.*` packages, Lombok as `org.projectlombok` with `lombok.*`).
+Ekbatan is published on Maven Central under groupId `io.github.ekbatan-io`. Note that Maven groupId and Java package names are deliberately not aligned — source imports remain `io.ekbatan.*` while the published coordinate is `io.github.ekbatan-io:*`. This split is normal practice (Picocli ships as `info.picocli` with `picocli.*` packages, Lombok as `org.projectlombok` with `lombok.*`).
 
 Full release procedure — one-time Sonatype/GPG setup, per-release workflow, troubleshooting, GPG keyring recovery — lives in [RELEASE.md](./RELEASE.md). Load-bearing facts for agents working in the codebase:
 

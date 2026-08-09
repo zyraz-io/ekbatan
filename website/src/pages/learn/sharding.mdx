@@ -218,7 +218,7 @@ var config = ExecutionConfiguration.Builder.executionConfiguration()
 executor.execute(principal, WalletTransferAction.class, params, config);
 ```
 
-**Watch the consistency model carefully**: per-shard atomicity, NOT global atomicity. The source-shard transaction can commit while the destination-shard one rolls back. For real transfers, use a [saga](/learn/sagas/) — split into `InitiateTransferAction` (source only) + `CompleteTransferAction` (dest only), chained by `@EkbatanEventHandler`, with `RefundTransferAction` as compensation if the dest leg fails. The runnable example: [`ekbatan-examples/spring-boot-wallet-saga-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-saga-gradle-pg).
+**Watch the consistency model carefully**: per-shard atomicity, NOT global atomicity. The source-shard transaction can commit while the destination-shard one rolls back. For real transfers, use a [saga](/learn/sagas/) — split into `InitiateTransferAction` (source only) + `CompleteTransferAction` (dest only), chained by `@EkbatanEventHandler`, with `RefundTransferAction` as compensation if the dest leg fails. The runnable example: [`ekbatan-examples/spring-boot-wallet-saga-gradle-pg`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-saga-gradle-pg).
 
 ## What just happened
 
@@ -238,5 +238,5 @@ executor.execute(principal, WalletTransferAction.class, params, config);
 - [Learn → Sharding strategies](/learn/sharding-strategies/) — the conceptual model behind the two axes and the three strategies
 - [Reference → Sharding](/reference/sharding/) — `ShardedUUID` bit layout, `DatabaseRegistry.effectiveShard`, `ShardingStrategy` API, declarative config
 - [Reference → Multi-database](/reference/multi-database/) — dialect-specific column types and converters
-- [`ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) — the runnable two-shard wallet this lesson is distilled from
-- [`ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg) — the same two-shard wallet with native-image test coverage
+- [`ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) — the runnable two-shard wallet this lesson is distilled from
+- [`ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg) — the same two-shard wallet with native-image test coverage

@@ -45,10 +45,10 @@ dependencies {
     // `:di:shared`'s full transitive graph as-is — these excludes are scoped to the Quarkus
     // consumer only.
     implementation(project(":ekbatan-integration-tests-di-shared")) {
-        exclude(group = "io.github.zyraz-io", module = "ekbatan-core")
-        exclude(group = "io.github.zyraz-io", module = "ekbatan-di-annotations")
-        exclude(group = "io.github.zyraz-io", module = "ekbatan-events-local-event-handler")
-        exclude(group = "io.github.zyraz-io", module = "ekbatan-distributed-jobs")
+        exclude(group = "io.github.ekbatan-io", module = "ekbatan-core")
+        exclude(group = "io.github.ekbatan-io", module = "ekbatan-di-annotations")
+        exclude(group = "io.github.ekbatan-io", module = "ekbatan-events-local-event-handler")
+        exclude(group = "io.github.ekbatan-io", module = "ekbatan-distributed-jobs")
     }
     // All Ekbatan internal modules + jOOQ + Jackson + JDBC etc. come transitively via this
     // jar's `api()` graph (the extension is the single source of truth for those deps; the

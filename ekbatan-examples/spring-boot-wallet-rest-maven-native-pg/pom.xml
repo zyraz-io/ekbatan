@@ -74,19 +74,19 @@
         <!-- The Spring Boot starter pulls ekbatan-core, the local-event-handler,
              and distributed-jobs transitively. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-spring-boot-starter</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-flyway</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <!-- @AutoBuilder is compile-time only: provided lets javac see the annotation;
              annotationProcessorPaths runs the processor below. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
             <scope>provided</scope>
@@ -95,7 +95,7 @@
         <!-- Native-image extras: ships GraalVM Features (Jackson 3 records, builders,
              generated jOOQ classes, etc.) plus HikariCP reachability metadata. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-native</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
@@ -200,7 +200,7 @@
                     <parameters>true</parameters>
                     <annotationProcessorPaths>
                         <path>
-                            <groupId>io.github.zyraz-io</groupId>
+                            <groupId>io.github.ekbatan-io</groupId>
                             <artifactId>ekbatan-annotation-processor</artifactId>
                             <version>${ekbatan.version}</version>
                         </path>

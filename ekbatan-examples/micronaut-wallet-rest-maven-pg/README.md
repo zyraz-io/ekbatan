@@ -28,12 +28,12 @@ The Micronaut parent POM already pre-configures `maven-compiler-plugin` with `mi
 ```xml
 <annotationProcessorPaths combine.children="append">
     <path>
-        <groupId>io.github.zyraz-io</groupId>
+        <groupId>io.github.ekbatan-io</groupId>
         <artifactId>ekbatan-annotation-processor</artifactId>
         <version>${ekbatan.version}</version>
     </path>
     <path>
-        <groupId>io.github.zyraz-io</groupId>
+        <groupId>io.github.ekbatan-io</groupId>
         <artifactId>ekbatan-micronaut</artifactId>
         <version>${ekbatan.version}</version>
     </path>

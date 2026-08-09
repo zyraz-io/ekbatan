@@ -208,4 +208,4 @@ It also does not try to be a CQRS framework, a saga orchestrator, an event store
 
 **Where to read next.**
 
-The code is at [github.com/zyraz-io/ekbatan](https://github.com/zyraz-io/ekbatan). For most readers, the better place to start is the website at [zyraz-io.github.io/ekbatan](https://zyraz-io.github.io/ekbatan/). It has the concepts written out in full, a getting-started tutorial with a stack picker that gives matching snippets for Spring, Quarkus, or Micronaut on Gradle or Maven, runnable examples for every combination of framework and database, and the API reference. Apache 2.0.
+The code is at [github.com/ekbatan-io/ekbatan](https://github.com/ekbatan-io/ekbatan). For most readers, the better place to start is the website at [ekbatan-io.github.io/ekbatan](https://ekbatan-io.github.io/ekbatan/). It has the concepts written out in full, a getting-started tutorial with a stack picker that gives matching snippets for Spring, Quarkus, or Micronaut on Gradle or Maven, runnable examples for every combination of framework and database, and the API reference. Apache 2.0.

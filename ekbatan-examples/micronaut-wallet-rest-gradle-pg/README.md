@@ -24,7 +24,7 @@ The framework is framework-agnostic; only the wiring surface differs.
 - **`@Context` over `@Singleton`** for `FlywayConfiguration` — `@Context` makes the bean eagerly initialized at context build time, which means migrations run before any `StartupEvent` listener fires (and the framework's `JobRegistry` starts on `StartupEvent`, so `scheduled_tasks` is already there when db-scheduler polls).
 - **`@MicronautTest` + `TestPropertyProvider`** for the integration test — the property provider runs *before* the application context is built, so Testcontainers comes up first and the dynamic JDBC URL lands in `ekbatan.sharding.*` before any Ekbatan bean reads it.
 - **`driverClassName` is set explicitly** in `application.yml` — Micronaut's Hikari init in this combo doesn't always pick the Postgres driver via the JDBC SPI when launched from the Gradle test worker.
-- **Compile-time bean lifting** — Ekbatan's `EkbatanStereotypeVisitor` (loaded via `annotationProcessor("io.github.zyraz-io:ekbatan-micronaut")`) lifts every `@EkbatanAction` / `@EkbatanRepository` / `@EkbatanEventHandler` to `@Singleton` so Micronaut emits `BeanDefinition`s for them at AOT time. Without this AP entry, the annotated classes never become beans.
+- **Compile-time bean lifting** — Ekbatan's `EkbatanStereotypeVisitor` (loaded via `annotationProcessor("io.github.ekbatan-io:ekbatan-micronaut")`) lifts every `@EkbatanAction` / `@EkbatanRepository` / `@EkbatanEventHandler` to `@Singleton` so Micronaut emits `BeanDefinition`s for them at AOT time. Without this AP entry, the annotated classes never become beans.
 
 ## Run locally
 

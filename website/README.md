@@ -1,6 +1,6 @@
 # Ekbatan website
 
-The marketing + docs site for [Ekbatan](https://github.com/zyraz-io/ekbatan). Built with [Astro](https://astro.build) + MDX.
+The marketing + docs site for [Ekbatan](https://github.com/ekbatan-io/ekbatan). Built with [Astro](https://astro.build) + MDX.
 
 ## Information architecture
 

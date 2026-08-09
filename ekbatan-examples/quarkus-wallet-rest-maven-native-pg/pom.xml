@@ -78,18 +78,18 @@
         <!-- ── Ekbatan ───────────────────────────────────────────────────────────── -->
         <!-- The Quarkus extension pulls ekbatan-core + handlers + jobs transitively. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-quarkus</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-flyway</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <!-- @AutoBuilder is compile-time only. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
             <scope>provided</scope>
@@ -102,7 +102,7 @@
              plain ekbatan-* JARs that aren't Quarkus extensions - this module bridges that
              gap. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-native</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
@@ -215,7 +215,7 @@
                     <parameters>true</parameters>
                     <annotationProcessorPaths>
                         <path>
-                            <groupId>io.github.zyraz-io</groupId>
+                            <groupId>io.github.ekbatan-io</groupId>
                             <artifactId>ekbatan-annotation-processor</artifactId>
                             <version>${ekbatan.version}</version>
                         </path>

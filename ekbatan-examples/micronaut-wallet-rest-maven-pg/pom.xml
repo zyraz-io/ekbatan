@@ -64,19 +64,19 @@
         <!-- The Micronaut integration jar pulls ekbatan-core, the local-event-handler,
              and distributed-jobs transitively. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-micronaut</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-flyway</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <!-- @AutoBuilder is compile-time only: provided lets javac see the annotation;
              annotationProcessorPaths runs the processor below. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
             <scope>provided</scope>
@@ -250,7 +250,7 @@
                     </compilerArgs>
                     <annotationProcessorPaths combine.children="append">
                         <path>
-                            <groupId>io.github.zyraz-io</groupId>
+                            <groupId>io.github.ekbatan-io</groupId>
                             <artifactId>ekbatan-annotation-processor</artifactId>
                             <version>${ekbatan.version}</version>
                         </path>
@@ -261,7 +261,7 @@
                              Micronaut generates no BeanDefinitions for them - the app fails at
                              runtime with "no candidates for WalletDepositMoneyAction". -->
                         <path>
-                            <groupId>io.github.zyraz-io</groupId>
+                            <groupId>io.github.ekbatan-io</groupId>
                             <artifactId>ekbatan-micronaut</artifactId>
                             <version>${ekbatan.version}</version>
                         </path>

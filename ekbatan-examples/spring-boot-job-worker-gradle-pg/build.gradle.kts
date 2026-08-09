@@ -38,10 +38,10 @@ dependencies {
     // ── Ekbatan ─────────────────────────────────────────────────────────────
     // The Spring Boot starter pulls ekbatan-core, the local-event-handler,
     // and distributed-jobs transitively.
-    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:$ekbatanVersion")
-    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-spring-boot-starter:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:$ekbatanVersion")
+    compileOnly("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
 
     // Used by the domain classes for Validate.notNull / Validate.isTrue style guards.
     implementation("org.apache.commons:commons-lang3:3.20.0")

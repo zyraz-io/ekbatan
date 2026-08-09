@@ -59,12 +59,12 @@
     <dependencies>
         <!-- ── Ekbatan ───────────────────────────────────────────────────────────── -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-micronaut</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
             <scope>provided</scope>
@@ -99,12 +99,12 @@
 
         <!-- Native-image extras. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-native</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-flyway</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
@@ -233,12 +233,12 @@
                     </compilerArgs>
                     <annotationProcessorPaths combine.children="append">
                         <path>
-                            <groupId>io.github.zyraz-io</groupId>
+                            <groupId>io.github.ekbatan-io</groupId>
                             <artifactId>ekbatan-annotation-processor</artifactId>
                             <version>${ekbatan.version}</version>
                         </path>
                         <path>
-                            <groupId>io.github.zyraz-io</groupId>
+                            <groupId>io.github.ekbatan-io</groupId>
                             <artifactId>ekbatan-micronaut</artifactId>
                             <version>${ekbatan.version}</version>
                         </path>

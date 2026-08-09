@@ -39,10 +39,10 @@ dependencies {
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:$quarkusVersion"))
 
     // ── Ekbatan ─────────────────────────────────────────────────────────────
-    implementation("io.github.zyraz-io:ekbatan-quarkus:$ekbatanVersion")
-    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-quarkus:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:$ekbatanVersion")
+    compileOnly("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
 
     // Used by the domain classes for Validate.notNull / Validate.isTrue style guards.
     implementation("org.apache.commons:commons-lang3:3.20.0")

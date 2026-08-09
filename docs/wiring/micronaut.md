@@ -11,13 +11,13 @@ For the equivalent in plain Java with no DI container, see [wiring/without-di.md
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-micronaut:<version>")
-    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:<version>")
+    implementation("io.github.ekbatan-io:ekbatan-micronaut:<version>")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-micronaut:<version>")
     annotationProcessor("io.micronaut:micronaut-inject-java")
 }
 ```
 
-(Published on Maven Central under groupId `io.github.zyraz-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
+(Published on Maven Central under groupId `io.github.ekbatan-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
 
 The `annotationProcessor` line is **required** — without it, the `EkbatanStereotypeVisitor` doesn't run during your compile, so your `@Ekbatan*` classes never get lifted to `@Singleton` and Micronaut produces no `BeanDefinition`s for them.
 
@@ -308,7 +308,7 @@ Skip the `micronaut-flyway` auto-wiring path. It works, but it forces you to dec
 dependencies {
     // Ekbatan's programmatic migrator. Runs one datasource or every primary shard
     // from ShardingConfig, and is native-image-aware when used in native binaries.
-    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:$ekbatanVersion")
 
     // The Micronaut extension. Pulls flyway-core transitively at Micronaut's BOM-pinned
     // version and ships native-image support. We don't use its auto-wired
@@ -324,7 +324,7 @@ dependencies {
 ```xml
 <!-- pom.xml -->
 <dependency>
-    <groupId>io.github.zyraz-io</groupId>
+    <groupId>io.github.ekbatan-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
     <version>${ekbatan.version}</version>
 </dependency>

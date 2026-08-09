@@ -11,11 +11,11 @@ For the equivalent in plain Java with no DI container, see [wiring/without-di.md
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-quarkus:<version>")
+    implementation("io.github.ekbatan-io:ekbatan-quarkus:<version>")
 }
 ```
 
-(Published on Maven Central under groupId `io.github.zyraz-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
+(Published on Maven Central under groupId `io.github.ekbatan-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
 
 That one runtime artifact transitively pulls in `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, and the `@Ekbatan*` annotation jar. Quarkus resolves the matching deployment module automatically at build time. Add `ekbatan-flyway` for `FlywayMigrator`, and add `ekbatan-keyed-lock-redis` separately if you want the Redis-backed lock provider.
 
@@ -304,7 +304,7 @@ Keep `quarkus-flyway` on the classpath for Flyway/Quarkus/native-image integrati
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-flyway:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:1.0.0")
 
     // Quarkus integration for Flyway and native-image support.
     implementation("io.quarkus:quarkus-flyway")
@@ -320,7 +320,7 @@ dependencies {
 ```xml
 <!-- pom.xml -->
 <dependency>
-    <groupId>io.github.zyraz-io</groupId>
+    <groupId>io.github.ekbatan-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
     <version>1.0.0</version>
 </dependency>

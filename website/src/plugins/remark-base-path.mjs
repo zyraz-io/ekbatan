@@ -5,7 +5,7 @@ import { visit } from "unist-util-visit";
  * markdown / MDX with the site's configured `base` path. Lets us keep the source
  * portable across deployments — `[link](/learn/foo/)` resolves correctly whether
  * the site is served at the root of a subdomain (Cloudflare Pages, custom domain)
- * or under a subpath (`zyraz-io.github.io/ekbatan/`).
+ * or under a subpath (`ekbatan-io.github.io/ekbatan/`).
  *
  * @param {{ base?: string }} options - same `base` value passed to Astro's defineConfig
  */

@@ -104,7 +104,7 @@ Gradle:
 
 ```kotlin
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-local-event-handler:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-local-event-handler:1.0.0")
 }
 ```
 
@@ -112,7 +112,7 @@ Maven:
 
 ```xml
 <dependency>
-  <groupId>io.github.zyraz-io</groupId>
+  <groupId>io.github.ekbatan-io</groupId>
   <artifactId>ekbatan-local-event-handler</artifactId>
   <version>1.0.0</version>
 </dependency>
@@ -316,4 +316,4 @@ If you start with local consumption and later add CDC, **no application code cha
 - [Reference → Local event handler](/reference/events/local-event-handler/) — `EventHandler` API, retry/expiry config, `EventEnvelope` shape
 - [Reference → Streaming (Debezium)](/reference/events/streaming/) — `OutboxToAvro` / `OutboxToProtobuf` SMT options, topic naming, snapshot modes
 - [Reference -> Framework tables](/reference/tables/) — table map plus full DDL for `eventlog.events` and `eventlog.event_notifications`
-- [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) — runs the in-process `WalletMoneyDepositedEventHandler` end-to-end with an integration test that asserts the notification row appears
+- [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) — runs the in-process `WalletMoneyDepositedEventHandler` end-to-end with an integration test that asserts the notification row appears

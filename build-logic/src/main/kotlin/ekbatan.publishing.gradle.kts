@@ -48,7 +48,7 @@ afterEvaluate {
         publications {
             create<MavenPublication>("maven") {
                 from(components["java"])
-                groupId = "io.github.zyraz-io"
+                groupId = "io.github.ekbatan-io"
                 this.artifactId = artifactId
                 // Gradle's "capability" concept (used by java-test-fixtures) has no POM equivalent.
                 // We don't publish test fixtures to Maven coordinates, so silence the warning.
@@ -57,7 +57,11 @@ afterEvaluate {
                 pom {
                     name.set(artifactId)
                     this.description.set(description)
-                    url.set("https://github.com/zyraz-io/ekbatan")
+                    // The documentation site, not the repository: this is the link Maven Central
+                    // renders as the project's home, and it is the more useful landing page for
+                    // someone deciding whether to depend on this. The repository is still reachable
+                    // through <scm> below.
+                    url.set("https://ekbatan-io.github.io/ekbatan/")
                     licenses {
                         license {
                             name.set("Apache License 2.0")
@@ -73,9 +77,9 @@ afterEvaluate {
                         }
                     }
                     scm {
-                        connection.set("scm:git:git://github.com/zyraz-io/ekbatan.git")
-                        developerConnection.set("scm:git:ssh://git@github.com/zyraz-io/ekbatan.git")
-                        url.set("https://github.com/zyraz-io/ekbatan")
+                        connection.set("scm:git:git://github.com/ekbatan-io/ekbatan.git")
+                        developerConnection.set("scm:git:ssh://git@github.com/ekbatan-io/ekbatan.git")
+                        url.set("https://github.com/ekbatan-io/ekbatan")
                         // For released versions, point at the matching tag (v<version>); for
                         // snapshots, use Maven's "HEAD" convention since snapshots aren't tagged.
                         val v = project.version.toString()

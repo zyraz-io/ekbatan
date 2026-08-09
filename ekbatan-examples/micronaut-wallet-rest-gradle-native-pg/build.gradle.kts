@@ -45,10 +45,10 @@ application {
 
 dependencies {
     // ── Ekbatan ─────────────────────────────────────────────────────────────
-    implementation("io.github.zyraz-io:ekbatan-micronaut:$ekbatanVersion")
-    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:$ekbatanVersion")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-micronaut:$ekbatanVersion")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-micronaut:$ekbatanVersion")
+    compileOnly("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
     // micronaut-serde-processor generates compile-time `Serializer`/`Deserializer`
     // beans for any class annotated with `@Serdeable`. Required by `micronaut-serde-jackson`.
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
@@ -58,9 +58,9 @@ dependencies {
     // Native-image extras: ships GraalVM Features (Jackson 3 records, jOOQ array-type fix,
     // HikariCP metadata, etc.) that auto-apply when native-image runs. Only needed because
     // we want a native binary; the JVM-only sibling doesn't include it.
-    implementation("io.github.zyraz-io:ekbatan-native:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-native:$ekbatanVersion")
     // Programmatic Flyway migrator. Native-aware classpath migration scanning lives here.
-    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:$ekbatanVersion")
 
     // ── Micronaut runtime ───────────────────────────────────────────────────
     // micronaut-serde-jackson — Jackson-compatible (de)serialization using

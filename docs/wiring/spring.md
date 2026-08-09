@@ -11,11 +11,11 @@ For the equivalent in plain Java with no DI container, see [wiring/without-di.md
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:<version>")
+    implementation("io.github.ekbatan-io:ekbatan-spring-boot-starter:<version>")
 }
 ```
 
-(Published on Maven Central under groupId `io.github.zyraz-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
+(Published on Maven Central under groupId `io.github.ekbatan-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
 
 That starter transitively pulls in `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, and the `@Ekbatan*` annotation jar. Add `ekbatan-flyway` for `FlywayMigrator`, and add `ekbatan-keyed-lock-redis` separately if you want the Redis-backed lock provider.
 
@@ -335,7 +335,7 @@ The application still decides when migrations run. The usual setup is one startu
 // build.gradle.kts
 dependencies {
     // Ekbatan's migrator reads ekbatan.sharding.* and runs Flyway on every primary shard.
-    implementation("io.github.zyraz-io:ekbatan-flyway:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:1.0.0")
 
     // Spring Boot's starter keeps Flyway and Spring Boot's Flyway/native integration
     // on the classpath; Ekbatan's starter prevents Boot's single-datasource
@@ -350,7 +350,7 @@ dependencies {
 ```xml
 <!-- pom.xml -->
 <dependency>
-    <groupId>io.github.zyraz-io</groupId>
+    <groupId>io.github.ekbatan-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
     <version>1.0.0</version>
 </dependency>

@@ -9,8 +9,8 @@ pluginManagement {
 }
 
 // Each project's path is its full directory path flattened with '-'. Disk layout is preserved
-// via projectDir mappings below. With a single `group = "io.github.zyraz-io"` in the root build,
-// this gives every module a unique Maven coordinate (`io.github.zyraz-io:<flat-name>:<version>`)
+// via projectDir mappings below. With a single `group = "io.github.ekbatan-io"` in the root build,
+// this gives every module a unique Maven coordinate (`io.github.ekbatan-io:<flat-name>:<version>`)
 // without per-subtree group rules.
 include(
     "ekbatan-core",

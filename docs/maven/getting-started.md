@@ -39,19 +39,19 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
         <!-- (2) One starter — pulls ekbatan-core, the local-event-handler,
              and distributed-jobs transitively. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-spring-boot-starter</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-flyway</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <!-- (3) @AutoBuilder is compile-time only: provided lets javac see
              the annotation without packaging the processor at runtime. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
             <scope>provided</scope>
@@ -88,7 +88,7 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
                          processor actually runs and emits *Builder.java. -->
                     <annotationProcessorPaths>
                         <path>
-                            <groupId>io.github.zyraz-io</groupId>
+                            <groupId>io.github.ekbatan-io</groupId>
                             <artifactId>ekbatan-annotation-processor</artifactId>
                             <version>${ekbatan.version}</version>
                         </path>
@@ -145,18 +145,18 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
     <dependencies>
         <!-- (2) Quarkus extension — pulls ekbatan-core + handlers + jobs. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-quarkus</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-flyway</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <!-- (3) @AutoBuilder is compile-time only. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
             <scope>provided</scope>
@@ -215,7 +215,7 @@ Pick the block for your stack. Everything below — the compiler flag, the codeg
                     <!-- (3) @AutoBuilder dual-path, part 2.  -->
                     <annotationProcessorPaths>
                         <path>
-                            <groupId>io.github.zyraz-io</groupId>
+                            <groupId>io.github.ekbatan-io</groupId>
                             <artifactId>ekbatan-annotation-processor</artifactId>
                             <version>${ekbatan.version}</version>
                         </path>
@@ -260,18 +260,18 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
     <dependencies>
         <!-- (2) Integration jar — pulls ekbatan-core + handlers + jobs. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-micronaut</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-flyway</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <!-- (3) @AutoBuilder is compile-time only. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
             <scope>provided</scope>
@@ -313,7 +313,7 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
                          BeanDefinitions. -->
                     <annotationProcessorPaths combine.children="append">
                         <path>
-                            <groupId>io.github.zyraz-io</groupId>
+                            <groupId>io.github.ekbatan-io</groupId>
                             <artifactId>ekbatan-annotation-processor</artifactId>
                             <version>${ekbatan.version}</version>
                         </path>
@@ -324,7 +324,7 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
                              Micronaut generates no BeanDefinitions for them — runtime then
                              fails with UnsatisfiedDependencyException. -->
                         <path>
-                            <groupId>io.github.zyraz-io</groupId>
+                            <groupId>io.github.ekbatan-io</groupId>
                             <artifactId>ekbatan-micronaut</artifactId>
                             <version>${ekbatan.version}</version>
                         </path>
@@ -362,12 +362,12 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
     <dependencies>
         <!-- Required ----------------------------------------------------- -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-core</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-flyway</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
@@ -375,7 +375,7 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
         <!-- (3) @AutoBuilder is compile-time only. Skip if you'd rather write
              builders by hand; without it, drop the AP path below too. -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-annotation-processor</artifactId>
             <version>${ekbatan.version}</version>
             <scope>provided</scope>
@@ -385,14 +385,14 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
 
         <!-- In-process event handlers (fanout + handling jobs over the eventlog). -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-local-event-handler</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
 
         <!-- Distributed background jobs (db-scheduler facade). -->
         <dependency>
-            <groupId>io.github.zyraz-io</groupId>
+            <groupId>io.github.ekbatan-io</groupId>
             <artifactId>ekbatan-distributed-jobs</artifactId>
             <version>${ekbatan.version}</version>
         </dependency>
@@ -418,7 +418,7 @@ The Micronaut parent POM pre-configures `maven-compiler-plugin` with `micronaut-
                     <parameters>true</parameters>
                     <annotationProcessorPaths>
                         <path>
-                            <groupId>io.github.zyraz-io</groupId>
+                            <groupId>io.github.ekbatan-io</groupId>
                             <artifactId>ekbatan-annotation-processor</artifactId>
                             <version>${ekbatan.version}</version>
                         </path>
@@ -452,10 +452,10 @@ The Quarkus BOM doesn't pin jOOQ, but the codegen plugin's default may not match
 
 | Stack | Coordinate | Pulls transitively |
 |---|---|---|
-| Spring Boot | `io.github.zyraz-io:ekbatan-spring-boot-starter` | `ekbatan-core`, `ekbatan-local-event-handler`, `ekbatan-distributed-jobs` |
-| Quarkus | `io.github.zyraz-io:ekbatan-quarkus` | same set |
-| Micronaut | `io.github.zyraz-io:ekbatan-micronaut` | same set |
-| Plain Java | `io.github.zyraz-io:ekbatan-core` (plus each optional module explicitly) | nothing transitively |
+| Spring Boot | `io.github.ekbatan-io:ekbatan-spring-boot-starter` | `ekbatan-core`, `ekbatan-local-event-handler`, `ekbatan-distributed-jobs` |
+| Quarkus | `io.github.ekbatan-io:ekbatan-quarkus` | same set |
+| Micronaut | `io.github.ekbatan-io:ekbatan-micronaut` | same set |
+| Plain Java | `io.github.ekbatan-io:ekbatan-core` (plus each optional module explicitly) | nothing transitively |
 
 The four `@Ekbatan*` annotations (`@EkbatanAction`, `@EkbatanRepository`, `@EkbatanEventHandler`, `@EkbatanDistributedJob`) live in `ekbatan-di-annotations` and come with the integration jars. You don't add them explicitly.
 
@@ -497,13 +497,13 @@ This one bites. The `ekbatan-micronaut` jar ships an `EkbatanStereotypeVisitor` 
 <annotationProcessorPaths combine.children="append">
     <!-- @AutoBuilder, like every other stack -->
     <path>
-        <groupId>io.github.zyraz-io</groupId>
+        <groupId>io.github.ekbatan-io</groupId>
         <artifactId>ekbatan-annotation-processor</artifactId>
         <version>${ekbatan.version}</version>
     </path>
     <!-- Micronaut-specific: the EkbatanStereotypeVisitor -->
     <path>
-        <groupId>io.github.zyraz-io</groupId>
+        <groupId>io.github.ekbatan-io</groupId>
         <artifactId>ekbatan-micronaut</artifactId>
         <version>${ekbatan.version}</version>
     </path>
@@ -530,28 +530,28 @@ The integration jars (`ekbatan-spring-boot-starter` / `ekbatan-quarkus` / `ekbat
 ```xml
 <!-- Programmatic Flyway migration from one DataSource or every primary shard in ShardingConfig. -->
 <dependency>
-    <groupId>io.github.zyraz-io</groupId>
+    <groupId>io.github.ekbatan-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
     <version>${ekbatan.version}</version>
 </dependency>
 
 <!-- Redis-backed distributed KeyedLockProvider (Redisson under the hood). -->
 <dependency>
-    <groupId>io.github.zyraz-io</groupId>
+    <groupId>io.github.ekbatan-io</groupId>
     <artifactId>ekbatan-keyed-lock-redis</artifactId>
     <version>${ekbatan.version}</version>
 </dependency>
 
 <!-- GraalVM native-image Features (auto-loaded; include only if you build native binaries). -->
 <dependency>
-    <groupId>io.github.zyraz-io</groupId>
+    <groupId>io.github.ekbatan-io</groupId>
     <artifactId>ekbatan-native</artifactId>
     <version>${ekbatan.version}</version>
 </dependency>
 
 <!-- ActionSpec, ActionAssert, VirtualClock, and classpath-resource Testcontainers helpers. -->
 <dependency>
-    <groupId>io.github.zyraz-io</groupId>
+    <groupId>io.github.ekbatan-io</groupId>
     <artifactId>ekbatan-test-support</artifactId>
     <version>${ekbatan.version}</version>
     <scope>test</scope>
@@ -560,7 +560,7 @@ The integration jars (`ekbatan-spring-boot-starter` / `ekbatan-quarkus` / `ekbat
 <!-- Wire-format DTOs for Kafka consumer apps reading from the eventlog. Pick the
      one matching your Kafka serializer; NOT needed in the producer app. -->
 <dependency>
-    <groupId>io.github.zyraz-io</groupId>
+    <groupId>io.github.ekbatan-io</groupId>
     <artifactId>ekbatan-action-event-json</artifactId>
     <version>${ekbatan.version}</version>
 </dependency>

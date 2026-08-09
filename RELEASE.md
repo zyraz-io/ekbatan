@@ -2,7 +2,7 @@
 
 This document covers the release pipeline: one-time setup, the per-release workflow, and the safety nets in between. The publishing surface is two targets:
 
-- **16 jars to Maven Central** under groupId `io.github.zyraz-io` (via Sonatype Central Portal, stage-and-confirm). The Java packages in the source tree are `io.ekbatan.*` — Maven groupId and Java package don't need to match, and we kept the cleaner Java naming.
+- **16 jars to Maven Central** under groupId `io.github.ekbatan-io` (via Sonatype Central Portal, stage-and-confirm). The Java packages in the source tree are `io.ekbatan.*` — Maven groupId and Java package don't need to match, and we kept the cleaner Java naming.
 - **2 SMT shadow jars to GitHub Releases** as drop-in assets for Kafka Connect's `plugin.path`.
 
 JReleaser orchestrates both from one config block in the root `build.gradle.kts`.
@@ -17,14 +17,14 @@ Do these once, before the first release. They never need to be repeated.
 
 Sign up at <https://central.sonatype.com>. The Central Portal is the post-2024 publishing path; do not use the legacy OSSRH.
 
-### 2. Claim the `io.github.zyraz-io` namespace
+### 2. Claim the `io.github.ekbatan-io` namespace
 
 Sonatype's namespace convention is reverse-DNS of a thing you control. For projects hosted under a GitHub org, `io.github.<org>` is verified by creating a one-off repo whose name matches the verification code Sonatype generates.
 
 In the Portal UI:
-1. **Namespaces** → **Add Namespace** → enter `io.github.zyraz-io`.
+1. **Namespaces** → **Add Namespace** → enter `io.github.ekbatan-io`.
 2. Sonatype shows a verification code (looks like a short alphanumeric string, e.g. `abc123def456`).
-3. Create a **public, empty** repo at `https://github.com/zyraz-io/<verification-code>` (use the exact code as the repo name).
+3. Create a **public, empty** repo at `https://github.com/ekbatan-io/<verification-code>` (use the exact code as the repo name).
 4. Back in the Portal, click **Verify Namespace**. Sonatype checks the repo exists; verification is usually instant.
 
 After verification you can delete the verification repo (or leave it — either is fine). The namespace is permanent.
@@ -93,7 +93,7 @@ You get a username/password pair separate from your Portal login — this is wha
 
 ### 7. Store five secrets on the GitHub repository
 
-Go to <https://github.com/zyraz-io/ekbatan/settings/secrets/actions> and add:
+Go to <https://github.com/ekbatan-io/ekbatan/settings/secrets/actions> and add:
 
 | Secret name | Value |
 |---|---|
@@ -176,7 +176,7 @@ The tag push fires `.github/workflows/release.yml`, which runs:
 
 ### Verify on the Central Portal
 
-Log into <https://central.sonatype.com>. Under **Deployments** you'll see a new entry for `io.github.zyraz-io:0.X.Y`. Status will be **Validating** for ~1-2 min, then **Validated**.
+Log into <https://central.sonatype.com>. Under **Deployments** you'll see a new entry for `io.github.ekbatan-io:0.X.Y`. Status will be **Validating** for ~1-2 min, then **Validated**.
 
 Click into it. Check:
 
@@ -193,7 +193,7 @@ This is the stage-and-confirm safety net. Use it.
 
 ### GitHub Release
 
-Independent of the Central Portal flow, the release workflow has already created the GitHub Release at `https://github.com/zyraz-io/ekbatan/releases/tag/v0.X.Y` with the two SMT shadow jars attached:
+Independent of the Central Portal flow, the release workflow has already created the GitHub Release at `https://github.com/ekbatan-io/ekbatan/releases/tag/v0.X.Y` with the two SMT shadow jars attached:
 
 - `ekbatan-debezium-smt-avro-0.X.Y.jar`
 - `ekbatan-debezium-smt-protobuf-0.X.Y.jar`
@@ -256,7 +256,7 @@ The only irreversible step is clicking **Publish** on the Central Portal. Until 
 
 ### The release workflow failed
 
-1. Open the failed run: <https://github.com/zyraz-io/ekbatan/actions/workflows/release.yml>
+1. Open the failed run: <https://github.com/ekbatan-io/ekbatan/actions/workflows/release.yml>
 2. The **"Upload JReleaser logs"** step runs `if: always()` and uploads `build/jreleaser/trace.log` + `build/jreleaser/output.properties` as a workflow artifact. Download these from the run page (top-right of the run UI, scroll to "Artifacts").
 3. `trace.log` is verbose; search for `[ERROR]` to find the actual failure.
 
@@ -286,7 +286,7 @@ The Central Portal publishes within ~10 min. The public `repo1.maven.org` Maven 
 - Check the deployment status in the Portal — if it's **Published**, the artifact IS on Maven Central, just not yet syndicated everywhere
 - Test direct fetch:
   ```bash
-  curl -I https://repo1.maven.org/maven2/io/github/zyraz-io/ekbatan-core/<version>/ekbatan-core-<version>.jar
+  curl -I https://repo1.maven.org/maven2/io/github/ekbatan-io/ekbatan-core/<version>/ekbatan-core-<version>.jar
   # 200 = available; 404 = not syndicated yet, wait
   ```
 

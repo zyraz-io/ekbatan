@@ -36,7 +36,7 @@ Pick the stack, build tool, and database you are using. Most native-image settin
 
 1. Use a Java 25 GraalVM JDK.
 2. Start from the matching `*-native-*` wallet example if possible.
-3. Add `io.github.zyraz-io:ekbatan-native`.
+3. Add `io.github.ekbatan-io:ekbatan-native`.
 4. Tell native-image which application packages to scan.
 5. Make migrations work in the native binary: run Flyway through `FlywayMigrator` and include SQL resources.
 6. Run JVM tests frequently, and run native tests/builds in heavier verification.
@@ -107,7 +107,7 @@ Add this dependency only to modules that build native binaries:
 
 ```kotlin
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-native:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-native:1.0.0")
 }
 ```
 
@@ -117,7 +117,7 @@ dependencies {
 
 ```xml
 <dependency>
-  <groupId>io.github.zyraz-io</groupId>
+  <groupId>io.github.ekbatan-io</groupId>
   <artifactId>ekbatan-native</artifactId>
   <version>1.0.0</version>
 </dependency>
@@ -333,6 +333,6 @@ Use the GraalVM Build Tools `nativeCompile` / `nativeTest` tasks or `native-mave
 ## See Also
 
 - [Reference -> GraalVM native-image](/reference/runtime/native-image/) - feature list, Flyway patterns, toolchain notes, troubleshooting
-- [`ekbatan-examples/*-native-*`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples) - 19 native wallet examples across Spring Boot, Quarkus, Micronaut, Gradle, Maven, the three supported databases, and the sharded Spring Boot PG example
+- [`ekbatan-examples/*-native-*`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples) - 19 native wallet examples across Spring Boot, Quarkus, Micronaut, Gradle, Maven, the three supported databases, and the sharded Spring Boot PG example
 - [GraalVM Build Tools docs](https://graalvm.github.io/native-build-tools/latest/) - official Gradle/Maven native plugin reference
 - [Quarkus native guide](https://quarkus.io/guides/building-native-image) - Quarkus-specific native build details

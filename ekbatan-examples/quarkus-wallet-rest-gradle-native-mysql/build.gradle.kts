@@ -56,14 +56,14 @@ jooq {
 dependencies {
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:$quarkusVersion"))
 
-    implementation("io.github.zyraz-io:ekbatan-quarkus:$ekbatanVersion")
-    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-quarkus:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:$ekbatanVersion")
+    compileOnly("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
 
     // Native-image extras: ships GraalVM Features (Jackson 3 records, builders, generated
     // jOOQ classes, etc.) plus HikariCP reachability metadata.
-    implementation("io.github.zyraz-io:ekbatan-native:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-native:$ekbatanVersion")
 
     implementation("org.apache.commons:commons-lang3:3.20.0")
 

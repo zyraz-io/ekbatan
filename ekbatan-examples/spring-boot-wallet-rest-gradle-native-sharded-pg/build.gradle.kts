@@ -42,19 +42,19 @@ dependencies {
     // ── Ekbatan ─────────────────────────────────────────────────────────────
     // The Spring Boot starter pulls ekbatan-core, the local-event-handler,
     // and distributed-jobs transitively.
-    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:$ekbatanVersion")
-    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-spring-boot-starter:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:$ekbatanVersion")
     // @AutoBuilder is compile-time only: compileOnly exposes the annotation to javac,
     // annotationProcessor runs the processor that emits *Builder classes.
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    compileOnly("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
 
     // Used by the domain classes for Validate.notNull / Validate.isTrue style guards.
     implementation("org.apache.commons:commons-lang3:3.20.0")
 
     // Native-image extras: ships GraalVM Features for Ekbatan runtime metadata
     // (Jackson 3 records, builders, generated jOOQ classes, HikariCP/JDBC metadata, etc.).
-    implementation("io.github.zyraz-io:ekbatan-native:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-native:$ekbatanVersion")
 
     // ── Spring Boot ─────────────────────────────────────────────────────────
     implementation("org.springframework.boot:spring-boot-starter-web")

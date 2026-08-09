@@ -6,8 +6,8 @@
   "author": {
     "name": "Zyraz"
   },
-  "homepage": "https://github.com/zyraz-io/ekbatan",
-  "repository": "https://github.com/zyraz-io/ekbatan",
+  "homepage": "https://github.com/ekbatan-io/ekbatan",
+  "repository": "https://github.com/ekbatan-io/ekbatan",
   "license": "Apache-2.0",
   "skills": [
     "./skills"

@@ -6,7 +6,7 @@ A GraalVM native-image variant of [`micronaut-wallet-rest-maven-pg`](../micronau
 
 | Concern | JVM sibling | This module |
 |---|---|---|
-| Dependencies | core + `ekbatan-flyway` + flyway + jdbc | + `io.github.zyraz-io:ekbatan-native` for Jackson3RecordsFeature, HikariCP metadata, jOOQ native support, etc. |
+| Dependencies | core + `ekbatan-flyway` + flyway + jdbc | + `io.github.ekbatan-io:ekbatan-native` for Jackson3RecordsFeature, HikariCP metadata, jOOQ native support, etc. |
 | `Flyway migrator` | `FlywayMigrator.migrate(shardingConfig)` | same call; native runtime gets substrate-VM-aware classpath scanning |
 | `native-maven-plugin` build args | n/a | adds `-Dio.ekbatan.graalvm.scan.packages=io.ekbatan,io.example` and `-H:IncludeResources=db/migration/.*\.sql` |
 | `micronaut-maven-plugin` | disables JVM AOT executions | leaves the native packaging flow to run Micronaut's native/AOT steps |

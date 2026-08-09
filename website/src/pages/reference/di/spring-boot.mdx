@@ -14,11 +14,11 @@ For the equivalent in plain Java with no DI container, see [wiring/without-di.md
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-spring-boot-starter:<version>")
+    implementation("io.github.ekbatan-io:ekbatan-spring-boot-starter:<version>")
 }
 ```
 
-(Published on Maven Central under groupId `io.github.zyraz-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
+(Published on Maven Central under groupId `io.github.ekbatan-io`. Java packages stay `io.ekbatan.*` — they don't need to match the Maven groupId.)
 
 That starter transitively pulls in `ekbatan-core`, `ekbatan-events:local-event-handler`, `ekbatan-distributed-jobs`, and the `@Ekbatan*` annotation jar. Add `ekbatan-flyway` for `FlywayMigrator`, and add `ekbatan-keyed-lock-redis` separately if you want the Redis-backed lock provider.
 
@@ -338,7 +338,7 @@ The application still decides when migrations run. The usual setup is one startu
 // build.gradle.kts
 dependencies {
     // Ekbatan's migrator reads ekbatan.sharding.* and runs Flyway on every primary shard.
-    implementation("io.github.zyraz-io:ekbatan-flyway:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:1.0.0")
 
     // Spring Boot's starter keeps Flyway and Spring Boot's Flyway/native integration
     // on the classpath; Ekbatan's starter prevents Boot's single-datasource
@@ -353,7 +353,7 @@ dependencies {
 ```xml
 <!-- pom.xml -->
 <dependency>
-    <groupId>io.github.zyraz-io</groupId>
+    <groupId>io.github.ekbatan-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
     <version>1.0.0</version>
 </dependency>
@@ -410,7 +410,7 @@ public class EkbatanShardFlywayMigrator {
 
 The empty `FlywayMigration` class is only a marker type. Creating the `flywayMigration` bean runs `FlywayMigrator.migrate(...)`, and the returned marker object gives Spring a concrete bean name that other beans can depend on. `jobRegistryDependsOnFlyway()` adds that dependency to `ekbatanJobRegistry`, so the distributed job registry will not start polling until migrations have completed.
 
-See [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) for the single-shard shape, [`spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) for the multi-shard one, and [`spring-boot-wallet-rest-gradle-native-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg) for the same sharded shape under `nativeTest`.
+See [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) for the single-shard shape, [`spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) for the multi-shard one, and [`spring-boot-wallet-rest-gradle-native-sharded-pg`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg) for the same sharded shape under `nativeTest`.
 
 ### Optional knobs
 
@@ -439,4 +439,4 @@ All rows above also accept camelCase aliases: `ekbatan.localEventHandler.*`, `fa
 - [GraalVM native-image](/reference/runtime/native-image/) — Spring AOT specifics
 - Runnable references:
   - [`ekbatan-integration-tests/di/spring-boot-starter`](../../ekbatan-integration-tests/di/spring-boot-starter) — the framework's own smoke test for the Spring Boot integration.
-  - [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) — a standalone Spring Boot app that uses Ekbatan as a Maven Central dependency, with a Wallet `Model`, a Notification `Entity`, three Actions, an `EventHandler` that runs listen-to-yourself, REST endpoints, and a Testcontainers integration test. Closer to what you'd actually write in your own service.
+  - [`ekbatan-examples/spring-boot-wallet-rest-gradle-pg`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-pg) — a standalone Spring Boot app that uses Ekbatan as a Maven Central dependency, with a Wallet `Model`, a Notification `Entity`, three Actions, an `EventHandler` that runs listen-to-yourself, REST endpoints, and a Testcontainers integration test. Closer to what you'd actually write in your own service.

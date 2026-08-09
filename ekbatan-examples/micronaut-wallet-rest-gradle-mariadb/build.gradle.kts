@@ -64,11 +64,11 @@ application {
 }
 
 dependencies {
-    implementation("io.github.zyraz-io:ekbatan-micronaut:$ekbatanVersion")
-    implementation("io.github.zyraz-io:ekbatan-flyway:$ekbatanVersion")
-    annotationProcessor("io.github.zyraz-io:ekbatan-micronaut:$ekbatanVersion")
-    compileOnly("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
-    annotationProcessor("io.github.zyraz-io:ekbatan-annotation-processor:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-micronaut:$ekbatanVersion")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:$ekbatanVersion")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-micronaut:$ekbatanVersion")
+    compileOnly("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
+    annotationProcessor("io.github.ekbatan-io:ekbatan-annotation-processor:$ekbatanVersion")
     // micronaut-serde-processor generates compile-time `Serializer`/`Deserializer`
     // beans for any class annotated with `@Serdeable`. Required by `micronaut-serde-jackson`.
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")

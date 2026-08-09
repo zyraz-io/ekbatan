@@ -21,7 +21,7 @@ want a native binary.
 
 ## What this project adds on top of the JVM sibling
 
-- **`io.github.zyraz-io:ekbatan-native` dependency** — ships GraalVM Features for Ekbatan runtime
+- **`io.github.ekbatan-io:ekbatan-native` dependency** — ships GraalVM Features for Ekbatan runtime
   metadata (Jackson 3 record reflection, jOOQ array-type fix, HikariCP/JDBC metadata, etc.) that
   auto-apply when native-image runs.
 - **`src/integrationTest/java` source set with `WalletResourceNativeIT`** — `@QuarkusIntegrationTest`

@@ -7,7 +7,7 @@ A GraalVM native-image variant of [`micronaut-wallet-rest-gradle-pg`](../microna
 | Concern | JVM sibling | This module |
 |---|---|---|
 | Build plugins | `io.micronaut.application` | same — the plugin auto-applies `org.graalvm.buildtools.native` |
-| Dependencies | core + `ekbatan-flyway` + flyway + jdbc | + `io.github.zyraz-io:ekbatan-native` for Jackson3RecordsFeature, HikariCP metadata, jOOQ native support, etc. |
+| Dependencies | core + `ekbatan-flyway` + flyway + jdbc | + `io.github.ekbatan-io:ekbatan-native` for Jackson3RecordsFeature, HikariCP metadata, jOOQ native support, etc. |
 | `Flyway migrator` | `FlywayMigrator.migrate(shardingConfig)` | same call; native runtime gets substrate-VM-aware classpath scanning |
 | `graalvmNative {}` block | n/a | requires a Java 25 `native-image`-capable launcher, bundles `db/migration/*.sql` into the image, points Jackson3RecordsFeature at `io.example.*` |
 

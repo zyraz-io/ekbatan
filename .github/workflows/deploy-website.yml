@@ -1,6 +1,6 @@
 # Builds the Astro site under `website/` and deploys it to GitHub Pages on
 # every push to `main` that touches the website. The site ends up at
-#     https://zyraz-io.github.io/ekbatan/
+#     https://ekbatan-io.github.io/ekbatan/
 # so `BASE=/ekbatan/` is passed to the build — see `website/astro.config.mjs`
 # and `website/src/lib/remark-base-path.mjs` for how that prefix flows through
 # to every internal link in the rendered HTML.

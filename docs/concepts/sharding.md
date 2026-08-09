@@ -88,5 +88,5 @@ If you reach for sharding to solve a *read latency* problem, you're probably rea
 - [Concepts → Sagas](./sagas.md) — how to split multi-step workflows into committed actions and compensation steps
 - [Concepts → The dual-write trap](./the-dual-write-trap.md) — why cross-shard actions are conceptually a dual write
 - [Concepts → Actions, ActionPlan, ActionExecutor](./actions.md) — the per-shard transaction grouping happens inside Phase 2
-- [`ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) — a runnable two-shard wallet using `EmbeddedBitsShardingStrategy`
-- [`ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg) — the same sharded wallet with GraalVM `nativeTest` coverage
+- [`ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-sharded-pg) — a runnable two-shard wallet using `EmbeddedBitsShardingStrategy`
+- [`ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples/spring-boot-wallet-rest-gradle-native-sharded-pg) — the same sharded wallet with GraalVM `nativeTest` coverage

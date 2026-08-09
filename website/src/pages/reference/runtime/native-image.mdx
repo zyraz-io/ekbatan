@@ -25,14 +25,14 @@ Native-image support is not a different execution model for Ekbatan. Actions, re
 Add the module to applications that build native binaries:
 
 ```kotlin
-implementation("io.github.zyraz-io:ekbatan-native:1.0.0")
+implementation("io.github.ekbatan-io:ekbatan-native:1.0.0")
 ```
 
 or Maven:
 
 ```xml
 <dependency>
-  <groupId>io.github.zyraz-io</groupId>
+  <groupId>io.github.ekbatan-io</groupId>
   <artifactId>ekbatan-native</artifactId>
   <version>1.0.0</version>
 </dependency>
@@ -41,12 +41,12 @@ or Maven:
 If your app calls Ekbatan's programmatic Flyway migrator, also add `ekbatan-flyway`:
 
 ```kotlin
-implementation("io.github.zyraz-io:ekbatan-flyway:1.0.0")
+implementation("io.github.ekbatan-io:ekbatan-flyway:1.0.0")
 ```
 
 ```xml
 <dependency>
-  <groupId>io.github.zyraz-io</groupId>
+  <groupId>io.github.ekbatan-io</groupId>
   <artifactId>ekbatan-flyway</artifactId>
   <version>1.0.0</version>
 </dependency>
@@ -175,4 +175,4 @@ Use that as heavy verification, not as the normal edit-compile-test loop.
 - [Wiring with Spring Boot](/reference/di/spring-boot/) - Spring AOT and Flyway details
 - [Wiring with Quarkus](/reference/di/quarkus/) - Quarkus native and Flyway details
 - [Wiring with Micronaut](/reference/di/micronaut/) - Micronaut native and serde details
-- [`ekbatan-examples/*-native-*`](https://github.com/zyraz-io/ekbatan/tree/main/ekbatan-examples) - runnable native wallet examples
+- [`ekbatan-examples/*-native-*`](https://github.com/ekbatan-io/ekbatan/tree/main/ekbatan-examples) - runnable native wallet examples
