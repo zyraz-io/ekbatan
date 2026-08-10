@@ -33,7 +33,7 @@ import tools.jackson.databind.node.ObjectNode;
  */
 public class SingleTableJsonEventPersister implements EventPersister {
 
-    private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.0");
+    private static final Tracer TRACER = GlobalOpenTelemetry.get().getTracer("io.ekbatan.core", "1.0.1");
 
     private final EventEntityRepository eventRepository;
     private final ObjectMapper objectMapper;

@@ -335,7 +335,7 @@ The application still decides when migrations run. The usual setup is one startu
 // build.gradle.kts
 dependencies {
     // Ekbatan's migrator reads ekbatan.sharding.* and runs Flyway on every primary shard.
-    implementation("io.github.ekbatan-io:ekbatan-flyway:1.0.0")
+    implementation("io.github.ekbatan-io:ekbatan-flyway:1.0.1")
 
     // Spring Boot's starter keeps Flyway and Spring Boot's Flyway/native integration
     // on the classpath; Ekbatan's starter prevents Boot's single-datasource
@@ -352,7 +352,7 @@ dependencies {
 <dependency>
     <groupId>io.github.ekbatan-io</groupId>
     <artifactId>ekbatan-flyway</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 </dependency>
 <dependency>
     <groupId>org.springframework.boot</groupId>

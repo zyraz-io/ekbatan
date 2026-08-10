@@ -83,3 +83,23 @@ tasks.withType<Test> {
         systemProperty("smt.action.event.descriptor", actionEventDescriptorFile.singleFile.absolutePath)
     }
 }
+
+// `nativeTest` is a NativeRunTask, not a Test task, so the `systemProperty` calls above do not
+// reach it. Without this mirror the test classes' static initialisers read a null property and
+// die in `<clinit>` with `Path.of(null)` - reported as ExceptionInInitializerError followed by
+// NoClassDefFoundError on every test in the class, which reads like a native-image reflection
+// problem rather than a missing -D. The avro and protobuf sibling modules already carry this.
+extensions.configure<org.graalvm.buildtools.gradle.dsl.GraalVMExtension> {
+    binaries.named("test") {
+        runtimeArgs.addAll(
+            provider {
+                listOf(
+                    "-Dsmt.plugin.jar=${smtPluginJar.singleFile.absolutePath}",
+                    "-Dsmt.action.event.descriptor=${actionEventDescriptorFile.singleFile.absolutePath}",
+                )
+            },
+        )
+    }
+}
+
+tasks.named("nativeTest") { dependsOn(smtPluginJar, actionEventDescriptorFile) }

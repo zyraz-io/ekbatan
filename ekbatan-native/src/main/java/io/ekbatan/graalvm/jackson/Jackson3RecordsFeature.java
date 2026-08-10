@@ -19,10 +19,14 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  * <ul>
  *   <li>Every Java {@code record} found under the scan roots - full reflective access plus
  *       {@code RuntimeReflection.registerAllRecordComponents}.</li>
- *   <li>Every class with a nested {@code Builder} inner class - Jackson uses reflection to
- *       call {@code build()} and the property setters (covers both
- *       {@code @JsonDeserialize(builder = ...)} and the project's {@code @AutoBuilder}
- *       annotation processor).</li>
+ *   <li>Every class with a nested {@code Builder} inner class, <em>and that class itself</em> -
+ *       Jackson uses reflection to call {@code build()} and the property setters on the builder,
+ *       and needs the enclosing type registered to read {@code @JsonDeserialize(builder = ...)}
+ *       off it. Registering only the builder was sufficient for as long as every such class also
+ *       carried {@code @JsonCreator}; it does not hold in general.</li>
+ *   <li>Every class annotated {@code @JsonDeserialize} (Jackson 2 or Jackson 3 package) - the
+ *       same target found by intent rather than by shape, for a builder that is not nested or not
+ *       named {@code Builder}.</li>
  *   <li>Every class with at least one {@code @JsonCreator}-annotated method (Jackson 2 or
  *       Jackson 3 package). The declaring class is fully registered (so Jackson can read its
  *       annotations - important for the project's mixin pattern), and if any such method is
@@ -72,6 +76,17 @@ public final class Jackson3RecordsFeature implements Feature {
     };
 
     /**
+     * Matched by name for the same reason as {@link #JSON_CREATOR_ANNOTATIONS}: this module
+     * carries no Jackson dependency, and both annotation packages are in use across the project.
+     */
+    /** Matched by name: this module has no dependency on ekbatan-core. */
+    private static final String MODEL_EVENT_CLASS = "io.ekbatan.core.domain.ModelEvent";
+
+    private static final String[] JSON_DESERIALIZE_ANNOTATIONS = {
+        "com.fasterxml.jackson.databind.annotation.JsonDeserialize", "tools.jackson.databind.annotation.JsonDeserialize"
+    };
+
+    /**
      * Per-build dedup of class registration. Inheritance walks for sibling leaf classes
      * (e.g. concrete event records that all extend the same {@code ModelEvent} super) hit
      * the same superclass repeatedly - without this set we'd re-issue the same
@@ -108,6 +123,7 @@ public final class Jackson3RecordsFeature implements Feature {
         int builderCount = 0;
         int jooqRecordCount = 0;
         int creatorCount = 0;
+        int modelEventCount = 0;
         java.util.Set<String> creatorTargets = new java.util.HashSet<>();
         try (ScanResult scan = new ClassGraph()
                 .overrideClasspath((Object[]) classpath)
@@ -151,9 +167,52 @@ public final class Jackson3RecordsFeature implements Feature {
                 for (Class<?> nested : cls.getDeclaredClasses()) {
                     if (nested.getSimpleName().equals("Builder")) {
                         register(nested, false, false);
+                        // ...and the class the builder builds. Registering only the builder was
+                        // enough for as long as every such class also carried @JsonCreator and was
+                        // picked up by the pass below; ActionEvent dropping its @JsonCreator in
+                        // favour of @JsonDeserialize(builder = ...) removed that coincidence, and
+                        // the type carrying the annotation went unregistered. Jackson then found
+                        // the builder but not the target, and every field deserialized to null -
+                        // silently, on native only, with the JVM tests still green.
+                        //
+                        // includeFields=true, unlike the builder itself: Jackson takes the property
+                        // set from the value type, and a value type may expose those properties as
+                        // public fields rather than getters - ActionEvent does. Registered without
+                        // fields it presents zero properties, so the builder is constructed, no
+                        // setter is ever called, and build() returns an all-null object. Measured:
+                        // includeFields=false left all three round-trip tests failing.
+                        register(cls, true, false);
                         builderCount++;
                     }
                 }
+
+                // The same target, found by intent rather than by shape. The nested-Builder rule
+                // above depends on the builder being nested and named exactly "Builder"; this
+                // catches a class whose builder is named otherwise or declared elsewhere, which is
+                // a shape users are free to write even though the framework's own classes do not.
+                for (String annotation : JSON_DESERIALIZE_ANNOTATIONS) {
+                    if (ci.hasAnnotation(annotation)) {
+                        register(cls, true, false);
+                        break;
+                    }
+                }
+            }
+
+            // Every ModelEvent subclass. SingleTableJsonEventPersister serialises each one to the
+            // outbox payload with objectMapper.valueToTree(event), so they need serialisation
+            // metadata by construction - and an event exposing its state as public fields, which
+            // the framework's own examples do, needs those fields registered or Jackson reports no
+            // properties and writes {}. Nothing failed: the row committed, the SMT encoded it
+            // faithfully, and the payload was empty. It only stayed hidden because every example
+            // event also carries @JsonCreator (for the read path) and was picked up by the pass
+            // below; an event consumed only outside this JVM has no reason to carry one.
+            //
+            // walkChain=true so ModelEvent's own inherited state is registered alongside.
+            for (var ci : scan.getSubclasses(MODEL_EVENT_CLASS)) {
+                Class<?> cls = tryLoad(ci);
+                if (cls == null) continue;
+                register(cls, true, true);
+                modelEventCount++;
             }
 
             // Classes with @JsonCreator-annotated methods. Catches:
@@ -213,7 +272,8 @@ public final class Jackson3RecordsFeature implements Feature {
         System.out.println("[ekbatan-native] Jackson3RecordsFeature: registered " + recordCount + " records, "
                 + jooqRecordCount + " jOOQ-generated classes, " + builderCount + " builders, " + creatorCount
                 + " @JsonCreator-bearing classes (+ " + creatorTargets.size()
-                + " creator-target return types) under " + String.join(",", scanRoots));
+                + " creator-target return types, " + modelEventCount
+                + " model events) under " + String.join(",", scanRoots));
         if (!skipped.isEmpty()) {
             System.out.println("[ekbatan-native] Jackson3RecordsFeature: skipped " + skipped.size()
                     + " class(es) whose members could not be introspected (absent optional"

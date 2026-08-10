@@ -111,24 +111,31 @@ class DatabaseRegistrySecondaryPoolTest {
     }
 
     /**
-     * A bad defaultShard must be rejected before any pool exists.
+     * A bad defaultShard must be rejected before any pool is built.
      *
      * <p>This check used to run after the loop that builds them, so a mistyped default-shard - the
-     * realistic mistake here - opened every pool and then threw. Nothing held a reference to them
-     * afterwards, so each kept a Hikari housekeeper thread alive for the life of the JVM.
+     * realistic mistake here - built every pool first and then threw. Nothing held a reference to
+     * them afterwards, so each kept a Hikari housekeeper thread alive for the life of the JVM.
      *
-     * <p>Counted by thread rather than asserted on the exception, because the exception was always
-     * thrown; the leak was the part nobody saw.
+     * <p>The ordering is what matters and it has no direct observable, so it is read off the
+     * exception instead: these datasources name a driver class that does not exist, which makes
+     * Hikari throw the moment a pool is constructed. Reaching the defaultShard error therefore
+     * proves no pool was built; reaching "Failed to load driver class" proves one was.
      *
-     * <p>Asserted as "no more than before" rather than "exactly as before". The count is global and
-     * other tests in this JVM close pools of their own; Hikari's housekeeper is a scheduled-executor
-     * thread whose termination after {@code close()} is asynchronous, so a straggler from an earlier
-     * test can die inside this window and drive the count <em>down</em>. That is what CI hit -
-     * expected 35, got 34 - and it says nothing about the leak under test. A leak can only push the
-     * count up, so an upper bound is both sufficient and stable.
+     * <p>Previously asserted by counting housekeeper threads. That count is JVM-wide, and every
+     * other test that builds or closes a pool moves it asynchronously and with a lag, so it drifted
+     * in both directions in CI - 34 where 35 was expected, then 31 where at most 30 was - neither
+     * reading having anything to do with this test.
      */
     @Test
-    void a_default_shard_naming_no_member_opens_no_pools() {
+    void a_default_shard_naming_no_member_builds_no_pools() {
+        var unloadableDriver = dataSourceConfig()
+                .jdbcUrl("jdbc:postgresql://primary-9e3f:5432/db")
+                .username("u")
+                .password("p")
+                .driverClassName("io.ekbatan.test.NoSuchDriver")
+                .build();
+
         var config = shardingConfig()
                 .defaultShard(ShardIdentifier.of(9, 9)) // no such member
                 .withGroup(shardGroupConfig()
@@ -136,32 +143,20 @@ class DatabaseRegistrySecondaryPoolTest {
                         .name("g0")
                         .withMember(shardMemberConfig()
                                 .member(0)
-                                .primaryConfig(PRIMARY)
+                                .primaryConfig(unloadableDriver)
                                 .build())
                         .withMember(shardMemberConfig()
                                 .member(1)
-                                .primaryConfig(REPLICA)
+                                .primaryConfig(unloadableDriver)
                                 .build())
                         .build())
                 .build();
 
-        var before = hikariHousekeepers();
-
         assertThatThrownBy(() -> DatabaseRegistry.fromConfig(config))
+                .as("a config the registry rejects must not build a pool")
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("defaultShard");
-
-        assertThat(hikariHousekeepers())
-                .as("no pool should survive a config the registry rejected")
-                .isLessThanOrEqualTo(before);
-    }
-
-    /** Hikari names one housekeeper thread per pool, so counting them counts live pools. */
-    private static long hikariHousekeepers() {
-        return Thread.getAllStackTraces().keySet().stream()
-                .map(Thread::getName)
-                .filter(name -> name.contains("housekeeper"))
-                .count();
+                .hasMessageContaining("defaultShard")
+                .hasMessageNotContaining("Failed to load driver class");
     }
 
     private static ShardingConfig config(DataSourceConfig replica) {
