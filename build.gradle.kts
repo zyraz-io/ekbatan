@@ -217,3 +217,32 @@ jreleaser {
         }
     }
 }
+
+// =====================================================================================
+// Enumerates the modules that compile a native test image, for the Heavy Verification
+// matrix. Derived from the build rather than hardcoded in YAML: a hand-maintained list
+// silently drops a newly added module out of native coverage, which is a worse failure
+// than a slow job - nothing goes red, the module simply stops being verified.
+//
+// Prints one module path per line, without the leading colon so the value is usable as a
+// GitHub Actions artifact-name component.
+// =====================================================================================
+tasks.register("nativeTestModules") {
+    group = "verification"
+    description = "Lists subprojects that have a nativeTest task, one per line."
+    val paths = provider {
+        subprojects
+            .filter { it.plugins.hasPlugin("org.graalvm.buildtools.native") }
+            // The native JUnit launcher cannot compute selectors for these Debezium/Kafka
+            // suites; they run on the JVM instead. Excluded here rather than on the CI
+            // command line so the matrix and the exclusion stay in one place.
+            .filterNot {
+                it.path.startsWith(":ekbatan-integration-tests-event-pipeline-debezium-kafka-json") ||
+                    it.path.startsWith(":ekbatan-integration-tests-event-pipeline-debezium-kafka-avro-smt") ||
+                    it.path.startsWith(":ekbatan-integration-tests-event-pipeline-debezium-kafka-protobuf-smt")
+            }
+            .map { it.path.removePrefix(":") }
+            .sorted()
+    }
+    doLast { paths.get().forEach { println(it) } }
+}

@@ -73,12 +73,59 @@ jobs:
             echo "No commits on main between $since and $until. Skipping heavy verification." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  root-native-tests:
-    name: Root Native Tests
+  # Enumerates the native-test modules so the matrix below is derived from the build rather
+  # than hardcoded here. A hand-maintained list silently drops a newly added module out of
+  # native coverage - nothing goes red, the module just stops being verified.
+  root-native-modules:
+    name: Enumerate Native Test Modules
     needs: activity
     if: needs.activity.outputs.should_run == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 15
+    outputs:
+      modules: ${{ steps.list.outputs.modules }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Temurin is enough to configure the build and print the list; no image is compiled here.
+      - name: Set Up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: List modules
+        id: list
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew -q nativeTestModules > modules.txt
+          # Fail loudly rather than emit an empty matrix, which GitHub would silently
+          # expand to zero jobs and report the whole workflow as green.
+          test -s modules.txt
+          MODULES=$(jq -R -s -c 'split("\n") | map(select(length > 0))' < modules.txt)
+          echo "modules=$MODULES" >> "$GITHUB_OUTPUT"
+          echo "Native test modules ($(wc -l < modules.txt)):" >> "$GITHUB_STEP_SUMMARY"
+          sed 's/^/  - /' modules.txt >> "$GITHUB_STEP_SUMMARY"
+
+  # One runner per module. Previously a single job compiled all 39 native images in series
+  # with --max-workers=1 (two concurrent native-image builds exhaust a runner's memory),
+  # which took upwards of 90 minutes. A matrix keeps one image per runner while removing
+  # the queue; the memory constraint that forced serialisation no longer applies.
+  root-native-tests:
+    name: Root Native Tests / ${{ matrix.module }}
+    needs: [activity, root-native-modules]
+    if: needs.activity.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.root-native-modules.outputs.modules) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -98,27 +145,24 @@ jobs:
           java -version
           native-image --version
 
-      - name: Run Root Native Tests
+      - name: Run Native Tests
         shell: bash
         run: |
           export GRAALVM_HOME="$JAVA_HOME"
-          # Debezium/Kafka event-pipeline coverage runs on the JVM; the native
-          # JUnit launcher cannot currently compute selectors for these suites.
           ./gradlew \
             -Dorg.gradle.java.installations.paths="$JAVA_HOME" \
             -Dorg.gradle.java.installations.auto-detect=false \
-            nativeTest --max-workers=1 --continue --stacktrace \
-            -x :ekbatan-integration-tests-event-pipeline-debezium-kafka-json:nativeTest \
-            -x :ekbatan-integration-tests-event-pipeline-debezium-kafka-avro-smt:nativeTest \
-            -x :ekbatan-integration-tests-event-pipeline-debezium-kafka-protobuf-smt:nativeTest
+            :${{ matrix.module }}:nativeTest --stacktrace
 
-      - name: Upload Root Native Test Reports
+      - name: Upload Native Test Reports
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: root-native-test-reports
+          name: root-native-test-reports-${{ matrix.module }}
           if-no-files-found: ignore
           path: |
+            ${{ matrix.module }}/build/reports/tests/nativeTest/**
+            ${{ matrix.module }}/build/test-results/nativeTest/**
             **/build/reports/tests/nativeTest/**
             **/build/test-results/nativeTest/**
 
